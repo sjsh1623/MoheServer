@@ -1,200 +1,210 @@
-# MOHE Spring Boot API
+# MoheSpring 🌸
 
-A comprehensive Spring Boot application built with Kotlin, providing REST APIs for the MOHE place recommendation mobile application.
+> 한국의 숨은 장소를 발견하고 MBTI 기반 개인화 추천을 제공하는 Spring Boot 애플리케이션
 
-## 🚀 Features
+[![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-brightgreen)](https://spring.io/projects/spring-boot)
+[![Spring Batch](https://img.shields.io/badge/Spring%20Batch-5.x-blue)](https://spring.io/projects/spring-batch)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Latest-blue)](https://www.postgresql.org/)
 
-### Authentication & Security
-- ✅ JWT-based authentication with access/refresh tokens
-- ✅ Email verification with OTP
-- ✅ Password reset functionality
-- ✅ Spring Security configuration
-- ✅ Role-based access control
+## 📋 목차
 
-### Core Functionality
-- ✅ User management and preferences
-- ✅ Place recommendations based on MBTI and preferences
-- ✅ Place search with contextual filters (weather, time)
-- ✅ Bookmark system
-- ✅ Recent view tracking
-- ✅ Place details with comprehensive data
+- [주요 기능](#주요-기능)
+- [기술 스택](#기술-스택)
+- [프로젝트 구조](#프로젝트-구조)
+- [시작하기](#시작하기)
+- [API 문서](#api-문서)
+- [배치 작업](#배치-작업)
 
-### Technical Stack
+## ✨ 주요 기능
+
+### 🎯 핵심 기능
+- **장소 추천**: MBTI 기반 개인화 추천 알고리즘
+- **벡터 검색**: pgvector를 활용한 유사도 검색
+- **실시간 데이터 수집**: Naver/Google API 통합
+- **Spring Batch**: 대용량 장소 데이터 자동 수집
+- **JWT 인증**: Stateless 보안 아키텍처
+
+### 🔐 사용자 관리
+- 이메일 기반 회원가입 (OTP 인증)
+- JWT Access/Refresh Token
+- MBTI 프로필 설정
+- 사용자 선호도 관리
+
+### 📍 장소 기능
+- 장소 검색 및 상세 정보
+- 북마크 및 최근 본 장소
+- 카테고리별 분류
+- 평점 및 리뷰 집계
+
+### 🤖 추천 시스템
+- MBTI 기반 장소 추천
+- 벡터 유사도 기반 추천
+- 날씨 기반 추천
+- 시간대별 맞춤 추천
+
+## 🛠️ 기술 스택
+
+### Backend
 - **Framework**: Spring Boot 3.2.0
-- **Language**: Kotlin 1.9.20
-- **Database**: PostgreSQL with HikariCP connection pooling
-- **Security**: Spring Security + JWT
-- **Email**: Spring Mail
-- **Testing**: JUnit 5 + H2 for tests
-- **Build**: Gradle with Kotlin DSL
+- **Language**: Java 21
+- **Build Tool**: Gradle 8.5
+- **Batch**: Spring Batch 5.x
 
-## 📁 Project Structure
+### Database
+- **Production**: PostgreSQL (with pgvector extension)
+- **Test**: H2 In-Memory Database
+- **Connection Pool**: HikariCP
+
+### Security
+- **Authentication**: Spring Security + JWT
+- **Token Storage**: Redis (optional)
+- **Password**: BCrypt
+
+### External APIs
+- **Naver Local Search API**: 장소 데이터 수집
+- **Google Places API**: 평점 및 상세 정보
+- **Korean Government API**: 행정구역 정보
+- **OpenAI API**: AI 기반 설명 생성
+- **Ollama**: 로컬 AI 벡터 생성
+
+## 📦 프로젝트 구조
 
 ```
-src/main/kotlin/com/mohe/spring/
-├── config/         # Spring configuration
-├── controller/     # REST controllers
-├── dto/           # Data transfer objects
-├── entity/        # JPA entities
-├── exception/     # Global exception handling
-├── repository/    # Data access layer
-├── security/      # JWT & authentication
-└── service/       # Business logic
+src/main/java/com/mohe/spring/
+├── batch/              # Spring Batch (장소 데이터 수집)
+├── config/             # 설정 (Security, Batch, OpenAPI)
+├── controller/         # REST API Controllers
+├── dto/                # Data Transfer Objects
+├── entity/             # JPA Entities (Domain Models)
+├── repository/         # Spring Data JPA Repositories
+├── service/            # Business Logic Services
+├── security/           # JWT, UserDetails, Filters
+└── exception/          # Global Exception Handling
 ```
 
-## 🔗 API Endpoints
+자세한 구조는 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) 참고
 
-### Authentication (`/api/auth`)
-- `POST /login` - User login
-- `POST /signup` - User registration 
-- `POST /verify-email` - OTP verification
-- `POST /check-nickname` - Nickname availability
-- `POST /setup-password` - Complete registration
-- `POST /refresh` - Token refresh
-- `POST /logout` - User logout
-- `POST /forgot-password` - Password reset request
-- `POST /reset-password` - Reset password
+## 🚀 시작하기
 
-### User Management (`/api/user`)
-- `GET /profile` - Get user profile
-- `PUT /profile` - Update profile
-- `PUT /preferences` - Set user preferences
-- `GET /recent-places` - Recent viewed places
-- `GET /my-places` - User contributed places
+### 필수 요구사항
+- Java 21+
+- Docker & Docker Compose
+- Gradle 8.5+
 
-### Places (`/api/places`)
-- `GET /recommendations` - Personalized recommendations
-- `GET /` - List places with pagination
-- `GET /{id}` - Place details
-- `GET /search` - Search places with filters
+### 환경 변수 설정
 
-### Bookmarks (`/api/bookmarks`)
-- `POST /toggle` - Add/remove bookmark
-- `GET /` - Get user bookmarks
-
-## 🐳 Docker Setup
-
-### Database Schema
-The application automatically initializes the PostgreSQL database with:
-- User management tables
-- Place data with comprehensive attributes
-- Bookmark and activity tracking
-- JWT token storage
-- Email verification system
-
-### Running with Docker
+`.env` 파일 생성:
 
 ```bash
-# Build and start services
-docker compose up --build
+# Database
+DB_USERNAME=mohe_user
+DB_PASSWORD=your_password
 
-# Services:
-# - PostgreSQL: localhost:5432
-# - Spring App: localhost:8080
-# - Health Check: http://localhost:8080/health
-# - Swagger UI: http://localhost:8080/swagger-ui.html
+# Naver API (필수)
+NAVER_CLIENT_ID=your_client_id
+NAVER_CLIENT_SECRET=your_client_secret
+
+# Google Places API (선택사항)
+GOOGLE_PLACES_API_KEY=your_api_key
+
+# JWT Secret
+JWT_SECRET=your_secret_key_minimum_64_characters
 ```
 
-## 🧪 Testing
+### Docker로 실행
 
 ```bash
-# Run tests
-./gradlew test
+# PostgreSQL + Spring Boot 실행
+docker-compose up --build
 
-# Build application  
+# 백그라운드 실행
+docker-compose up -d
+
+# 종료
+docker-compose down
+```
+
+### 로컬 개발 환경
+
+```bash
+# PostgreSQL만 Docker로 실행
+docker-compose up postgres -d
+
+# Gradle로 애플리케이션 실행
+./gradlew bootRun
+
+# 또는 빌드 후 실행
 ./gradlew build
+java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 ```
 
-## 📊 Database Schema
+## 📚 API 문서
 
-### Key Tables:
-- **users** - User accounts and preferences
-- **places** - Location data with MBTI scoring
-- **bookmarks** - User bookmarks
-- **recent_views** - Activity tracking
-- **refresh_tokens** - JWT token management
-- **temp_users** - Registration workflow
-- **place_mbti_score** - MBTI-based recommendations
+애플리케이션 실행 후:
 
-## 📖 API Documentation
-
-### Swagger UI
-Interactive API documentation is available at:
-- **Development**: http://localhost:8080/swagger-ui.html
-- **OpenAPI JSON**: http://localhost:8080/v3/api-docs
-
-### API Features
-- ✅ **Complete API Documentation** with Korean descriptions
-- ✅ **Interactive Testing** with Try It Out functionality
-- ✅ **JWT Authentication** with Bearer token support
-- ✅ **Request/Response Examples** for all endpoints
-- ✅ **Parameter Validation** documentation
-- ✅ **Error Response** examples with Korean messages
-
-### API Categories
-1. **인증 관리** - Authentication and user registration
-2. **사용자 관리** - Profile and preferences management  
-3. **장소 관리** - Place recommendations and search
-4. **북마크 관리** - Bookmark functionality
-5. **사용자 활동** - Recent views and user activity
-6. **시스템** - Health checks and system status
-
-## 🔧 Configuration
-
-### Application Properties
-- JWT secret and expiration settings
-- HikariCP connection pool configuration
-- PostgreSQL database connection
-- Email service settings
-- Logging configuration
-
-### Environment Profiles
-- `docker` - For containerized deployment
-- `local` - For local development
-- `test` - For testing with H2 database
-
-## 🎯 API Documentation Features
-
-The API implements the complete specification from the Korean documentation:
-
-### 🔐 Authentication Flow
-1. Email signup → OTP verification → Password setup
-2. Login with JWT tokens (access + refresh)
-3. Automatic token refresh and logout
-
-### 👤 User Experience  
-1. MBTI-based personality preferences
-2. Age range and transportation preferences
-3. Space type preferences (workshop, exhibition, nature, etc.)
-4. Personalized place recommendations
-
-### 📍 Place Discovery
-1. Context-aware search (weather, time, location)
-2. MBTI-matched recommendations
-3. Rating and popularity-based sorting
-4. Comprehensive place details with images
-
-### 💾 Data Management
-1. Bookmark system with toggle functionality
-2. Recent view history tracking
-3. User activity monitoring
-4. Preference-based filtering
-
-## 🚀 Next Steps
-
-The application is production-ready and includes:
-- ✅ Complete API implementation
-- ✅ **Comprehensive Swagger documentation**
-- ✅ **Interactive API testing** via Swagger UI
-- ✅ Security best practices
-- ✅ Database optimization
-- ✅ Error handling
-- ✅ Docker deployment
-- ✅ Testing framework
-
-### 📖 API Documentation Access
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **OpenAPI Spec**: http://localhost:8080/v3/api-docs
-- **All endpoints** documented with Korean descriptions and examples
+- **Health Check**: http://localhost:8080/health
 
-Ready for frontend integration and deployment!
+### 주요 API 엔드포인트
+
+#### 인증
+- `POST /api/auth/signup` - 회원가입
+- `POST /api/auth/login` - 로그인
+- `POST /api/auth/refresh` - 토큰 갱신
+
+#### 장소
+- `GET /api/places` - 장소 목록
+- `GET /api/places/{id}` - 장소 상세
+- `GET /api/places/search` - 장소 검색
+
+#### 추천
+- `GET /api/recommendations` - MBTI 기반 추천
+- `GET /api/recommendations/vector-similar` - 벡터 유사도 추천
+
+#### 배치
+- `POST /api/batch/jobs/place-collection` - 장소 수집 배치 실행
+
+## 🔄 배치 작업
+
+### Spring Batch Job 실행
+
+```bash
+# API를 통한 배치 실행
+curl -X POST http://localhost:8080/api/batch/jobs/place-collection
+```
+
+자세한 내용은 [BATCH_GUIDE.md](BATCH_GUIDE.md) 참고
+
+## 💻 개발 가이드
+
+### 코드 스타일
+- **EditorConfig**: `.editorconfig` 파일 참고
+- **Indentation**: 4 spaces (Java), 2 spaces (YAML/JSON)
+- **Line Length**: 120 characters max
+
+### 테스트 실행
+
+```bash
+# 전체 테스트
+./gradlew test
+
+# 빌드
+./gradlew clean build
+```
+
+## 📖 문서
+
+- [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - 상세 프로젝트 구조
+- [BATCH_GUIDE.md](BATCH_GUIDE.md) - Spring Batch 가이드
+- [CLAUDE.md](CLAUDE.md) - Claude Code 사용 가이드
+
+## 👤 작성자
+
+**Andrew Lim (임석현)**
+- Email: sjsh1623@gmail.com
+
+---
+
+⭐ 이 프로젝트가 도움이 되었다면 Star를 눌러주세요!

@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * 장소 검색 쿼리를 생성하는 Reader
- *
+ * <p>
  * 지역 정보 (정부 API) + 카테고리를 조합하여 검색 쿼리 생성
  * 예: "강남구 카페", "종로구 맛집" 등
  */
@@ -27,9 +27,7 @@ public class PlaceQueryReader implements ItemReader<String> {
 
     // 검색 카테고리 (편의점, 마트 제외)
     private static final List<String> SEARCH_CATEGORIES = Arrays.asList(
-        "카페", "맛집", "레스토랑", "이색 체험", "공방", "서점", "미용실",
-        "펜션", "호텔", "관광지", "박물관", "갤러리", "공원", "체육관",
-        "영화관", "문화센터", "도서관", "베이커리", "디저트"
+            "카페", "맛집", "데이트", "이색 체험", "공방", "박물관", "갤러리", "공원", "디저트"
     );
 
     public PlaceQueryReader(KoreanGovernmentApiService governmentApiService) {
