@@ -1,49 +1,48 @@
 package com.mohe.spring.batch.job;
 
+import com.mohe.spring.batch.reader.PlaceQueryReader;
 import com.mohe.spring.entity.Place;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /**
- * 장소 데이터 수집 Batch Job 설정
+ * Place Collection Batch Job 설정
  *
- * <p>Spring Batch를 사용하여 외부 API(Naver, Google)로부터 장소 데이터를 수집하고
- * 데이터베이스에 저장하는 배치 작업을 정의합니다.</p>
+ * <p>Naver API를 통해 장소 데이터를 수집하여 데이터베이스에 저장하는 배치 Job을 정의합니다.</p>
  *
- * <h3>배치 처리 흐름</h3>
- * <ol>
- *   <li><b>Reader</b>: 지역명 + 카테고리 조합으로 검색 쿼리 생성 (예: "강남구 카페")</li>
- *   <li><b>Processor</b>:
- *     <ul>
- *       <li>Naver Local Search API 호출하여 장소 검색</li>
- *       <li>Place 엔티티로 변환</li>
- *       <li>Google Places API로 평점 및 상세 정보 보강</li>
- *       <li>편의점/마트 등 불필요한 장소 필터링</li>
- *       <li>중복 체크</li>
- *     </ul>
- *   </li>
- *   <li><b>Writer</b>: 검증된 Place 엔티티를 DB에 저장 (10개씩 chunk 처리)</li>
- * </ol>
+ * <h3>Job 구성</h3>
+ * <ul>
+ *   <li><b>Reader:</b> PlaceQueryReader - 지역 + 카테고리 조합 쿼리 생성</li>
+ *   <li><b>Processor:</b> PlaceDataProcessor - Naver API 호출 및 필터링</li>
+ *   <li><b>Writer:</b> PlaceDataWriter - DB 저장</li>
+ * </ul>
  *
- * <h3>실행 방법</h3>
- * <pre>
- * POST /api/batch/jobs/place-collection
- * </pre>
+ * <h3>Region 기반 처리</h3>
+ * <p>Job 파라미터로 "region"을 전달하여 특정 지역만 처리할 수 있습니다:</p>
+ * <ul>
+ *   <li><b>"seoul":</b> 서울특별시만 처리</li>
+ *   <li><b>"jeju":</b> 제주특별자치도만 처리</li>
+ *   <li><b>"yongin":</b> 경기도 용인특례시만 처리</li>
+ *   <li><b>null 또는 기타:</b> 모든 지역 처리</li>
+ * </ul>
  *
+ * @author Andrew Lim
+ * @since 1.0
  * @see com.mohe.spring.batch.reader.PlaceQueryReader
  * @see com.mohe.spring.batch.processor.PlaceDataProcessor
  * @see com.mohe.spring.batch.writer.PlaceDataWriter
- * @author Andrew Lim
- * @since 1.0
  */
 @Configuration
 public class PlaceCollectionJobConfig {
@@ -83,7 +82,7 @@ public class PlaceCollectionJobConfig {
      *
      * @param jobRepository Spring Batch 메타데이터 저장소
      * @param transactionManager 트랜잭션 관리자
-     * @param placeQueryReader 검색 쿼리를 읽어오는 Reader
+     * @param placeQueryReader 검색 쿼리를 읽어오는 Reader (region 파라미터 적용)
      * @param placeProcessor 검색 쿼리를 Place로 변환하는 Processor
      * @param placeWriter Place를 DB에 저장하는 Writer
      * @return 실행 가능한 Step 인스턴스
@@ -93,7 +92,7 @@ public class PlaceCollectionJobConfig {
             JobRepository jobRepository,
             PlatformTransactionManager transactionManager,
             ItemReader<String> placeQueryReader,
-            ItemProcessor<String, Place> placeProcessor,
+            @Qualifier("placeDataProcessor") ItemProcessor<String, Place> placeProcessor,
             ItemWriter<Place> placeWriter) {
         return new StepBuilder("placeCollectionStep", jobRepository)
                 .<String, Place>chunk(10, transactionManager) // 10개씩 chunk 처리
@@ -101,5 +100,31 @@ public class PlaceCollectionJobConfig {
                 .processor(placeProcessor)     // API 호출 및 변환
                 .writer(placeWriter)           // DB 저장
                 .build();
+    }
+
+    /**
+     * Region 기반 PlaceQueryReader 생성 (Step Scope)
+     *
+     * <p>Job 파라미터로 전달된 region 값에 따라 PlaceQueryReader를 동적으로 생성합니다.
+     * @StepScope를 사용하여 각 Job 실행마다 새로운 인스턴스가 생성됩니다.</p>
+     *
+     * <h3>Region 파라미터</h3>
+     * <p>Job 실행 시 전달되는 파라미터:</p>
+     * <pre>
+     * JobParameters params = new JobParametersBuilder()
+     *     .addString("region", "seoul")  // 서울만 처리
+     *     .toJobParameters();
+     * </pre>
+     *
+     * @param region Job 파라미터로 전달된 지역 코드 (nullable)
+     * @return 설정된 PlaceQueryReader 인스턴스
+     */
+    @Bean
+    @StepScope
+    public PlaceQueryReader placeQueryReader(
+            @Value("#{jobParameters['region']}") String region) {
+        PlaceQueryReader reader = new PlaceQueryReader();
+        reader.setRegion(region);
+        return reader;
     }
 }

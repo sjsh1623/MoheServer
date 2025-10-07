@@ -449,24 +449,15 @@ public class RecommendationController {
         SimplePlaceDto dto = new SimplePlaceDto();
         dto.setId(place.getId().toString());
         dto.setName(place.getName());
-        dto.setTitle(place.getTitle() != null ? place.getTitle() : place.getName());
         dto.setCategory(place.getCategory());
         dto.setRating(place.getRating() != null ? place.getRating().doubleValue() : null);
         dto.setReviewCount(place.getReviewCount());
-        dto.setAddress(place.getAddress());
-        dto.setLocation(place.getAddress()); // For backward compatibility
+        dto.setAddress(place.getRoadAddress());
+        dto.setLocation(place.getRoadAddress()); // For backward compatibility
         dto.setDescription(place.getDescription());
-        dto.setImageUrl(getPlaceImageUrl(place));
+        dto.setImageUrl(null); // Gallery field removed
         dto.setDistance(0.0); // Will be calculated if needed
         dto.setIsBookmarked(false); // Will be set based on user authentication
         return dto;
-    }
-
-    private String getPlaceImageUrl(Place place) {
-        // Get first image from gallery
-        if (place.getGallery() != null && !place.getGallery().isEmpty()) {
-            return place.getGallery().get(0);
-        }
-        return null;
     }
 }

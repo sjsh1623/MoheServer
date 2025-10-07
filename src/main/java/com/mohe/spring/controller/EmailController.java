@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +25,7 @@ import java.time.LocalDateTime;
 @RequestMapping("/api/email")
 @SecurityRequirements
 @Tag(name = "이메일 발송", description = "HTML/텍스트 이메일 발송 API")
+@ConditionalOnBean(EmailService.class)
 public class EmailController {
     
     private static final Logger logger = LoggerFactory.getLogger(EmailController.class);

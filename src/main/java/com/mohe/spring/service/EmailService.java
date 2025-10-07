@@ -5,6 +5,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.safety.Safelist;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.util.regex.Pattern;
 
 @Service
+@ConditionalOnProperty(name = "spring.mail.enabled", havingValue = "true", matchIfMissing = false)
 public class EmailService {
     
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);

@@ -71,7 +71,7 @@ dependencies {
     // YAML configuration support
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml'
     
-    // HTML sanitization for email content
+    // HTML sanitization for email content and HTML tag removal
     implementation 'org.jsoup:jsoup:1.17.2'
     
     implementation 'com.aallam.openai:openai-client:3.8.0'

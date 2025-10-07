@@ -102,7 +102,7 @@ public class ContextualRecommendationService {
         
         // Prepare place names for LLM
         List<String> placeNames = candidatePlaces.stream()
-            .map(place -> place.getName() != null ? place.getName() : place.getTitle())
+            .map(Place::getName)
             .collect(Collectors.toList());
         
         // Use LLM for intelligent recommendations
@@ -125,10 +125,7 @@ public class ContextualRecommendationService {
             // Use LLM recommendations
             final OllamaRecommendationResponse finalLlmResponse = llmResponse;
             recommendations = candidatePlaces.stream()
-                .filter(place -> {
-                    String placeName = place.getName() != null ? place.getName() : place.getTitle();
-                    return finalLlmResponse.getRecommendedPlaces().contains(placeName);
-                })
+                .filter(place -> finalLlmResponse.getRecommendedPlaces().contains(place.getName()))
                 .limit(Math.min(limit, 15))
                 .map(this::convertToSimplePlaceDto)
                 .collect(Collectors.toList());
@@ -225,7 +222,7 @@ public class ContextualRecommendationService {
             
             // Prepare place names for LLM
             List<String> placeNames = candidatePlaces.stream()
-                .map(place -> place.getName() != null ? place.getName() : place.getTitle())
+                .map(Place::getName)
                 .collect(Collectors.toList());
             
             // Use LLM for intelligent recommendations with MBTI
@@ -248,10 +245,7 @@ public class ContextualRecommendationService {
                 // Use LLM recommendations
                 final OllamaRecommendationResponse finalLlmResponse = llmResponse;
                 recommendations = candidatePlaces.stream()
-                    .filter(place -> {
-                        String placeName = place.getName() != null ? place.getName() : place.getTitle();
-                        return finalLlmResponse.getRecommendedPlaces().contains(placeName);
-                    })
+                    .filter(place -> finalLlmResponse.getRecommendedPlaces().contains(place.getName()))
                     .limit(Math.min(limit, 15))
                     .map(this::convertToSimplePlaceDto)
                     .collect(Collectors.toList());
@@ -368,34 +362,24 @@ public class ContextualRecommendationService {
     private SimplePlaceDto convertToSimplePlaceDto(Place place) {
         SimplePlaceDto dto = new SimplePlaceDto(
             place.getId().toString(),
-            place.getName() != null ? place.getName() : place.getTitle(),
+            place.getName(),
             place.getCategory() != null ? place.getCategory() : "기타",
             place.getRating() != null ? place.getRating().doubleValue() : 4.0,
-            place.getAddress(),
-            getPlaceImageUrl(place)
+            place.getRoadAddress(),
+            null // Gallery field removed
         );
-        
+
         // Set additional fields
         dto.setReviewCount(place.getReviewCount() != null ? place.getReviewCount() : 0);
-        dto.setAddress(place.getAddress());
-        dto.setImages(place.getGallery());
+        dto.setAddress(place.getRoadAddress());
         dto.setDescription(place.getDescription());
-        dto.setTags(place.getTags());
         dto.setPhone(place.getPhone());
         dto.setWebsiteUrl(place.getWebsiteUrl());
-        dto.setAmenities(place.getAmenities());
         dto.setDistance(0.0); // Distance disabled as per requirements
         dto.setIsBookmarked(false); // TODO: Check if bookmarked by current user
         dto.setIsDemo(false);
-        
+
         return dto;
-    }
-    
-    private String getPlaceImageUrl(Place place) {
-        if (place.getGallery() != null && !place.getGallery().isEmpty()) {
-            return place.getGallery().get(0);
-        }
-        return null;
     }
     
     private String getCurrentTimeOfDay() {

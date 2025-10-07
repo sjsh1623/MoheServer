@@ -96,16 +96,11 @@ public class PlaceService {
         
         Place place = placeOpt.get();
         SimplePlaceDto placeDto = convertToSimplePlaceDto(place);
-        
-        // Get images from gallery
-        List<String> images = place.getGallery() != null && !place.getGallery().isEmpty() ? 
-            place.getGallery() : 
-            List.of();
-        
+
         // Get similar places (simple implementation - same category)
         List<SimplePlaceDto> similarPlaces = List.of(); // TODO: Implement similarity logic
-        
-        return new PlaceDetailResponse(placeDto, images, false, similarPlaces);
+
+        return new PlaceDetailResponse(placeDto, List.of(), false, similarPlaces);
     }
     
     public PlaceSearchResponse searchPlaces(String q, String location, String weather, String time) {
@@ -341,31 +336,20 @@ public class PlaceService {
      * Get places with images for home page
      */
     public List<PlaceDto.PlaceResponse> getPlacesWithImages(int limit) {
-        // Use a simple approach to get places with gallery images
-        Pageable pageable = PageRequest.of(0, limit * 3); // Get more to filter
-        List<Place> allPlaces = placeRepository.findTopRatedPlaces(3.0, pageable).getContent();
-        
-        // Filter places that have gallery images and limit the results
-        List<Place> places = allPlaces.stream()
-            .filter(place -> place.getGallery() != null && !place.getGallery().isEmpty())
-            .limit(limit)
-            .collect(Collectors.toList());
-        
+        // Get top rated places
+        Pageable pageable = PageRequest.of(0, limit);
+        List<Place> places = placeRepository.findTopRatedPlaces(3.0, pageable).getContent();
+
         return places.stream()
             .map(place -> {
-                // Get primary image or first available image
+                // Get primary image
                 String imageUrl = getPlaceImageUrl(place);
-                
-                // Get all images for this place from gallery
-                List<String> images = place.getGallery() != null && !place.getGallery().isEmpty() ? 
-                    place.getGallery() : 
-                    List.of();
-                
+
                 return new PlaceDto.PlaceResponse(
                     place.getId(),
-                    place.getName() != null ? place.getName() : place.getTitle(),
+                    place.getName(),
                     imageUrl,
-                    images,
+                    List.of(),
                     place.getRating() != null ? place.getRating().doubleValue() : 4.0,
                     place.getCategory() != null ? place.getCategory() : "카테고리 없음"
                 );
@@ -375,26 +359,22 @@ public class PlaceService {
     
     private SimplePlaceDto convertToSimplePlaceDto(Place place) {
         String imageUrl = getPlaceImageUrl(place);
-        
+
         SimplePlaceDto dto = new SimplePlaceDto(
             place.getId().toString(),
-            place.getName() != null ? place.getName() : place.getTitle(),
+            place.getName(),
             place.getCategory() != null ? place.getCategory() : "기타",
             place.getRating() != null ? place.getRating().doubleValue() : 4.0,
-            place.getAddress(),
+            place.getRoadAddress(),
             imageUrl
         );
 
         // Set additional fields
-        dto.setTitle(place.getTitle());
         dto.setReviewCount(place.getReviewCount() != null ? place.getReviewCount() : 0);
-        dto.setAddress(place.getAddress());
-        dto.setImages(place.getGallery());
+        dto.setAddress(place.getRoadAddress());
         dto.setDescription(place.getDescription());
-        dto.setTags(place.getTags());
         dto.setPhone(place.getPhone());
         dto.setWebsiteUrl(place.getWebsiteUrl());
-        dto.setAmenities(place.getAmenities());
         dto.setDistance(0.0); // TODO: Calculate actual distance
         dto.setIsBookmarked(false); // TODO: Check if bookmarked by current user
         dto.setIsDemo(false);
@@ -403,11 +383,7 @@ public class PlaceService {
     }
     
     private String getPlaceImageUrl(Place place) {
-        // Get first image from gallery
-        if (place.getGallery() != null && !place.getGallery().isEmpty()) {
-            return place.getGallery().get(0);
-        }
-
+        // Return null since gallery field is removed
         return null;
     }
 

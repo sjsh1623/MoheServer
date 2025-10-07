@@ -54,7 +54,9 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     Optional<Place> findByGooglePlaceId(String googlePlaceId);
     
     Optional<Place> findByName(String name);
-    
+
+    boolean existsByRoadAddress(String roadAddress);
+
     @Query("""
         SELECT p FROM Place p 
         WHERE p.name = :name 
