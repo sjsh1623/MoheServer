@@ -96,11 +96,8 @@ public class BookmarkService {
                     BookmarkPlaceData placeData = new BookmarkPlaceData();
                     placeData.setId(bookmark.getPlace().getId().toString());
                     placeData.setName(bookmark.getPlace().getName());
-                    placeData.setLocation(bookmark.getPlace().getAddress());
-                    // Get first image from gallery or null
-                    String imageUrl = bookmark.getPlace().getGallery() != null && !bookmark.getPlace().getGallery().isEmpty() ? 
-                        bookmark.getPlace().getGallery().get(0) : null;
-                    placeData.setImage(imageUrl);
+                    placeData.setLocation(bookmark.getPlace().getRoadAddress());
+                    placeData.setImage(null); // Gallery field removed
                     placeData.setRating(bookmark.getPlace().getRating());
                     
                     BookmarkData data = new BookmarkData();

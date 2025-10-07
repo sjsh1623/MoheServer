@@ -53,12 +53,9 @@ public class ActivityService {
                 .map(recentView -> {
                     RecentPlaceData data = new RecentPlaceData();
                     data.setId(recentView.getPlace().getId().toString());
-                    data.setTitle(recentView.getPlace().getTitle());
-                    data.setLocation(recentView.getPlace().getAddress());
-                    // Get first image from gallery or null
-                    String imageUrl = recentView.getPlace().getGallery() != null && !recentView.getPlace().getGallery().isEmpty() ? 
-                        recentView.getPlace().getGallery().get(0) : null;
-                    data.setImage(imageUrl);
+                    data.setTitle(recentView.getPlace().getName());
+                    data.setLocation(recentView.getPlace().getRoadAddress());
+                    data.setImage(null); // Gallery field removed
                     data.setRating(recentView.getPlace().getRating());
                     data.setViewedAt(recentView.getViewedAt());
                     data.setViewCount(1);
@@ -130,24 +127,15 @@ public class ActivityService {
             place.getName(),
             place.getCategory(),
             place.getRating() != null ? place.getRating().doubleValue() : null,
-            place.getAddress(),
-            getPrimaryImage(place)
+            place.getRoadAddress(),
+            null // Gallery field removed
         );
 
         dto.setReviewCount(place.getReviewCount());
-        dto.setAddress(place.getAddress());
+        dto.setAddress(place.getRoadAddress());
         dto.setIsBookmarked(true);
-        dto.setTags(place.getTags());
-        dto.setImages(place.getGallery());
         dto.setDescription(place.getDescription());
 
         return dto;
-    }
-
-    private String getPrimaryImage(Place place) {
-        if (place.getGallery() != null && !place.getGallery().isEmpty()) {
-            return place.getGallery().get(0);
-        }
-        return null;
     }
 }

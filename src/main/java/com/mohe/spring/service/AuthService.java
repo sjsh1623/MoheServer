@@ -29,9 +29,9 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
-    private final EmailService emailService;
+    private final Optional<EmailService> emailService;
     private final Random random = new Random();
-    
+
     public AuthService(
             UserRepository userRepository,
             TempUserRepository tempUserRepository,
@@ -40,7 +40,7 @@ public class AuthService {
             AuthenticationManager authenticationManager,
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
-            EmailService emailService
+            Optional<EmailService> emailService
     ) {
         this.userRepository = userRepository;
         this.tempUserRepository = tempUserRepository;

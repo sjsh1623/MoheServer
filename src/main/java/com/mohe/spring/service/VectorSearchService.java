@@ -216,19 +216,12 @@ public class VectorSearchService {
     private PlaceDto.PlaceResponse convertToPlaceDto(Place place) {
         return new PlaceDto.PlaceResponse(
             place.getId(),
-            place.getName() != null ? place.getName() : place.getTitle(),
-            getPlaceImageUrl(place),
-            place.getGallery(),
+            place.getName(),
+            null, // Gallery field removed
+            List.of(),
             place.getRating() != null ? place.getRating().doubleValue() : 4.0,
             place.getCategory() != null ? place.getCategory() : "기타"
         );
-    }
-    
-    private String getPlaceImageUrl(Place place) {
-        if (place.getGallery() != null && !place.getGallery().isEmpty()) {
-            return place.getGallery().get(0);
-        }
-        return null;
     }
     
     /**

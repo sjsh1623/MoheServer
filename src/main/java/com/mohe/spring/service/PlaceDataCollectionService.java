@@ -135,20 +135,25 @@ public class PlaceDataCollectionService {
         String title = item.get("title").asText().replaceAll("<[^>]*>", "");
         place.setName(title);
         place.setCategory(item.get("category").asText());
-        place.setAddress(item.get("address").asText());
         place.setRoadAddress(item.has("roadAddress") ? item.get("roadAddress").asText() : null);
 
         // 좌표 변환 (Naver API 좌표계)
+        // mapx = 경도(longitude), mapy = 위도(latitude)
+        // Naver API는 좌표를 10000000을 곱한 정수로 제공
         if (item.has("mapy") && item.has("mapx")) {
-            double lat = item.get("mapy").asInt() / 10000000.0;
-            double lng = item.get("mapx").asInt() / 10000000.0;
-            place.setLatitude(BigDecimal.valueOf(lat));
-            place.setLongitude(BigDecimal.valueOf(lng));
-        }
+            int mapyInt = item.get("mapy").asInt();
+            int mapxInt = item.get("mapx").asInt();
 
-        // 전화번호
-        if (item.has("telephone") && !item.get("telephone").isNull()) {
-            place.setTelephone(item.get("telephone").asText());
+            double latitude = mapyInt / 10000000.0;
+            double longitude = mapxInt / 10000000.0;
+
+            place.setLatitude(BigDecimal.valueOf(latitude));
+            place.setLongitude(BigDecimal.valueOf(longitude));
+
+            logger.debug("좌표 변환: {} - mapx={} → lng={}, mapy={} → lat={}",
+                title, mapxInt, longitude, mapyInt, latitude);
+        } else {
+            logger.warn("좌표 정보 없음: {}", title);
         }
 
         place.setDescription(String.format("한국의 %s - %s", title, place.getCategory()));
@@ -168,7 +173,7 @@ public class PlaceDataCollectionService {
         }
 
         try {
-            String query = place.getName() + " " + place.getAddress();
+            String query = place.getName() + " " + place.getRoadAddress();
             String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
             String urlString = String.format(
                 "https://maps.googleapis.com/maps/api/place/textsearch/json?query=%s&key=%s&language=ko",
@@ -209,12 +214,6 @@ public class PlaceDataCollectionService {
                     int userRatingsTotal = firstResult.path("user_ratings_total").asInt(0);
                     if (userRatingsTotal > 0) {
                         place.setReviewCount(userRatingsTotal);
-                    }
-
-                    // Place ID
-                    String placeId = firstResult.path("place_id").asText();
-                    if (!placeId.isEmpty()) {
-                        place.setGooglePlaceId(placeId);
                     }
 
                     logger.debug("✅ Google Places 상세 정보 보강 완료: {} (평점: {})", place.getName(), rating);
@@ -267,10 +266,29 @@ public class PlaceDataCollectionService {
     }
 
     /**
-     * 중복 체크
+     * 중복 체크 - 이름과 좌표를 모두 비교
+     * 같은 이름이면서 좌표가 0.001도(약 100m) 이내인 경우 중복으로 판단
      */
     public boolean isDuplicate(Place place) {
-        return placeRepository.findByName(place.getName()).isPresent();
+        if (place.getName() == null || place.getLatitude() == null || place.getLongitude() == null) {
+            return false;
+        }
+
+        // 0.001도 = 약 100미터 반경 내 중복 체크
+        BigDecimal radius = BigDecimal.valueOf(0.001);
+        Optional<Place> similarPlace = placeRepository.findSimilarPlace(
+            place.getName(),
+            place.getLatitude(),
+            place.getLongitude(),
+            radius
+        );
+
+        if (similarPlace.isPresent()) {
+            logger.debug("중복 장소 발견: {} (기존 ID: {})", place.getName(), similarPlace.get().getId());
+            return true;
+        }
+
+        return false;
     }
 
     /**

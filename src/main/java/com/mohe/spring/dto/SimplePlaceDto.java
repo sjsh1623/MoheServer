@@ -8,7 +8,6 @@ import java.util.List;
 public class SimplePlaceDto {
     private String id;
     private String name;
-    private String title; // For backward compatibility
     private String category;
     private Double rating;
     private Integer reviewCount;
@@ -19,11 +18,9 @@ public class SimplePlaceDto {
     private Double distance;
     private Boolean isBookmarked;
     private String description;
-    private List<String> tags;
     private String phone;
     private String websiteUrl;
     private String operatingHours;
-    private List<String> amenities;
     
     // Transportation info
     private String carTime;
@@ -39,11 +36,10 @@ public class SimplePlaceDto {
 
     public SimplePlaceDto() {}
 
-    public SimplePlaceDto(String id, String name, String category, Double rating, 
+    public SimplePlaceDto(String id, String name, String category, Double rating,
                           String location, String imageUrl) {
         this.id = id;
         this.name = name;
-        this.title = name; // For backward compatibility
         this.category = category;
         this.rating = rating;
         this.location = location;
@@ -53,15 +49,14 @@ public class SimplePlaceDto {
     }
 
     // Full constructor
-    public SimplePlaceDto(String id, String name, String title, String category, Double rating, 
-                          Integer reviewCount, String location, String address, String imageUrl, 
-                          List<String> images, Double distance, Boolean isBookmarked, String description, 
-                          List<String> tags, String phone, String websiteUrl, String operatingHours, 
-                          List<String> amenities, String carTime, String busTime, Double similarityScore, 
+    public SimplePlaceDto(String id, String name, String category, Double rating,
+                          Integer reviewCount, String location, String address, String imageUrl,
+                          List<String> images, Double distance, Boolean isBookmarked, String description,
+                          String phone, String websiteUrl, String operatingHours,
+                          String carTime, String busTime, Double similarityScore,
                           String explanation, String recommendationReason, Boolean isDemo) {
         this.id = id;
         this.name = name;
-        this.title = title;
         this.category = category;
         this.rating = rating;
         this.reviewCount = reviewCount;
@@ -72,11 +67,9 @@ public class SimplePlaceDto {
         this.distance = distance;
         this.isBookmarked = isBookmarked;
         this.description = description;
-        this.tags = tags;
         this.phone = phone;
         this.websiteUrl = websiteUrl;
         this.operatingHours = operatingHours;
-        this.amenities = amenities;
         this.carTime = carTime;
         this.busTime = busTime;
         this.similarityScore = similarityScore;
@@ -91,9 +84,6 @@ public class SimplePlaceDto {
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
-
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
 
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
@@ -125,9 +115,6 @@ public class SimplePlaceDto {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public List<String> getTags() { return tags; }
-    public void setTags(List<String> tags) { this.tags = tags; }
-
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
 
@@ -136,9 +123,6 @@ public class SimplePlaceDto {
 
     public String getOperatingHours() { return operatingHours; }
     public void setOperatingHours(String operatingHours) { this.operatingHours = operatingHours; }
-
-    public List<String> getAmenities() { return amenities; }
-    public void setAmenities(List<String> amenities) { this.amenities = amenities; }
 
     public String getCarTime() { return carTime; }
     public void setCarTime(String carTime) { this.carTime = carTime; }

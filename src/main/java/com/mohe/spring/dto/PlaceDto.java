@@ -58,30 +58,28 @@ public class PlaceDto {
 
     public static class PlaceRecommendationData {
         private final String id;
-        private final String title;
+        private final String name;
         private final Double rating;
         private final int reviewCount;
         private final String location;
         private final String image;
         private final List<PlaceImageData> images;
-        private final List<String> tags;
         private final String description;
         private final TransportationInfo transportation;
         private final boolean isBookmarked;
         private final String recommendationReason;
 
-        public PlaceRecommendationData(String id, String title, Double rating, int reviewCount,
+        public PlaceRecommendationData(String id, String name, Double rating, int reviewCount,
                                      String location, String image, List<PlaceImageData> images,
-                                     List<String> tags, String description, TransportationInfo transportation,
+                                     String description, TransportationInfo transportation,
                                      boolean isBookmarked, String recommendationReason) {
             this.id = id;
-            this.title = title;
+            this.name = name;
             this.rating = rating;
             this.reviewCount = reviewCount;
             this.location = location;
             this.image = image;
             this.images = images != null ? images : List.of();
-            this.tags = tags;
             this.description = description;
             this.transportation = transportation;
             this.isBookmarked = isBookmarked;
@@ -95,13 +93,12 @@ public class PlaceDto {
 
         // Getters
         public String getId() { return id; }
-        public String getTitle() { return title; }
+        public String getName() { return name; }
         public Double getRating() { return rating; }
         public int getReviewCount() { return reviewCount; }
         public String getLocation() { return location; }
         public String getImage() { return image; }
         public List<PlaceImageData> getImages() { return images; }
-        public List<String> getTags() { return tags; }
         public String getDescription() { return description; }
         public TransportationInfo getTransportation() { return transportation; }
         public boolean isBookmarked() { return isBookmarked; }
@@ -135,39 +132,33 @@ public class PlaceDto {
 
     public static class PlaceDetailData {
         private final String id;
-        private final String title;
-        private final List<String> tags;
+        private final String name;
         private final String location;
         private final String address;
         private final Double rating;
         private final int reviewCount;
         private final String description;
         private final List<PlaceImageData> images;
-        private final List<String> gallery;
         private final int additionalImageCount;
         private final TransportationInfo transportation;
         private final String operatingHours;
-        private final List<String> amenities;
         private final boolean isBookmarked;
 
-        public PlaceDetailData(String id, String title, List<String> tags, String location, String address,
+        public PlaceDetailData(String id, String name, String location, String address,
                              Double rating, int reviewCount, String description, List<PlaceImageData> images,
-                             List<String> gallery, int additionalImageCount, TransportationInfo transportation,
-                             String operatingHours, List<String> amenities, boolean isBookmarked) {
+                             int additionalImageCount, TransportationInfo transportation,
+                             String operatingHours, boolean isBookmarked) {
             this.id = id;
-            this.title = title;
-            this.tags = tags;
+            this.name = name;
             this.location = location;
             this.address = address;
             this.rating = rating;
             this.reviewCount = reviewCount;
             this.description = description;
             this.images = images;
-            this.gallery = gallery;
             this.additionalImageCount = additionalImageCount;
             this.transportation = transportation;
             this.operatingHours = operatingHours;
-            this.amenities = amenities;
             this.isBookmarked = isBookmarked;
         }
 
@@ -178,19 +169,16 @@ public class PlaceDto {
 
         // Getters
         public String getId() { return id; }
-        public String getTitle() { return title; }
-        public List<String> getTags() { return tags; }
+        public String getName() { return name; }
         public String getLocation() { return location; }
         public String getAddress() { return address; }
         public Double getRating() { return rating; }
         public int getReviewCount() { return reviewCount; }
         public String getDescription() { return description; }
         public List<PlaceImageData> getImages() { return images; }
-        public List<String> getGallery() { return gallery; }
         public int getAdditionalImageCount() { return additionalImageCount; }
         public TransportationInfo getTransportation() { return transportation; }
         public String getOperatingHours() { return operatingHours; }
-        public List<String> getAmenities() { return amenities; }
         public boolean isBookmarked() { return isBookmarked; }
     }
 
@@ -208,7 +196,6 @@ public class PlaceDto {
         private final Double rating;
         private final String carTime;
         private final String busTime;
-        private final List<String> tags;
         private final String image;
         private final List<PlaceImageData> images;
         private final boolean isBookmarked;
@@ -216,7 +203,7 @@ public class PlaceDto {
         private final TagInfo noiseTag;
 
         public PlaceSearchResult(String id, String name, String hours, String location, Double rating,
-                               String carTime, String busTime, List<String> tags, String image,
+                               String carTime, String busTime, String image,
                                List<PlaceImageData> images, boolean isBookmarked, TagInfo weatherTag, TagInfo noiseTag) {
             this.id = id;
             this.name = name;
@@ -225,7 +212,6 @@ public class PlaceDto {
             this.rating = rating;
             this.carTime = carTime;
             this.busTime = busTime;
-            this.tags = tags;
             this.image = image;
             this.images = images != null ? images : List.of();
             this.isBookmarked = isBookmarked;
@@ -246,7 +232,6 @@ public class PlaceDto {
         public Double getRating() { return rating; }
         public String getCarTime() { return carTime; }
         public String getBusTime() { return busTime; }
-        public List<String> getTags() { return tags; }
         public String getImage() { return image; }
         public List<PlaceImageData> getImages() { return images; }
         public boolean isBookmarked() { return isBookmarked; }
