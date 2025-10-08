@@ -1,7 +1,7 @@
 package com.mohe.spring.batch.processor;
 
 import com.mohe.spring.batch.category.ExcludedCategory;
-import com.mohe.spring.batch.service.NaverPlaceApiService;
+import com.mohe.spring.batch.service.KakaoPlaceApiService;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceDescription;
 import com.mohe.spring.repository.PlaceRepository;
@@ -17,28 +17,20 @@ import java.util.List;
  * 장소 데이터 처리 ItemProcessor
  *
  * <p>검색 쿼리를 입력받아 실제 장소 데이터로 변환하는 핵심 처리 로직입니다.
- * Naver API를 직접 호출하여 장소 정보를 수집합니다.</p>
+ * Kakao API를 통해 장소 정보를 수집합니다 (페이지당 15개 × 20페이지 = 최대 300개).</p>
  *
  * <h3>처리 흐름</h3>
  * <ol>
- *   <li><b>Naver API 호출</b>: NaverPlaceApiService를 통해 검색 쿼리로 장소 검색 (최대 5개)</li>
+ *   <li><b>Kakao API 호출</b>: KakaoPlaceApiService를 통해 검색 쿼리로 장소 검색 (최대 300개)</li>
  *   <li><b>필터링</b>: ExcludedCategory를 사용하여 학원, 병원, 종교시설 등 제외</li>
  *   <li><b>중복 체크</b>: 이미 DB에 존재하는 장소 스킵 (roadAddress 기준)</li>
- *   <li><b>검증된 Place 반환</b>: null 반환 시 Writer로 전달되지 않음</li>
+ *   <li><b>직접 저장</b>: Processor에서 검증된 장소를 바로 DB에 저장</li>
  * </ol>
  *
  * <h3>입력/출력</h3>
  * <ul>
  *   <li><b>Input</b>: String (검색 쿼리, 예: "서울특별시 강남구 역삼동 카페")</li>
- *   <li><b>Output</b>: Place 엔티티 (저장할 장소만) 또는 null (필터링/중복)</li>
- * </ul>
- *
- * <h3>Null 반환 케이스</h3>
- * <p>다음 경우 null을 반환하여 해당 아이템을 스킵합니다:</p>
- * <ul>
- *   <li>Naver API에서 검색 결과가 없는 경우</li>
- *   <li>학원, 병원 등 ExcludedCategory에 해당하는 경우</li>
- *   <li>이미 DB에 존재하는 중복 장소인 경우</li>
+ *   <li><b>Output</b>: null (Processor에서 직접 저장 처리)</li>
  * </ul>
  *
  * <h3>제외 카테고리</h3>
@@ -54,9 +46,9 @@ import java.util.List;
  * </ul>
  *
  * @author Andrew Lim
- * @since 1.0
+ * @since 2.0
  * @see org.springframework.batch.item.ItemProcessor
- * @see com.mohe.spring.batch.service.NaverPlaceApiService
+ * @see com.mohe.spring.batch.service.KakaoPlaceApiService
  * @see com.mohe.spring.batch.category.ExcludedCategory
  */
 @Component
@@ -64,8 +56,8 @@ public class PlaceDataProcessor implements ItemProcessor<String, Place> {
 
     private static final Logger logger = LoggerFactory.getLogger(PlaceDataProcessor.class);
 
-    /** Naver Place API 호출 서비스 */
-    private final NaverPlaceApiService naverPlaceApiService;
+    /** Kakao Place API 호출 서비스 */
+    private final KakaoPlaceApiService kakaoPlaceApiService;
 
     /** Place 엔티티 Repository (중복 체크용) */
     private final PlaceRepository placeRepository;
@@ -76,14 +68,14 @@ public class PlaceDataProcessor implements ItemProcessor<String, Place> {
     /**
      * PlaceDataProcessor 생성자
      *
-     * @param naverPlaceApiService Naver API 호출 담당 서비스
+     * @param kakaoPlaceApiService Kakao API 호출 담당 서비스
      * @param placeRepository Place 엔티티 저장소 (중복 체크용)
      * @param placeDataCollectionService Place 저장 서비스
      */
-    public PlaceDataProcessor(NaverPlaceApiService naverPlaceApiService,
+    public PlaceDataProcessor(KakaoPlaceApiService kakaoPlaceApiService,
                               PlaceRepository placeRepository,
                               PlaceDataCollectionService placeDataCollectionService) {
-        this.naverPlaceApiService = naverPlaceApiService;
+        this.kakaoPlaceApiService = kakaoPlaceApiService;
         this.placeRepository = placeRepository;
         this.placeDataCollectionService = placeDataCollectionService;
     }
@@ -133,8 +125,8 @@ public class PlaceDataProcessor implements ItemProcessor<String, Place> {
             // API Rate Limit 방지 - 요청 사이에 짧은 딜레이 추가
             Thread.sleep(100); // 100ms 딜레이 (초당 10개 요청으로 제한)
 
-            // 1. Naver API를 통해 장소 검색 (최대 50개)
-            List<Place> places = naverPlaceApiService.searchPlaces(query, 50);
+            // 1. Kakao API를 통해 장소 검색 (size=15, page=1~20, 최대 300개)
+            List<Place> places = kakaoPlaceApiService.searchPlaces(query, 300);
 
             if (places.isEmpty()) {
                 logger.warn("⚠️ No places found for query: {}", query);
