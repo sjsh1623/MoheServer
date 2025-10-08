@@ -7,6 +7,8 @@ import java.util.List;
 /**
  * Naver Place API 호출 서비스 인터페이스
  *
+ * @deprecated Kakao Local API로 교체되었습니다. {@link KakaoPlaceApiService}를 사용하세요.
+ *
  * <p>Naver Local Search API를 호출하여 장소 데이터를 검색하고,
  * 응답을 Place 엔티티로 변환하는 기능을 정의합니다.</p>
  *
@@ -52,11 +54,15 @@ import java.util.List;
  * @author Andrew Lim
  * @since 1.0
  * @see com.mohe.spring.batch.service.impl.NaverPlaceApiServiceImpl
+ * @see KakaoPlaceApiService
  */
+@Deprecated
 public interface NaverPlaceApiService {
 
     /**
      * Naver Local Search API를 호출하여 장소를 검색합니다
+     *
+     * @deprecated Kakao Local API로 교체되었습니다. {@link KakaoPlaceApiService#searchPlaces(String, int)}를 사용하세요.
      *
      * <p>검색 쿼리를 기반으로 Naver API를 호출하고,
      * 응답 데이터를 Place 엔티티 리스트로 변환하여 반환합니다.</p>
@@ -95,5 +101,6 @@ public interface NaverPlaceApiService {
      * @return 검색된 장소 리스트 (Place 엔티티)
      * @throws RuntimeException API 호출 실패 시
      */
+    @Deprecated
     List<Place> searchPlaces(String query, int display);
 }
