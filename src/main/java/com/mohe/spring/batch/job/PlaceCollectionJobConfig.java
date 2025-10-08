@@ -1,5 +1,6 @@
 package com.mohe.spring.batch.job;
 
+import com.mohe.spring.batch.location.LocationRegistry;
 import com.mohe.spring.batch.reader.PlaceQueryReader;
 import com.mohe.spring.entity.Place;
 import org.springframework.batch.core.Job;
@@ -116,14 +117,16 @@ public class PlaceCollectionJobConfig {
      *     .toJobParameters();
      * </pre>
      *
+     * @param locationRegistry 지역 정보 레지스트리
      * @param region Job 파라미터로 전달된 지역 코드 (nullable)
      * @return 설정된 PlaceQueryReader 인스턴스
      */
     @Bean
     @StepScope
     public PlaceQueryReader placeQueryReader(
+            LocationRegistry locationRegistry,
             @Value("#{jobParameters['region']}") String region) {
-        PlaceQueryReader reader = new PlaceQueryReader();
+        PlaceQueryReader reader = new PlaceQueryReader(locationRegistry);
         reader.setRegion(region);
         return reader;
     }

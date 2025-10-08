@@ -42,8 +42,14 @@ public enum ExcludedCategory {
     /** 학원 (입시, 어학, 과외, 교습소 등) */
     ACADEMY("학원", Arrays.asList("학원", "교습소", "과외")),
 
+    /* 학교 */
+    SCHOOL("학교", Arrays.asList("학교", "어린이집", "유치원")),
+
+    /* 주유소 */
+    GAS_STATION("주유소", Arrays.asList("주유소")),
+
     /** 병원 (종합병원, 의원, 클리닉) */
-    HOSPITAL("병원", Arrays.asList("병원", "의원", "클리닉", "한의원")),
+    HOSPITAL("병원", Arrays.asList("병원", "의원", "클리닉", "한의원", "약국")),
 
     /** 보건소 (공공 보건의료 기관) */
     PUBLIC_HEALTH_CENTER("보건소", Arrays.asList("보건소")),
@@ -56,6 +62,12 @@ public enum ExcludedCategory {
 
     /** 성당 (천주교 예배 장소) */
     CATHEDRAL("성당", Arrays.asList("성당")),
+
+    /* 마켓 (마트) */
+    MARKET("마트", Arrays.asList("마트", "농협", "편의점")),
+
+    /* 숙박 */
+    STAY("숙박", Arrays.asList("호텔", "모텔", "민박", "숙박")),
 
     /** 종교시설 (사찰, 절, 성지 등) */
     RELIGIOUS_FACILITY("종교시설", Arrays.asList("사찰", "절", "성지", "교리", "기도원"));
@@ -130,6 +142,20 @@ public enum ExcludedCategory {
         }
 
         return false; // 제외 대상 아님
+    }
+
+    public static boolean shouldExclude(List<String> categories) {
+        if (categories == null || categories.isEmpty()) {
+            return false;
+        }
+
+        for (String category : categories) {
+            if (shouldExclude(category)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

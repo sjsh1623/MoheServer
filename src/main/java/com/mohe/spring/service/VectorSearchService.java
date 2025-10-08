@@ -220,7 +220,7 @@ public class VectorSearchService {
             null, // Gallery field removed
             List.of(),
             place.getRating() != null ? place.getRating().doubleValue() : 4.0,
-            place.getCategory() != null ? place.getCategory() : "기타"
+            place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "기타"
         );
     }
     

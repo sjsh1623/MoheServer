@@ -54,7 +54,7 @@ public class NaverPlaceApiServiceImpl implements NaverPlaceApiService {
     private static final Logger logger = LoggerFactory.getLogger(NaverPlaceApiServiceImpl.class);
 
     /** Naver Local Search API 엔드포인트 */
-    private static final String NAVER_LOCAL_SEARCH_URL = "https://openapi.naver.com/v1/search/local.json";
+    private static final String NAVER_LOCAL_SEARCH_URL = "https://openapi.naver.com/v1/search/local";
 
     /** Naver API 클라이언트 ID (application.yml에서 주입) */
     @Value("${naver.place.clientId}")
@@ -123,7 +123,7 @@ public class NaverPlaceApiServiceImpl implements NaverPlaceApiService {
      * </pre>
      *
      * @param query 검색 쿼리 (예: "서울특별시 종로구 청운효자동 카페")
-     * @param display 검색 결과 개수 (최대 5)
+     * @param display 검색 결과 개수 (최대 50)
      * @return 검색된 장소 리스트 (Place 엔티티)
      * @throws RuntimeException API 호출 실패 시
      */
@@ -249,11 +249,10 @@ public class NaverPlaceApiServiceImpl implements NaverPlaceApiService {
         // Place 엔티티 생성
         Place place = new Place();
         place.setName(cleanTitle);
-        place.setCategory(category);
+        place.setCategory(List.of(category.split(">")));
         place.setRoadAddress(roadAddress);
         place.setLongitude(longitude);
         place.setLatitude(latitude);
-        place.setSearchQuery(query);
 
         logger.debug("✅ Converted place: {} [{}] at ({}, {})",
                 cleanTitle, category, latitude, longitude);

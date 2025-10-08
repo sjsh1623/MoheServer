@@ -1,6 +1,6 @@
 package com.mohe.spring.batch.location;
 
-public enum SeoulLocation {
+public enum SeoulLocation implements Location {
     SEOUL_JONGNO_CHEONGUN_HYOJA_DONG("서울특별시", "종로구", "청운효자동"),
     SEOUL_JONGNO_SAJIK_DONG("서울특별시", "종로구", "사직동"),
     SEOUL_JONGNO_SAMCHEONG_DONG("서울특별시", "종로구", "삼청동"),
@@ -418,7 +418,13 @@ public enum SeoulLocation {
         return dong;
     }
 
+    @Override
     public String getFullName() {
         return city + " " + district + " " + dong;
+    }
+
+    @Override
+    public String getRegionCode() {
+        return "seoul";
     }
 }

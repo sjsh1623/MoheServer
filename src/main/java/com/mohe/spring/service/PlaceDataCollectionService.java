@@ -134,7 +134,7 @@ public class PlaceDataCollectionService {
         // 기본 정보
         String title = item.get("title").asText().replaceAll("<[^>]*>", "");
         place.setName(title);
-        place.setCategory(item.get("category").asText());
+        place.setCategory(List.of(item.get("category").asText().split(">")));
         place.setRoadAddress(item.has("roadAddress") ? item.get("roadAddress").asText() : null);
 
         // 좌표 변환 (Naver API 좌표계)
@@ -156,9 +156,8 @@ public class PlaceDataCollectionService {
             logger.warn("좌표 정보 없음: {}", title);
         }
 
-        place.setDescription(String.format("한국의 %s - %s", title, place.getCategory()));
         place.setRating(BigDecimal.ZERO); // Google API로 나중에 보강
-        place.setCreatedAt(OffsetDateTime.now());
+        place.setCreatedAt(java.time.LocalDateTime.now());
 
         return place;
     }
@@ -235,7 +234,7 @@ public class PlaceDataCollectionService {
         if (place == null) return true;
 
         String name = place.getName() != null ? place.getName().toLowerCase() : "";
-        String category = place.getCategory() != null ? place.getCategory().toLowerCase() : "";
+        List<String> categories = place.getCategory();
 
         // 이름 필터링
         String[] nameFilters = {
@@ -251,14 +250,18 @@ public class PlaceDataCollectionService {
         }
 
         // 카테고리 필터링
-        String[] categoryFilters = {
-            "슈퍼마켓", "편의점", "약국", "마트", "대형마트", "할인점",
-            "supermarket", "convenience store", "pharmacy", "drugstore"
-        };
+        if (categories != null) {
+            String[] categoryFilters = {
+                "슈퍼마켓", "편의점", "약국", "마트", "대형마트", "할인점",
+                "supermarket", "convenience store", "pharmacy", "drugstore"
+            };
 
-        for (String filter : categoryFilters) {
-            if (category.contains(filter)) {
-                return true;
+            for (String category : categories) {
+                for (String filter : categoryFilters) {
+                    if (category.toLowerCase().contains(filter)) {
+                        return true;
+                    }
+                }
             }
         }
 

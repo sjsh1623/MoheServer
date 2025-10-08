@@ -5,7 +5,7 @@ package com.mohe.spring.batch.location;
  * - 수지구, 기흥구, 처인구의 행정동 총 32개
  * 검증 출처: 위키백과 '용인시의 행정동' 분류 및 각 구청 행정복지센터 현황 페이지.
  */
-public enum YonginLocation {
+public enum YonginLocation implements Location {
     // 수지구
     YONGIN_SUJI_PUNGDEOKCHEON_1_DONG("경기도", "용인특례시", "수지구", "풍덕천1동"),
     YONGIN_SUJI_PUNGDEOKCHEON_2_DONG("경기도", "용인특례시", "수지구", "풍덕천2동"),
@@ -76,8 +76,17 @@ public enum YonginLocation {
     /**
      * 풀네임: 예) "경기도 용인특례시 수지구 풍덕천1동"
      */
+    @Override
     public String getFullName() {
         return province + " " + city + " " + district + " " + dong;
+    }
+
+    /**
+     * 지역 코드 반환
+     */
+    @Override
+    public String getRegionCode() {
+        return "yongin";
     }
 
     /**

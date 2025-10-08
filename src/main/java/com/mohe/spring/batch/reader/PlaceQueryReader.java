@@ -1,9 +1,8 @@
 package com.mohe.spring.batch.reader;
 
 import com.mohe.spring.batch.category.SearchCategory;
-import com.mohe.spring.batch.location.JejuLocation;
-import com.mohe.spring.batch.location.SeoulLocation;
-import com.mohe.spring.batch.location.YonginLocation;
+import com.mohe.spring.batch.location.Location;
+import com.mohe.spring.batch.location.LocationRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.item.ItemReader;
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 장소 검색 쿼리를 생성하는 ItemReader
@@ -20,7 +20,7 @@ import java.util.List;
  *
  * <h3>동작 방식</h3>
  * <ol>
- *   <li>Location Enum에서 모든 지역 정보 가져오기 (Seoul, Jeju, Yongin)</li>
+ *   <li>LocationRegistry에서 등록된 모든 지역 정보 가져오기</li>
  *   <li>SearchCategory Enum의 모든 카테고리와 조합</li>
  *   <li>"지역 전체명 + 카테고리" 형태의 검색 쿼리 생성</li>
  *   <li>예시: "서울특별시 종로구 청운효자동 카페", "제주특별자치도 제주시 노형동 맛집" 등</li>
@@ -30,13 +30,13 @@ import java.util.List;
  * <p>SearchCategory Enum에 정의된 카테고리만 사용합니다:
  * 카페, 맛집, 레스토랑, 데이트, 바, 공방, 취미생활, 쇼핑</p>
  *
- * <h3>지역 범위</h3>
- * <p>다음 지역의 모든 행정동을 포함합니다:</p>
- * <ul>
- *   <li><b>서울특별시:</b> 모든 구의 행정동 (SeoulLocation Enum)</li>
- *   <li><b>제주특별자치도:</b> 제주시, 서귀포시의 행정동 (JejuLocation Enum)</li>
- *   <li><b>경기도 용인특례시:</b> 수지구, 기흥구, 처인구의 행정동 (YonginLocation Enum)</li>
- * </ul>
+ * <h3>지역 자동 등록</h3>
+ * <p>LocationRegistry에 등록된 모든 지역이 자동으로 처리됩니다.</p>
+ * <p>새로운 지역을 추가하려면:</p>
+ * <ol>
+ *   <li>Location 인터페이스를 구현하는 새로운 Enum 생성 (예: BusanLocation)</li>
+ *   <li>LocationRegistry의 registerAllLocations()에 등록</li>
+ * </ol>
  *
  * <h3>Stateful Reader</h3>
  * <p>첫 번째 read() 호출 시 모든 검색 쿼리를 초기화하고,
@@ -50,15 +50,17 @@ import java.util.List;
  * @author Andrew Lim
  * @since 1.0
  * @see org.springframework.batch.item.ItemReader
- * @see com.mohe.spring.batch.location.SeoulLocation
- * @see com.mohe.spring.batch.location.JejuLocation
- * @see com.mohe.spring.batch.location.YonginLocation
+ * @see com.mohe.spring.batch.location.Location
+ * @see com.mohe.spring.batch.location.LocationRegistry
  * @see com.mohe.spring.batch.category.SearchCategory
  */
 @Component
 public class PlaceQueryReader implements ItemReader<String> {
 
     private static final Logger logger = LoggerFactory.getLogger(PlaceQueryReader.class);
+
+    /** 지역 정보를 관리하는 레지스트리 */
+    private final LocationRegistry locationRegistry;
 
     /** 생성된 검색 쿼리 목록 (지역명 + 카테고리 조합) */
     private List<String> searchQueries;
@@ -70,9 +72,12 @@ public class PlaceQueryReader implements ItemReader<String> {
     private String regionFilter = null;
 
     /**
-     * PlaceQueryReader 기본 생성자
+     * PlaceQueryReader 생성자
+     *
+     * @param locationRegistry 지역 정보 레지스트리
      */
-    public PlaceQueryReader() {
+    public PlaceQueryReader(LocationRegistry locationRegistry) {
+        this.locationRegistry = locationRegistry;
     }
 
     /**
@@ -127,39 +132,35 @@ public class PlaceQueryReader implements ItemReader<String> {
      *
      * <p>regionFilter 값에 따라 다음과 같이 동작합니다:</p>
      * <ul>
-     *   <li><b>"seoul":</b> 서울특별시 모든 행정동</li>
-     *   <li><b>"jeju":</b> 제주특별자치도 모든 행정동</li>
-     *   <li><b>"yongin":</b> 경기도 용인특례시 모든 행정동</li>
-     *   <li><b>null 또는 기타:</b> 모든 지역</li>
+     *   <li><b>특정 지역 코드 (예: "seoul", "jeju", "yongin"):</b> 해당 지역만</li>
+     *   <li><b>null:</b> LocationRegistry에 등록된 모든 지역</li>
      * </ul>
+     *
+     * <p>새로운 지역이 LocationRegistry에 등록되면 자동으로 처리됩니다.</p>
      *
      * @return 지역 전체명 리스트 (예: ["서울특별시 종로구 청운효자동", ...])
      */
     private List<String> getLocationsBasedOnFilter() {
-        List<String> locations = new ArrayList<>();
+        List<Location> locations;
 
-        // Region filter가 null이거나 "seoul"이면 서울 포함
-        if (regionFilter == null || "seoul".equalsIgnoreCase(regionFilter)) {
-            for (SeoulLocation location : SeoulLocation.values()) {
-                locations.add(location.getFullName());
+        if (regionFilter == null) {
+            // 모든 지역 가져오기
+            locations = locationRegistry.getAllLocations();
+            logger.info("📍 Processing ALL regions: {}", locationRegistry.getAvailableRegions());
+        } else {
+            // 특정 지역만 가져오기
+            locations = locationRegistry.getLocations(regionFilter);
+            if (locations.isEmpty()) {
+                logger.warn("⚠️ No locations found for region: {}. Available regions: {}",
+                           regionFilter, locationRegistry.getAvailableRegions());
+            } else {
+                logger.info("📍 Processing region: {}", regionFilter);
             }
         }
 
-        // Region filter가 null이거나 "jeju"이면 제주 포함
-        if (regionFilter == null || "jeju".equalsIgnoreCase(regionFilter)) {
-            for (JejuLocation location : JejuLocation.values()) {
-                locations.add(location.getFullName());
-            }
-        }
-
-        // Region filter가 null이거나 "yongin"이면 용인 포함
-        if (regionFilter == null || "yongin".equalsIgnoreCase(regionFilter)) {
-            for (YonginLocation location : YonginLocation.values()) {
-                locations.add(location.getFullName());
-            }
-        }
-
-        return locations;
+        return locations.stream()
+                .map(Location::getFullName)
+                .collect(Collectors.toList());
     }
 
     /**

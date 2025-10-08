@@ -125,7 +125,7 @@ public class ActivityService {
         SimplePlaceDto dto = new SimplePlaceDto(
             place.getId().toString(),
             place.getName(),
-            place.getCategory(),
+            place.getCategory().get(0),
             place.getRating() != null ? place.getRating().doubleValue() : null,
             place.getRoadAddress(),
             null // Gallery field removed
@@ -134,7 +134,6 @@ public class ActivityService {
         dto.setReviewCount(place.getReviewCount());
         dto.setAddress(place.getRoadAddress());
         dto.setIsBookmarked(true);
-        dto.setDescription(place.getDescription());
 
         return dto;
     }

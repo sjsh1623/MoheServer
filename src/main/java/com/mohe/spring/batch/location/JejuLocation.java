@@ -7,7 +7,7 @@ package com.mohe.spring.batch.location;
  * - 제주시 행정동 19개: 건입동, 노형동, 도두동, 봉개동, 삼도1동, 삼도2동, 삼양동, 아라동, 연동, 오라동, 외도동, 용담1동, 용담2동, 이도1동, 이도2동, 이호동, 일도1동, 일도2동, 화북동
  * - 서귀포시 행정동 12개: 대륜동, 대천동, 동홍동, 서홍동, 송산동, 영천동, 예래동, 정방동, 중문동, 중앙동, 천지동, 효돈동
  */
-public enum JejuLocation {
+public enum JejuLocation implements Location {
     // 제주시(19)
     JEJU_JEJU_GEONIP_DONG("제주특별자치도", "제주시", "건입동"),
     JEJU_JEJU_NOHYEONG_DONG("제주특별자치도", "제주시", "노형동"),
@@ -68,8 +68,17 @@ public enum JejuLocation {
     /**
      * 풀네임: 예) "제주특별자치도 제주시 노형동"
      */
+    @Override
     public String getFullName() {
         return province + " " + city + " " + dong;
+    }
+
+    /**
+     * 지역 코드 반환
+     */
+    @Override
+    public String getRegionCode() {
+        return "jeju";
     }
 
     /**

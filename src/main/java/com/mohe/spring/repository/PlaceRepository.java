@@ -21,26 +21,24 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     
     @Query("SELECT p FROM Place p WHERE p.rating >= :minRating ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findTopRatedPlaces(@Param("minRating") Double minRating, Pageable pageable);
-    
-    // Removed problematic query method
-    
-    @Query("SELECT p FROM Place p ORDER BY p.popularity DESC, p.rating DESC")
+
+    @Query("SELECT p FROM Place p ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findPopularPlaces(Pageable pageable);
     
     @Query("SELECT p FROM Place p WHERE " +
            "LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(p.description) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(p.address) LIKE LOWER(CONCAT('%', :query, '%'))")
+           "LOWER(p.roadAddress) LIKE LOWER(CONCAT('%', :query, '%'))")
     Page<Place> searchPlaces(@Param("query") String query, Pageable pageable);
     
-    @Query("SELECT p FROM Place p WHERE " +
-           "(:category IS NULL OR p.category = :category) AND " +
-           "(:location IS NULL OR LOWER(p.address) LIKE LOWER(CONCAT('%', :location, '%')))")
-    Page<Place> findPlacesWithFilters(
-        @Param("category") String category,
-        @Param("location") String location,
-        Pageable pageable
-    );
+    // Disabled: complex array member check not supported
+    // @Query("SELECT p FROM Place p WHERE " +
+    //        "(:category IS NULL OR :category MEMBER OF p.category) AND " +
+    //        "(:location IS NULL OR LOWER(p.roadAddress) LIKE LOWER(CONCAT('%', :location, '%')))")
+    // Page<Place> findPlacesWithFilters(
+    //     @Param("category") String category,
+    //     @Param("location") String location,
+    //     Pageable pageable
+    // );
     
     @Query("SELECT p FROM Place p WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL")
     List<Place> findPlacesWithLocation();
@@ -49,10 +47,6 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     List<String> findAllCategories();
     
     // New methods for enhanced place management
-    Optional<Place> findByNaverPlaceId(String naverPlaceId);
-    
-    Optional<Place> findByGooglePlaceId(String googlePlaceId);
-    
     Optional<Place> findByName(String name);
 
     boolean existsByRoadAddress(String roadAddress);
@@ -94,16 +88,17 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     """)
     Page<Place> findRecommendablePlaces(Pageable pageable);
     
-    @Query("""
-        SELECT p FROM Place p 
-        WHERE p.shouldRecheckRating = true 
-        AND p.lastRatingCheck < :recheckThreshold
-        ORDER BY p.lastRatingCheck ASC NULLS FIRST
-    """)
-    Page<Place> findPlacesNeedingRatingRecheck(
-        @Param("recheckThreshold") OffsetDateTime recheckThreshold,
-        Pageable pageable
-    );
+    // Disabled: Place entity doesn't have shouldRecheckRating and lastRatingCheck fields
+    // @Query("""
+    //     SELECT p FROM Place p
+    //     WHERE p.shouldRecheckRating = true
+    //     AND p.lastRatingCheck < :recheckThreshold
+    //     ORDER BY p.lastRatingCheck ASC NULLS FIRST
+    // """)
+    // Page<Place> findPlacesNeedingRatingRecheck(
+    //     @Param("recheckThreshold") OffsetDateTime recheckThreshold,
+    //     Pageable pageable
+    // );
 
     @Query("SELECT p FROM Place p WHERE p.createdAt < :oldDate AND p.rating < :ratingThreshold")
     List<Place> findOldLowRatedPlaces(
@@ -158,8 +153,8 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
                 WHERE LOWER(p.category) LIKE LOWER('%' || cat.category || '%')
             )
         )
-        AND (p.rating >= 3.0 OR p.is_new_place = true)
-        ORDER BY p.rating DESC, p.review_count DESC
+        AND (p.rating >= 3.0 OR p.rating IS NULL)
+        ORDER BY p.rating DESC NULLS LAST, p.review_count DESC NULLS LAST
         LIMIT :#{#pageable.pageSize}
     """, nativeQuery = true)
     List<Place> findNearbyPlacesByTimePreference(
@@ -173,16 +168,17 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     /**
      * Find places that match time-based preferences (no location filter)
      */
-    @Query("""
-        SELECT p FROM Place p
-        WHERE LOWER(p.category) IN :categories
-        AND (p.rating >= 3.0 OR p.isNewPlace = true)
-        ORDER BY p.rating DESC, p.reviewCount DESC
-    """)
-    List<Place> findPlacesByTimePreference(
-        @Param("categories") List<String> categories,
-        Pageable pageable
-    );
+    // Disabled: Place entity doesn't have isNewPlace field
+    // @Query("""
+    //     SELECT p FROM Place p
+    //     WHERE LOWER(p.category) IN :categories
+    //     AND (p.rating >= 3.0 OR p.rating IS NULL)
+    //     ORDER BY p.rating DESC, p.reviewCount DESC
+    // """)
+    // List<Place> findPlacesByTimePreference(
+    //     @Param("categories") List<String> categories,
+    //     Pageable pageable
+    // );
 
     /**
      * Find nearby places ordered by distance (for LLM recommendations)
@@ -190,7 +186,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query(value = """
         SELECT p.* FROM places p
         WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
-        AND (p.rating >= 3.0 OR p.is_new_place = true)
+        AND (p.rating >= 3.0 OR p.rating IS NULL)
         AND (
             6371 * acos(
                 cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
@@ -219,7 +215,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
      */
     @Query("""
         SELECT p FROM Place p
-        WHERE (p.rating >= 3.0 OR p.isNewPlace = true)
+        WHERE (p.rating >= 3.0 OR p.rating IS NULL)
         ORDER BY p.rating DESC, p.reviewCount DESC
     """)
     List<Place> findGeneralPlacesForLLM(Pageable pageable);
@@ -235,4 +231,6 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         ORDER BY p.rating DESC NULLS LAST, p.reviewCount DESC NULLS LAST
     """)
     List<Place> findPlacesWithoutImages();
+
+    Page<Place> findByReady(boolean ready, Pageable pageable);
 }
