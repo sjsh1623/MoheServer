@@ -7,10 +7,10 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "place_images")
+@Table(name = "place_sns")
 @Getter
 @Setter
-public class PlaceImage {
+public class PlaceSns {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -19,10 +19,11 @@ public class PlaceImage {
     @JoinColumn(name = "place_id")
     private Place place;
 
+    @Column(length = 50)
+    private String platform;
+
     @Column(columnDefinition = "TEXT")
     private String url;
-
-    private Integer orderIndex;
 
     private LocalDateTime createdAt;
 

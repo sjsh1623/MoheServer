@@ -351,7 +351,7 @@ public class PlaceService {
                     imageUrl,
                     List.of(),
                     place.getRating() != null ? place.getRating().doubleValue() : 4.0,
-                    place.getCategory() != null ? place.getCategory() : "카테고리 없음"
+                    place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "카테고리 없음"
                 );
             })
             .collect(Collectors.toList());
@@ -363,7 +363,7 @@ public class PlaceService {
         SimplePlaceDto dto = new SimplePlaceDto(
             place.getId().toString(),
             place.getName(),
-            place.getCategory() != null ? place.getCategory() : "기타",
+            place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "기타",
             place.getRating() != null ? place.getRating().doubleValue() : 4.0,
             place.getRoadAddress(),
             imageUrl
@@ -372,9 +372,6 @@ public class PlaceService {
         // Set additional fields
         dto.setReviewCount(place.getReviewCount() != null ? place.getReviewCount() : 0);
         dto.setAddress(place.getRoadAddress());
-        dto.setDescription(place.getDescription());
-        dto.setPhone(place.getPhone());
-        dto.setWebsiteUrl(place.getWebsiteUrl());
         dto.setDistance(0.0); // TODO: Calculate actual distance
         dto.setIsBookmarked(false); // TODO: Check if bookmarked by current user
         dto.setIsDemo(false);

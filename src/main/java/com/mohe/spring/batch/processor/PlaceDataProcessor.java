@@ -3,7 +3,9 @@ package com.mohe.spring.batch.processor;
 import com.mohe.spring.batch.category.ExcludedCategory;
 import com.mohe.spring.batch.service.NaverPlaceApiService;
 import com.mohe.spring.entity.Place;
+import com.mohe.spring.entity.PlaceDescription;
 import com.mohe.spring.repository.PlaceRepository;
+import com.mohe.spring.service.PlaceDataCollectionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.item.ItemProcessor;
@@ -68,16 +70,22 @@ public class PlaceDataProcessor implements ItemProcessor<String, Place> {
     /** Place 엔티티 Repository (중복 체크용) */
     private final PlaceRepository placeRepository;
 
+    /** Place 저장 서비스 */
+    private final PlaceDataCollectionService placeDataCollectionService;
+
     /**
      * PlaceDataProcessor 생성자
      *
      * @param naverPlaceApiService Naver API 호출 담당 서비스
      * @param placeRepository Place 엔티티 저장소 (중복 체크용)
+     * @param placeDataCollectionService Place 저장 서비스
      */
     public PlaceDataProcessor(NaverPlaceApiService naverPlaceApiService,
-                              PlaceRepository placeRepository) {
+                              PlaceRepository placeRepository,
+                              PlaceDataCollectionService placeDataCollectionService) {
         this.naverPlaceApiService = naverPlaceApiService;
         this.placeRepository = placeRepository;
+        this.placeDataCollectionService = placeDataCollectionService;
     }
 
     /**
@@ -122,38 +130,72 @@ public class PlaceDataProcessor implements ItemProcessor<String, Place> {
         logger.info("🔄 Processing query: {}", query);
 
         try {
-            // 1. Naver API를 통해 장소 검색 (최대 5개, sort=comment)
-            List<Place> places = naverPlaceApiService.searchPlaces(query, 5);
+            // API Rate Limit 방지 - 요청 사이에 짧은 딜레이 추가
+            Thread.sleep(100); // 100ms 딜레이 (초당 10개 요청으로 제한)
+
+            // 1. Naver API를 통해 장소 검색 (최대 50개)
+            List<Place> places = naverPlaceApiService.searchPlaces(query, 50);
 
             if (places.isEmpty()) {
                 logger.warn("⚠️ No places found for query: {}", query);
                 return null; // null 반환 시 Writer로 전달되지 않음
             }
 
-            // 2. 첫 번째 장소만 처리 (API 비용 절감 및 효율성)
-            Place place = places.get(0);
+            logger.info("📦 Found {} places for query: {}", places.size(), query);
 
-            // 3. ExcludedCategory로 필터링 - 학원, 병원, 종교시설 등 제외
-            if (ExcludedCategory.shouldExclude(place.getCategory())) {
-                logger.debug("🚫 Filtered out place: {} (category: {})",
-                        place.getName(), place.getCategory());
-                return null;
-            }
+            // 2. 모든 장소를 처리하고 직접 저장 (필터링 및 중복 체크)
+            int savedCount = 0;
+            int skippedCount = 0;
+            int filteredCount = 0;
 
-            // 4. 중복 체크 - DB에 동일 roadAddress가 존재하는지 확인
-            if (place.getRoadAddress() != null && !place.getRoadAddress().isEmpty()) {
-                boolean exists = placeRepository.existsByRoadAddress(place.getRoadAddress());
-                if (exists) {
-                    logger.debug("⚠️ Duplicate place skipped: {} (address: {})",
-                            place.getName(), place.getRoadAddress());
-                    return null;
+            for (Place place : places) {
+                try {
+                    // 3. ExcludedCategory로 필터링 - 학원, 병원, 종교시설 등 제외
+                    if (ExcludedCategory.shouldExclude(place.getCategory())) {
+                        logger.debug("🚫 Filtered out place: {} (category: {})",
+                                place.getName(), place.getCategory());
+                        filteredCount++;
+                        continue;
+                    }
+
+                    // 4. 중복 체크 - DB에 동일 roadAddress가 존재하는지 확인
+                    if (place.getRoadAddress() != null && !place.getRoadAddress().isEmpty()) {
+                        boolean exists = placeRepository.existsByRoadAddress(place.getRoadAddress());
+                        if (exists) {
+                            logger.debug("⚠️ Duplicate place skipped: {} (address: {})",
+                                    place.getName(), place.getRoadAddress());
+                            skippedCount++;
+                            continue;
+                        }
+                    }
+
+                    // 5. PlaceDescription 추가
+                    PlaceDescription description = new PlaceDescription();
+                    description.setPlace(place);
+                    description.setSearchQuery(query);
+                    place.getDescriptions().add(description);
+
+                    // 6. 직접 저장
+                    placeDataCollectionService.savePlace(place);
+                    logger.info("✅ Saved place: {} [{}] at {}",
+                            place.getName(), place.getCategory(), place.getRoadAddress());
+                    savedCount++;
+
+                } catch (Exception e) {
+                    logger.error("❌ Failed to save place: {} - {}", place.getName(), e.getMessage());
                 }
             }
 
-            logger.info("✅ Processed place: {} [{}] at {}",
-                    place.getName(), place.getCategory(), place.getRoadAddress());
-            return place;
+            logger.info("📊 Query '{}' - Total: {}, Saved: {}, Skipped: {}, Filtered: {}",
+                    query, places.size(), savedCount, skippedCount, filteredCount);
 
+            // Writer로 전달하지 않고 Processor에서 직접 처리했으므로 null 반환
+            return null;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("❌ Thread interrupted while processing query: {}", query, e);
+            return null;
         } catch (Exception e) {
             logger.error("❌ Failed to process query: {}", query, e);
             return null; // 에러 발생 시 null 반환하여 배치 계속 진행

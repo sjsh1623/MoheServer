@@ -17,6 +17,10 @@ public interface PlaceDescriptionVectorRepository extends JpaRepository<PlaceDes
     
     List<PlaceDescriptionVector> findByPlaceIdIn(List<Long> placeIds);
     
-    @Query("SELECT pdv FROM PlaceDescriptionVector pdv WHERE pdv.place.shouldRecheckRating = false")
+    // Disabled: Place entity doesn't have shouldRecheckRating field
+    // @Query("SELECT pdv FROM PlaceDescriptionVector pdv WHERE pdv.place.shouldRecheckRating = false")
+    // List<PlaceDescriptionVector> findAllActive();
+
+    @Query("SELECT pdv FROM PlaceDescriptionVector pdv")
     List<PlaceDescriptionVector> findAllActive();
 }

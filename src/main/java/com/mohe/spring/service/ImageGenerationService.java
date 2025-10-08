@@ -102,16 +102,8 @@ public class ImageGenerationService {
             // PlaceImage 엔티티 생성
             PlaceImage placeImage = new PlaceImage();
             placeImage.setPlace(place);
-            placeImage.setImageUrl(localImagePath);  // 웹 접근 경로
-            placeImage.setImagePath(localImagePath); // 파일 시스템 경로
-            placeImage.setSource(ImageSource.AI_GENERATED);
-            placeImage.setIsAiGenerated(true);
-            placeImage.setAiModel("dall-e-3");
-            placeImage.setPromptUsed(prompt);
-            placeImage.setIsPrimary(true);
-            placeImage.setIsVerified(false);
-            placeImage.setCreatedAt(OffsetDateTime.now());
-            placeImage.setUpdatedAt(OffsetDateTime.now());
+            placeImage.setUrl(localImagePath);
+            placeImage.setCreatedAt(java.time.LocalDateTime.now());
 
             logger.info("✅ Successfully generated AI image for place: {} (rating: {})", place.getName(), place.getRating());
             return placeImage;
@@ -127,7 +119,7 @@ public class ImageGenerationService {
      */
     private PlaceImage generateDefaultImage(Place place) {
         try {
-            String category = place.getCategory() != null ? place.getCategory() : "카페";
+            String category = place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "카페";
             String defaultImagePath = getDefaultImagePath(category);
 
             java.math.BigDecimal rating = place.getRating();
@@ -139,16 +131,8 @@ public class ImageGenerationService {
             // PlaceImage 엔티티 생성
             PlaceImage placeImage = new PlaceImage();
             placeImage.setPlace(place);
-            placeImage.setImageUrl(defaultImagePath);  // 웹 접근 경로
-            placeImage.setImagePath(defaultImagePath); // 파일 시스템 경로
-            placeImage.setSource(ImageSource.MANUAL_UPLOAD);
-            placeImage.setIsAiGenerated(false);
-            placeImage.setAiModel(null);
-            placeImage.setPromptUsed("Default image for rating < 3.0");
-            placeImage.setIsPrimary(true);
-            placeImage.setIsVerified(true);
-            placeImage.setCreatedAt(OffsetDateTime.now());
-            placeImage.setUpdatedAt(OffsetDateTime.now());
+            placeImage.setUrl(defaultImagePath);
+            placeImage.setCreatedAt(java.time.LocalDateTime.now());
 
             return placeImage;
 
@@ -283,8 +267,7 @@ public class ImageGenerationService {
      */
     private String generateKoreanPlacePrompt(Place place) {
         String cleanName = place.getName().replaceAll("<[^>]*>", "");
-        String category = place.getCategory() != null ? place.getCategory() : "카페";
-        String description = place.getDescription() != null ? place.getDescription() : "";
+        String category = place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "카페";
 
         // 카테고리별 상세 프롬프트 매핑
         Map<String, String> categoryPrompts = new HashMap<>();
@@ -333,26 +316,12 @@ public class ImageGenerationService {
 
         String basePrompt = categoryPrompts.getOrDefault(category, defaultPrompt);
 
-        // Description 기반 추가 요소
-        String additionalElements = "";
-        if (description.contains("파스타") || description.contains("이탈리안")) {
-            additionalElements += " Fresh pasta dishes and Italian cuisine visible.";
-        } else if (description.contains("피자")) {
-            additionalElements += " Wood-fired pizza oven and fresh pizzas visible.";
-        } else if (description.contains("치킨") || description.contains("프라이드")) {
-            additionalElements += " Crispy fried chicken and side dishes on display.";
-        } else if (description.contains("베이커리") || description.contains("빵")) {
-            additionalElements += " Fresh bread, pastries, and baked goods in display cases.";
-        } else if (description.contains("바") || description.contains("칵테일")) {
-            additionalElements += " Professional bar setup with bottles and cocktail glasses.";
-        }
-
         return String.format(
-            "%s%s " +
+            "%s " +
             "Professional photography, high-quality interior shot, realistic lighting. " +
             "No text, no signs, no writing visible. Focus on the food and interior atmosphere. " +
             "Modern contemporary style without traditional cultural elements.",
-            basePrompt, additionalElements
+            basePrompt
         );
     }
 
@@ -518,7 +487,7 @@ public class ImageGenerationService {
         try {
             if (geminiApiKey == null || geminiApiKey.isEmpty()) {
                 logger.warn("Gemini API 키가 없어서 기본 이미지 사용: {}", place.getName());
-                return getDefaultImagePath(place.getCategory());
+                return getDefaultImagePath(place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : null);
             }
 
             logger.info("🎨 Gemini API로 이미지 생성 시작: {}", place.getName());
@@ -540,11 +509,11 @@ public class ImageGenerationService {
 
             // 실패시 기본 이미지 반환
             logger.warn("⚠️ Gemini 이미지 생성 실패, 기본 이미지 사용: {}", place.getName());
-            return getDefaultImagePath(place.getCategory());
+            return getDefaultImagePath(place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : null);
 
         } catch (Exception e) {
             logger.error("❌ Gemini 이미지 생성 중 오류 for {}: {}", place.getName(), e.getMessage());
-            return getDefaultImagePath(place.getCategory());
+            return getDefaultImagePath(place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : null);
         }
     }
 

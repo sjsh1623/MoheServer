@@ -80,7 +80,11 @@ dependencies {
     // HTTP Client Libraries - 가장 유명하고 안정적인 라이브러리들
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'  // 가장 인기 있는 HTTP 클라이언트
     implementation 'org.apache.httpcomponents.client5:httpclient5:5.3' // Apache HttpClient 5
-    
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
     // Test dependencies
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'

@@ -337,10 +337,10 @@ public class ContextualRecommendationService {
      * Simple MBTI-based scoring (can be enhanced with ML/vector similarity)
      */
     private double calculateMbtiScore(Place place, String mbtiType) {
-        if (mbtiType == null || place.getCategory() == null) return 0.0;
+        if (mbtiType == null || place.getCategory() == null || place.getCategory().isEmpty()) return 0.0;
         
         // Simple heuristic based on place category and MBTI preferences
-        String category = place.getCategory().toLowerCase();
+        String category = place.getCategory().get(0).toLowerCase();
         
         // Extrovert (E) vs Introvert (I) preferences
         if (mbtiType.startsWith("E")) {
@@ -363,7 +363,7 @@ public class ContextualRecommendationService {
         SimplePlaceDto dto = new SimplePlaceDto(
             place.getId().toString(),
             place.getName(),
-            place.getCategory() != null ? place.getCategory() : "기타",
+            place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "기타",
             place.getRating() != null ? place.getRating().doubleValue() : 4.0,
             place.getRoadAddress(),
             null // Gallery field removed
@@ -372,9 +372,6 @@ public class ContextualRecommendationService {
         // Set additional fields
         dto.setReviewCount(place.getReviewCount() != null ? place.getReviewCount() : 0);
         dto.setAddress(place.getRoadAddress());
-        dto.setDescription(place.getDescription());
-        dto.setPhone(place.getPhone());
-        dto.setWebsiteUrl(place.getWebsiteUrl());
         dto.setDistance(0.0); // Distance disabled as per requirements
         dto.setIsBookmarked(false); // TODO: Check if bookmarked by current user
         dto.setIsDemo(false);

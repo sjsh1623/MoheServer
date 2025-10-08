@@ -3,17 +3,20 @@ spring:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
     username: sa
-    password: 
-  
+    password:
+
   jpa:
     hibernate:
       ddl-auto: create-drop
     database-platform: org.hibernate.dialect.H2Dialect
     show-sql: true
-  
+
   h2:
     console:
       enabled: true
+
+  flyway:
+    enabled: false
 
 jwt:
   secret: testSecretKey123456789012345678901234567890123456789012345678901234567890
