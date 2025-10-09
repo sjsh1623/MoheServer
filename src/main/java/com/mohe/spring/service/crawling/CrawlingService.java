@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mohe.spring.dto.crawling.CrawledDataDto;
 import com.mohe.spring.dto.crawling.CrawlingResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -16,8 +17,9 @@ public class CrawlingService {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
 
-    public CrawlingService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
-        this.webClient = webClientBuilder.baseUrl("http://localhost:4000").build();
+    public CrawlingService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
+                          @Value("${crawler.base-url:http://host.docker.internal:4000}") String baseUrl) {
+        this.webClient = webClientBuilder.baseUrl(baseUrl).build();
         this.objectMapper = objectMapper;
     }
 
@@ -27,7 +29,7 @@ public class CrawlingService {
         requestBody.put("placeName", placeName);
 
         return webClient.post()
-                .uri("/")
+                .uri("/api/v1/place")
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(Map.class)

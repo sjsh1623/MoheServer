@@ -60,6 +60,9 @@ public class UpdateCrawledDataJobConfig {
                 .reader(placeReader)
                 .processor(placeProcessor)
                 .writer(placeWriter)
+                .faultTolerant()
+                .skip(org.springframework.web.reactive.function.client.WebClientResponseException.class)
+                .skipLimit(Integer.MAX_VALUE)
                 .build();
     }
 
@@ -77,16 +80,17 @@ public class UpdateCrawledDataJobConfig {
     @Bean
     public ItemProcessor<Place, Place> placeProcessor() {
         return place -> {
-            // Get search query from PlaceDescription if available
-            String searchQuery = place.getRoadAddress();
-            if (!place.getDescriptions().isEmpty()) {
-                String savedSearchQuery = place.getDescriptions().get(0).getSearchQuery();
-                if (savedSearchQuery != null && !savedSearchQuery.isEmpty()) {
-                    searchQuery = savedSearchQuery;
+            try {
+                // Get search query from PlaceDescription if available
+                String searchQuery = place.getRoadAddress();
+                if (!place.getDescriptions().isEmpty()) {
+                    String savedSearchQuery = place.getDescriptions().get(0).getSearchQuery();
+                    if (savedSearchQuery != null && !savedSearchQuery.isEmpty()) {
+                        searchQuery = savedSearchQuery;
+                    }
                 }
-            }
 
-            CrawledDataDto crawledData = crawlingService.crawlPlaceData(searchQuery, place.getName()).block().getData();
+                CrawledDataDto crawledData = crawlingService.crawlPlaceData(searchQuery, place.getName()).block().getData();
 
             // Update Place entity with crawled data
             try {
@@ -192,10 +196,28 @@ public class UpdateCrawledDataJobConfig {
                 }
             }
 
-            // Mark place as ready after successful processing
-            place.setReady(true);
+                // Mark place as ready and crawler_found as true after successful processing
+                place.setReady(true);
+                place.setCrawlerFound(true);
 
-            return place;
+                return place;
+            } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+                // 404 에러 = 크롤러에서 해당 장소를 찾을 수 없음 -> crawler_found = false
+                if (e.getStatusCode().value() == 404) {
+                    System.err.println("Skipping place '" + place.getName() + "' - not found by crawler (404)");
+                    place.setCrawlerFound(false);
+                    placeRepository.save(place);
+                } else {
+                    // 다른 HTTP 에러 (500, 503 등) = 크롤링 서버 문제 -> crawler_found = null (변경하지 않음)
+                    System.err.println("Skipping place '" + place.getName() + "' due to crawler server error: " + e.getStatusCode());
+                }
+                return null; // Returning null will skip this item
+            } catch (Exception e) {
+                // 기타 예외 (connection refused, timeout 등) = 크롤링 서버 죽음 -> crawler_found = null (변경하지 않음)
+                System.err.println("Skipping place '" + place.getName() + "' due to error: " + e.getMessage());
+                e.printStackTrace();
+                return null; // Returning null will skip this item
+            }
         };
     }
 

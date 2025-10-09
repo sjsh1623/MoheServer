@@ -1,5 +1,6 @@
 package com.mohe.spring.service.image;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -14,9 +15,10 @@ import java.util.List;
 
 @Service
 public class ImageService {
-    private final Path imageStorageLocation = Paths.get("build/images");
+    private final Path imageStorageLocation;
 
-    public ImageService() {
+    public ImageService(@Value("${mohe.image.storage-path:/images}") String storagePath) {
+        this.imageStorageLocation = Paths.get(storagePath);
         try {
             Files.createDirectories(this.imageStorageLocation);
         } catch (Exception ex) {
@@ -32,7 +34,8 @@ public class ImageService {
             try (InputStream in = new URL(imageUrl).openStream()) {
                 Path targetPath = this.imageStorageLocation.resolve(fileName);
                 Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
-                savedImagePaths.add(targetPath.toString());
+                // Store as /images/{filename} format
+                savedImagePaths.add("/images/" + fileName);
             } catch (IOException e) {
                 // Log the error, but continue processing other images
                 e.printStackTrace();
