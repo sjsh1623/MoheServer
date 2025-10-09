@@ -116,6 +116,13 @@ public class UpdateCrawledDataJobConfig {
                 categoryStr,
                 place.getPetFriendly() != null ? place.getPetFriendly() : false
             );
+
+            // Validate Ollama description - skip if generation failed
+            if (moheDescription == null || moheDescription.equals("AI 설명을 생성할 수 없습니다.")) {
+                System.err.println("Skipping place '" + place.getName() + "' - Ollama description generation failed");
+                return null; // Skip this item - don't save to DB
+            }
+
             description.setOllamaDescription(moheDescription);
             place.getDescriptions().add(description);
 
@@ -125,10 +132,40 @@ public class UpdateCrawledDataJobConfig {
                 categoryStr,
                 place.getPetFriendly() != null ? place.getPetFriendly() : false
             );
+
+            // Validate keywords - check if all are default placeholders
+            boolean allKeywordsAreDefault = true;
+            for (int i = 0; i < keywords.length; i++) {
+                if (!keywords[i].equals("키워드" + (i + 1))) {
+                    allKeywordsAreDefault = false;
+                    break;
+                }
+            }
+
+            if (allKeywordsAreDefault) {
+                System.err.println("Skipping place '" + place.getName() + "' - Ollama keyword generation failed (all default)");
+                return null; // Skip this item - don't save to DB
+            }
+
             place.setKeyword(Arrays.asList(keywords));
 
             // Vectorize keywords using Ollama embedding
             float[] keywordVector = ollamaService.vectorizeKeywords(keywords);
+
+            // Validate vector - check if it's the default empty vector
+            boolean isDefaultVector = true;
+            for (float v : keywordVector) {
+                if (v != 0.0f) {
+                    isDefaultVector = false;
+                    break;
+                }
+            }
+
+            if (isDefaultVector) {
+                System.err.println("Skipping place '" + place.getName() + "' - Ollama vectorization failed (default empty vector)");
+                return null; // Skip this item - don't save to DB
+            }
+
             place.setKeywordVector(Arrays.toString(keywordVector));
 
             // Download and save images

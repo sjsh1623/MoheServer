@@ -4,13 +4,20 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mohe.spring.dto.crawling.CrawledDataDto;
 import com.mohe.spring.dto.crawling.CrawlingResponse;
+import io.netty.channel.ChannelOption;
+import io.netty.handler.timeout.ReadTimeoutHandler;
+import io.netty.handler.timeout.WriteTimeoutHandler;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class CrawlingService {
@@ -19,7 +26,18 @@ public class CrawlingService {
 
     public CrawlingService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
                           @Value("${crawler.base-url:http://host.docker.internal:4000}") String baseUrl) {
-        this.webClient = webClientBuilder.baseUrl(baseUrl).build();
+        // HttpClient 설정: 타임아웃 증가 및 연결 풀 설정
+        HttpClient httpClient = HttpClient.create()
+                .responseTimeout(Duration.ofMinutes(3))  // 응답 타임아웃 3분
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 60000)  // 연결 타임아웃 60초
+                .doOnConnected(conn -> conn
+                        .addHandlerLast(new ReadTimeoutHandler(180, TimeUnit.SECONDS))  // 읽기 타임아웃 3분
+                        .addHandlerLast(new WriteTimeoutHandler(60, TimeUnit.SECONDS)));  // 쓰기 타임아웃 60초
+
+        this.webClient = webClientBuilder
+                .baseUrl(baseUrl)
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
         this.objectMapper = objectMapper;
     }
 
