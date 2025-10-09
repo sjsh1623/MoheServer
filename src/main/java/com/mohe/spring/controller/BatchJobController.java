@@ -22,12 +22,12 @@ public class BatchJobController {
 
     private static final Logger logger = LoggerFactory.getLogger(BatchJobController.class);
 
-    private final JobLauncher jobLauncher;
+    private final JobLauncher asyncJobLauncher;
     private final Job placeCollectionJob;
     private final Job updateCrawledDataJob;
 
-    public BatchJobController(JobLauncher jobLauncher, Job placeCollectionJob, Job updateCrawledDataJob) {
-        this.jobLauncher = jobLauncher;
+    public BatchJobController(JobLauncher asyncJobLauncher, Job placeCollectionJob, Job updateCrawledDataJob) {
+        this.asyncJobLauncher = asyncJobLauncher;
         this.placeCollectionJob = placeCollectionJob;
         this.updateCrawledDataJob = updateCrawledDataJob;
     }
@@ -44,79 +44,88 @@ public class BatchJobController {
     @PostMapping("/place-collection/{region}")
     @Operation(
         summary = "장소 수집 배치 실행 (특정 지역)",
-        description = "Naver API를 통해 특정 지역의 장소 데이터를 수집하여 DB에 저장합니다. " +
+        description = "Kakao API를 통해 특정 지역의 장소 데이터를 수집하여 DB에 저장합니다. " +
+                      "배치 작업은 백그라운드에서 비동기로 실행됩니다. " +
                       "지역: seoul (서울), jeju (제주), yongin (용인)"
     )
     public ResponseEntity<ApiResponse<Map<String, Object>>> runPlaceCollectionJobWithRegion(
             @PathVariable(required = false) String region) {
         try {
             String regionName = region != null ? region : "ALL";
-            logger.info("🚀 Starting Place Collection Batch Job (Region: {})", regionName);
+            long startTime = System.currentTimeMillis();
+
+            logger.info("🚀 Triggering Place Collection Batch Job (Region: {})", regionName);
 
             JobParametersBuilder builder = new JobParametersBuilder()
-                    .addLong("startTime", System.currentTimeMillis());
+                    .addLong("startTime", startTime);
 
             if (region != null && !region.trim().isEmpty()) {
                 builder.addString("region", region.toLowerCase());
             }
 
             JobParameters jobParameters = builder.toJobParameters();
-            jobLauncher.run(placeCollectionJob, jobParameters);
+
+            // 비동기 실행 - 즉시 반환
+            asyncJobLauncher.run(placeCollectionJob, jobParameters);
 
             Map<String, Object> result = new HashMap<>();
-            result.put("status", "SUCCESS");
-            result.put("message", "Place Collection Job started successfully");
+            result.put("status", "STARTED");
+            result.put("message", "Place Collection Batch Job has been triggered and is running in the background");
             result.put("region", regionName);
-            result.put("startTime", System.currentTimeMillis());
+            result.put("startTime", startTime);
 
-            logger.info("✅ Place Collection Batch Job started for region: {}", regionName);
+            logger.info("✅ Place Collection Batch Job triggered for region: {}", regionName);
             return ResponseEntity.ok(ApiResponse.success(result));
 
         } catch (Exception e) {
-            logger.error("❌ Failed to start Place Collection Batch Job", e);
+            logger.error("❌ Failed to trigger Place Collection Batch Job", e);
 
             Map<String, Object> error = new HashMap<>();
             error.put("status", "FAILED");
-            error.put("message", "Failed to start batch job: " + e.getMessage());
+            error.put("message", "Failed to trigger batch job: " + e.getMessage());
             error.put("region", region != null ? region : "ALL");
 
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.success(error));
+                    .body(ApiResponse.error("BATCH_JOB_ERROR", error.get("message").toString(), "/api/batch/jobs/place-collection"));
         }
     }
 
     @PostMapping("/update-crawled-data")
     @Operation(
         summary = "크롤링 데이터 업데이트 배치 실행",
-        description = "Crawling 서버와 연동하여 장소 데이터를 업데이트하고 DB에 저장합니다"
+        description = "Crawling 서버와 연동하여 장소 데이터를 업데이트하고 DB에 저장합니다. " +
+                      "배치 작업은 백그라운드에서 비동기로 실행됩니다."
     )
     public ResponseEntity<ApiResponse<Map<String, Object>>> runUpdateCrawledDataJob() {
         try {
-            logger.info("🕷️ Starting Update Crawled Data Batch Job");
+            long startTime = System.currentTimeMillis();
+
+            logger.info("🕷️ Triggering Update Crawled Data Batch Job");
 
             JobParameters jobParameters = new JobParametersBuilder()
-                    .addLong("startTime", System.currentTimeMillis())
+                    .addLong("startTime", startTime)
                     .toJobParameters();
 
-            jobLauncher.run(updateCrawledDataJob, jobParameters);
+            // 비동기 실행 - 즉시 반환
+            asyncJobLauncher.run(updateCrawledDataJob, jobParameters);
 
             Map<String, Object> result = new HashMap<>();
-            result.put("status", "SUCCESS");
-            result.put("message", "Update Crawled Data Job started successfully");
-            result.put("startTime", System.currentTimeMillis());
+            result.put("status", "STARTED");
+            result.put("message", "Update Crawled Data Job has been triggered and is running in the background");
+            result.put("startTime", startTime);
 
-            logger.info("✅ Update Crawled Data Job started");
+            logger.info("✅ Update Crawled Data Job triggered");
             return ResponseEntity.ok(ApiResponse.success(result));
 
         } catch (Exception e) {
-            logger.error("❌ Failed to start Update Crawled Data Batch Job", e);
+            logger.error("❌ Failed to trigger Update Crawled Data Batch Job", e);
 
             Map<String, Object> error = new HashMap<>();
             error.put("status", "FAILED");
-            error.put("message", "Failed to start batch job: " + e.getMessage());
+            error.put("message", "Failed to trigger batch job: " + e.getMessage());
 
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.success(error));
+                    .body(ApiResponse.error("BATCH_JOB_ERROR", error.get("message").toString(), "/api/batch/jobs/update-crawled-data"));
         }
     }
 }
