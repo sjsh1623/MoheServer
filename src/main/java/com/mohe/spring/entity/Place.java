@@ -57,6 +57,9 @@ public class Place {
 
     private Boolean ready;
 
+    @Column(name = "crawler_found")
+    private Boolean crawlerFound;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
