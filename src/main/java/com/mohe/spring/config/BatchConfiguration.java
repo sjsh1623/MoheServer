@@ -2,7 +2,12 @@ package com.mohe.spring.config;
 
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.support.DefaultBatchConfiguration;
+import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.launch.support.TaskExecutorJobLauncher;
+import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 
 /**
  * Spring Batch 기본 설정
@@ -32,6 +37,10 @@ import org.springframework.context.annotation.Configuration;
  *       initialize-schema: always  # 메타데이터 테이블 자동 생성
  * </pre>
  *
+ * <h3>비동기 JobLauncher</h3>
+ * <p>배치 작업을 비동기로 실행하여 API 응답 시간을 최소화합니다.
+ * {@link SimpleAsyncTaskExecutor}를 사용하여 별도 스레드에서 배치를 실행합니다.</p>
+ *
  * <h3>커스터마이징</h3>
  * <p>필요 시 다음 메서드를 오버라이드하여 설정을 변경할 수 있습니다:</p>
  * <ul>
@@ -49,18 +58,22 @@ import org.springframework.context.annotation.Configuration;
 @EnableBatchProcessing
 public class BatchConfiguration extends DefaultBatchConfiguration {
 
-    // ✅ Spring Batch 메타데이터 테이블은 자동으로 생성됩니다
-    // - BATCH_JOB_INSTANCE: Job 인스턴스
-    // - BATCH_JOB_EXECUTION: Job 실행 이력
-    // - BATCH_STEP_EXECUTION: Step 실행 이력
-    // - BATCH_JOB_EXECUTION_PARAMS: Job 파라미터
-    // - BATCH_JOB_EXECUTION_CONTEXT: Job 컨텍스트
-    // - BATCH_STEP_EXECUTION_CONTEXT: Step 컨텍스트
-
-    // 💡 커스텀 설정이 필요한 경우 아래 메서드를 오버라이드하세요
-    // @Override
-    // public PlatformTransactionManager getTransactionManager() { ... }
-    //
-    // @Override
-    // public DataSource getDataSource() { ... }
+    /**
+     * 비동기 JobLauncher를 생성합니다.
+     *
+     * <p>배치 작업이 별도 스레드에서 실행되어 API 요청이 즉시 응답을 반환합니다.
+     * 이를 통해 긴 배치 작업이 HTTP 요청을 블로킹하지 않습니다.</p>
+     *
+     * @param jobRepository Spring Batch JobRepository
+     * @return 비동기 작업을 수행하는 JobLauncher
+     * @throws Exception JobLauncher 초기화 실패 시
+     */
+    @Bean
+    public JobLauncher asyncJobLauncher(JobRepository jobRepository) throws Exception {
+        TaskExecutorJobLauncher jobLauncher = new TaskExecutorJobLauncher();
+        jobLauncher.setJobRepository(jobRepository);
+        jobLauncher.setTaskExecutor(new SimpleAsyncTaskExecutor());
+        jobLauncher.afterPropertiesSet();
+        return jobLauncher;
+    }
 }
