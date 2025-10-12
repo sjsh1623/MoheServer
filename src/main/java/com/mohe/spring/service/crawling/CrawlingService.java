@@ -27,12 +27,13 @@ public class CrawlingService {
     public CrawlingService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
                           @Value("${crawler.base-url:http://host.docker.internal:4000}") String baseUrl) {
         // HttpClient 설정: 타임아웃 증가 및 연결 풀 설정
+        // 크롤러는 Selenium으로 실제 브라우저를 구동하므로 매우 긴 타임아웃 필요
         HttpClient httpClient = HttpClient.create()
-                .responseTimeout(Duration.ofMinutes(3))  // 응답 타임아웃 3분
+                .responseTimeout(Duration.ofMinutes(10))  // 응답 타임아웃 10분
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 60000)  // 연결 타임아웃 60초
                 .doOnConnected(conn -> conn
-                        .addHandlerLast(new ReadTimeoutHandler(180, TimeUnit.SECONDS))  // 읽기 타임아웃 3분
-                        .addHandlerLast(new WriteTimeoutHandler(60, TimeUnit.SECONDS)));  // 쓰기 타임아웃 60초
+                        .addHandlerLast(new ReadTimeoutHandler(600, TimeUnit.SECONDS))  // 읽기 타임아웃 10분
+                        .addHandlerLast(new WriteTimeoutHandler(120, TimeUnit.SECONDS)));  // 쓰기 타임아웃 2분
 
         this.webClient = webClientBuilder
                 .baseUrl(baseUrl)

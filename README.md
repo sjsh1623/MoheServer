@@ -147,24 +147,18 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 - **OpenAPI Spec**: http://localhost:8080/v3/api-docs
 - **Health Check**: http://localhost:8080/health
 
-### 주요 API 엔드포인트
+### 문서 & 빠른 링크
+- [API 가이드 (한글)](API_GUIDE.md) - 컨트롤러별 엔드포인트와 권한 요약
+- [BATCH_GUIDE.md](BATCH_GUIDE.md) - 배치 작업 설정 및 운영 팁
+- [REGION_GUIDE.md](REGION_GUIDE.md) - 행정구역 데이터 수집과 캐시 정책
 
-#### 인증
-- `POST /api/auth/signup` - 회원가입
-- `POST /api/auth/login` - 로그인
-- `POST /api/auth/refresh` - 토큰 갱신
-
-#### 장소
-- `GET /api/places` - 장소 목록
-- `GET /api/places/{id}` - 장소 상세
-- `GET /api/places/search` - 장소 검색
-
-#### 추천
-- `GET /api/recommendations` - MBTI 기반 추천
-- `GET /api/recommendations/vector-similar` - 벡터 유사도 추천
-
-#### 배치
-- `POST /api/batch/jobs/place-collection` - 장소 수집 배치 실행
+### 대표 API 그룹
+- **인증/온보딩**: `POST /api/auth/login`, `POST /api/auth/signup`, `POST /api/auth/verify-email`
+- **사용자 & 활동** *(Bearer)*: `GET /api/user/profile`, `GET /api/user/recent-places`, `POST /api/bookmarks/toggle`
+- **장소 탐색**: `GET /api/places`, `GET /api/places/search`, `GET /api/places/vector-search` *(Bearer)*
+- **추천 서비스**: `GET /api/recommendations/enhanced` *(Bearer)*, `GET /api/recommendations/contextual`, `GET /api/keyword-recommendations/by-keyword` *(Bearer)*
+- **관리자/데이터 관리** *(Bearer ADMIN)*: `POST /api/admin/place-management/check-availability`, `POST /api/place-enhancement/batch-enhance`, `POST /api/admin/similarity/calculate`
+- **배치/동기화**: `POST /api/batch/jobs/place-collection`, `POST /api/batch/jobs/update-crawled-data`
 
 ## 🔄 배치 작업
 
@@ -197,7 +191,9 @@ curl -X POST http://localhost:8080/api/batch/jobs/place-collection
 ## 📖 문서
 
 - [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - 상세 프로젝트 구조
+- [API_GUIDE.md](API_GUIDE.md) - REST API 개요 및 권한 체계
 - [BATCH_GUIDE.md](BATCH_GUIDE.md) - Spring Batch 가이드
+- [REGION_GUIDE.md](REGION_GUIDE.md) - 한국 행정구역 데이터 처리 가이드
 - [CLAUDE.md](CLAUDE.md) - Claude Code 사용 가이드
 
 ## 👤 작성자
