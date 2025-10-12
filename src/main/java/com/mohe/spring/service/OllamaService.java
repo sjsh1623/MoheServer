@@ -69,7 +69,8 @@ public class OllamaService implements LlmService {
             "2. 반드시 완전한 문장으로 끝내세요 (마침표, 느낌표, 물음표로 끝나야 함)\n" +
             "3. 문장이 중간에 끊기지 않도록 주의하세요\n" +
             "4. 친근하고 매력적인 문체를 사용하세요\n" +
-            "5. 다른 설명 없이 장소 설명문만 출력하세요\n\n" +
+            "5. 다른 설명 없이 장소 설명문만 출력하세요\n" +
+            "6. 이모지를 절대 사용하지 마세요 (❌, ✨, 💕, 🌟 등 모든 이모지 금지)\n\n" +
             "예시: 서촌의 숨은 보석 같은 카페입니다. 조용한 분위기와 맛있는 커피로 힐링하기 좋아요. 반려동물과 함께 방문할 수 있어서 더욱 특별합니다.",
             aiSummary,
             category,
@@ -103,6 +104,9 @@ public class OllamaService implements LlmService {
             }
 
             String description = responseNode.asText().trim();
+
+            // Remove all emojis (Unicode emoji ranges)
+            description = description.replaceAll("[\\p{So}\\p{Cn}]", "").trim();
 
             if (description.isEmpty()) {
                 System.err.println("Failed to generate Mohe description: Empty description from Ollama");
@@ -174,6 +178,7 @@ public class OllamaService implements LlmService {
             "반려동물 동반 가능: %s\n\n" +
             "키워드는 쉼표(,)로 구분하여 정확히 6개만 출력하세요.\n" +
             "중괄호, 대괄호, 따옴표 등 특수문자 없이 키워드만 출력하세요.\n" +
+            "이모지를 절대 사용하지 마세요 (❌, ✨, 💕, 🌟 등 모든 이모지 금지).\n" +
             "예시: 카페,조용한,작업하기좋은,와이파이,커피맛집,힐링\n" +
             "절대 {키워드1,키워드2} 형식으로 출력하지 마세요.",
             aiSummary,
@@ -208,6 +213,9 @@ public class OllamaService implements LlmService {
             }
 
             String keywordsText = responseNode.asText().trim();
+
+            // Remove all emojis first (Unicode emoji ranges)
+            keywordsText = keywordsText.replaceAll("[\\p{So}\\p{Cn}]", "");
 
             // Remove common wrapper patterns: {...}, [...], "...", quotes, etc.
             keywordsText = keywordsText.replaceAll("^[\\{\\[\"']+", "")  // Remove leading {, [, ", '

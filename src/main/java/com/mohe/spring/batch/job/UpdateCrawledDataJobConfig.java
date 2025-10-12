@@ -90,7 +90,9 @@ public class UpdateCrawledDataJobConfig {
                     }
                 }
 
+                System.out.println("🔍 Starting crawl for '" + place.getName() + "' with query: '" + searchQuery + "'");
                 CrawledDataDto crawledData = crawlingService.crawlPlaceData(searchQuery, place.getName()).block().getData();
+                System.out.println("📥 Crawl response received for '" + place.getName() + "'");
 
             // Update Place entity with crawled data
             try {
@@ -106,32 +108,81 @@ public class UpdateCrawledDataJobConfig {
             PlaceDescription description = new PlaceDescription();
             description.setPlace(place);
             description.setOriginalDescription(crawledData.getOriginalDescription());
-            description.setAiSummary(String.join("\n", crawledData.getAiSummary()));
+
+            // Check if AI summary is available, otherwise use original description
+            String aiSummaryText = "";
+            if (crawledData.getAiSummary() != null && !crawledData.getAiSummary().isEmpty()) {
+                aiSummaryText = String.join("\n", crawledData.getAiSummary());
+            }
+
+            // If AI summary is empty, fall back to original description
+            String textForOllama;
+            if (aiSummaryText.trim().isEmpty()) {
+                textForOllama = crawledData.getOriginalDescription();
+                System.out.println("⚠️ No AI summary for '" + place.getName() + "', using original description instead");
+            } else {
+                textForOllama = aiSummaryText;
+            }
+
+            // Validate that we have some text to work with
+            if (textForOllama == null || textForOllama.trim().isEmpty()) {
+                System.err.println("Skipping place '" + place.getName() + "' - no description text available (both AI summary and original description are empty)");
+                return null;
+            }
+
+            description.setAiSummary(aiSummaryText);
             description.setSearchQuery(searchQuery);
 
             // Generate Mohe description using Ollama
             String categoryStr = place.getCategory() != null ? String.join(",", place.getCategory()) : "";
+            System.out.println("🤖 Generating Ollama description for '" + place.getName() + "'...");
             String moheDescription = ollamaService.generateMoheDescription(
-                String.join("\n", crawledData.getAiSummary()),
+                textForOllama,
                 categoryStr,
                 place.getPetFriendly() != null ? place.getPetFriendly() : false
             );
+            System.out.println("✅ Ollama description generated for '" + place.getName() + "'");
 
-            // Validate Ollama description - skip if generation failed
-            if (moheDescription == null || moheDescription.equals("AI 설명을 생성할 수 없습니다.")) {
-                System.err.println("Skipping place '" + place.getName() + "' - Ollama description generation failed");
-                return null; // Skip this item - don't save to DB
+            // CRITICAL: ollama_description must NEVER be empty
+            // If Ollama generation failed, use the original text as fallback
+            if (moheDescription == null || moheDescription.trim().isEmpty() || moheDescription.equals("AI 설명을 생성할 수 없습니다.")) {
+                System.err.println("⚠️ Ollama description generation failed for '" + place.getName() + "', using fallback description");
+
+                // Use original description as fallback, truncate to reasonable length if needed
+                String fallbackDescription = textForOllama;
+                if (fallbackDescription.length() > 150) {
+                    // Try to find a good sentence boundary
+                    int lastPeriod = Math.max(fallbackDescription.substring(0, 150).lastIndexOf('.'),
+                                            fallbackDescription.substring(0, 150).lastIndexOf('!'));
+                    lastPeriod = Math.max(lastPeriod, fallbackDescription.substring(0, 150).lastIndexOf('?'));
+
+                    if (lastPeriod > 50) {
+                        fallbackDescription = fallbackDescription.substring(0, lastPeriod + 1).trim();
+                    } else {
+                        // Just truncate at 150 chars and add ellipsis
+                        fallbackDescription = fallbackDescription.substring(0, 147).trim() + "...";
+                    }
+                }
+                moheDescription = fallbackDescription;
+            }
+
+            // Double-check: This should NEVER happen, but as a last resort
+            if (moheDescription == null || moheDescription.trim().isEmpty()) {
+                moheDescription = place.getName() + "에 대한 정보입니다.";
+                System.err.println("🚨 CRITICAL: Using minimal fallback for '" + place.getName() + "'");
             }
 
             description.setOllamaDescription(moheDescription);
             place.getDescriptions().add(description);
 
-            // Generate and set keywords using Ollama
+            // Generate and set keywords using Ollama (use the same text we used for description)
+            System.out.println("🔑 Generating keywords for '" + place.getName() + "'...");
             String[] keywords = ollamaService.generateKeywords(
-                String.join("\n", crawledData.getAiSummary()),
+                textForOllama,
                 categoryStr,
                 place.getPetFriendly() != null ? place.getPetFriendly() : false
             );
+            System.out.println("✅ Keywords generated for '" + place.getName() + "': " + String.join(", ", keywords));
 
             // Validate keywords - check if all are default placeholders
             boolean allKeywordsAreDefault = true;
@@ -150,7 +201,9 @@ public class UpdateCrawledDataJobConfig {
             place.setKeyword(Arrays.asList(keywords));
 
             // Vectorize keywords using Ollama embedding
+            System.out.println("🧮 Vectorizing keywords for '" + place.getName() + "'...");
             float[] keywordVector = ollamaService.vectorizeKeywords(keywords);
+            System.out.println("✅ Vector generated for '" + place.getName() + "' (dimension: " + keywordVector.length + ")");
 
             // Validate vector - check if it's the default empty vector
             boolean isDefaultVector = true;
@@ -171,11 +224,13 @@ public class UpdateCrawledDataJobConfig {
             // Download and save images
             place.getImages().clear();
             if (crawledData.getImageUrls() != null && !crawledData.getImageUrls().isEmpty()) {
+                System.out.println("📸 Downloading " + crawledData.getImageUrls().size() + " images for '" + place.getName() + "'...");
                 List<String> savedImagePaths = imageService.downloadAndSaveImages(
                     place.getId(),
                     place.getName(),
                     crawledData.getImageUrls()
                 );
+                System.out.println("✅ Saved " + savedImagePaths.size() + " images for '" + place.getName() + "'");
 
                 for (int i = 0; i < savedImagePaths.size(); i++) {
                     PlaceImage placeImage = new PlaceImage();
@@ -237,6 +292,14 @@ public class UpdateCrawledDataJobConfig {
                 place.setReady(true);
                 place.setCrawlerFound(true);
 
+                // ✅ Success logging
+                System.out.println("✅ Successfully crawled '" + place.getName() + "' - " +
+                    "Reviews: " + place.getReviewCount() + ", " +
+                    "Images: " + place.getImages().size() + ", " +
+                    "Keywords: " + String.join(", ", place.getKeyword()) + ", " +
+                    "Parking: " + (place.getParkingAvailable() != null ? place.getParkingAvailable() : "Unknown") + ", " +
+                    "Pet-friendly: " + (place.getPetFriendly() != null ? place.getPetFriendly() : "Unknown"));
+
                 return place;
             } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
                 // 404 에러 = 크롤러에서 해당 장소를 찾을 수 없음 -> crawler_found = false
@@ -260,6 +323,11 @@ public class UpdateCrawledDataJobConfig {
 
     @Bean
     public ItemWriter<Place> placeWriter() {
-        return places -> placeRepository.saveAll(places);
+        return chunk -> {
+            // Spring Batch 5.x uses Chunk instead of List
+            placeRepository.saveAll(chunk.getItems());
+            // Log batch write success
+            System.out.println("💾 Saved batch of " + chunk.getItems().size() + " places to database");
+        };
     }
 }
