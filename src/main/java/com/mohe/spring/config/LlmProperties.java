@@ -8,17 +8,8 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "llm")
 public class LlmProperties {
 
-    private boolean isOpenAiActive = false;
     private final OpenAiProperties openai = new OpenAiProperties();
     private final OllamaProperties ollama = new OllamaProperties();
-
-    public boolean isOpenAiActive() {
-        return isOpenAiActive;
-    }
-
-    public void setOpenAiActive(boolean openAiActive) {
-        isOpenAiActive = openAiActive;
-    }
 
     public OpenAiProperties getOpenai() {
         return openai;
@@ -31,6 +22,7 @@ public class LlmProperties {
     public static class OpenAiProperties {
         private String apiKey = "";
         private String model = "gpt-3.5-turbo";
+        private boolean active = false;
 
         public String getApiKey() {
             return apiKey;
@@ -47,11 +39,20 @@ public class LlmProperties {
         public void setModel(String model) {
             this.model = model;
         }
+
+        public boolean isActive() {
+            return active;
+        }
+
+        public void setActive(boolean active) {
+            this.active = active;
+        }
     }
 
     public static class OllamaProperties {
         private String baseUrl = "http://localhost:11434";
-        private String model = "llama3";
+        private String model = "kanana-instruct";
+        private int timeout = 120;
 
         public String getBaseUrl() {
             return baseUrl;
@@ -67,6 +68,14 @@ public class LlmProperties {
 
         public void setModel(String model) {
             this.model = model;
+        }
+
+        public int getTimeout() {
+            return timeout;
+        }
+
+        public void setTimeout(int timeout) {
+            this.timeout = timeout;
         }
     }
 }

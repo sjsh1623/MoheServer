@@ -13,7 +13,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-@Service
+import org.springframework.boot.web.client.RestTemplateBuilder;
+
 public class OpenAiService implements LlmService {
 
     private static final Logger logger = LoggerFactory.getLogger(OpenAiService.class);
@@ -22,9 +23,9 @@ public class OpenAiService implements LlmService {
     private final ObjectMapper objectMapper;
     private final LlmProperties llmProperties;
 
-    public OpenAiService(LlmProperties llmProperties) {
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+    public OpenAiService(LlmProperties llmProperties, RestTemplateBuilder restTemplateBuilder, ObjectMapper objectMapper) {
+        this.restTemplate = restTemplateBuilder.build();
+        this.objectMapper = objectMapper;
         this.llmProperties = llmProperties;
     }
 
