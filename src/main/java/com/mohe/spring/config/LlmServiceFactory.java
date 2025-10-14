@@ -20,9 +20,9 @@ public class LlmServiceFactory {
         return new OpenAiService(llmProperties, restTemplateBuilder, objectMapper);
     }
 
-    @Bean
+    @Bean(name = "llmService")
     @Profile("ollama")
-    public LlmService ollamaService(LlmProperties llmProperties, WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+    public LlmService ollamaLlmService(LlmProperties llmProperties, WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
         return new OllamaService(llmProperties, webClientBuilder, objectMapper);
     }
 }
