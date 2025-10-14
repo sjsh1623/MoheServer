@@ -57,11 +57,11 @@ public class NaverPlaceApiServiceImpl implements NaverPlaceApiService {
     private static final String NAVER_LOCAL_SEARCH_URL = "https://openapi.naver.com/v1/search/local";
 
     /** Naver API 클라이언트 ID (application.yml에서 주입) */
-    @Value("${naver.place.clientId}")
+    @Value("${NAVER_CLIENT_ID}")
     private String clientId;
 
     /** Naver API 클라이언트 Secret (application.yml에서 주입) */
-    @Value("${naver.place.clientSecret}")
+    @Value("${NAVER_CLIENT_SECRET}")
     private String clientSecret;
 
     /** HTTP 클라이언트 (OkHttp3) */

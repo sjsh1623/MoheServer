@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-@Service
 public class OllamaService implements LlmService {
     private final LlmProperties llmProperties;
     private final WebClient webClient;
