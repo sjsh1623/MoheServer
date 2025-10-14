@@ -27,6 +27,40 @@ mohe:
   image:
     storage-path: build/test-images
 
+kakao:
+  api:
+    key: test-kakao-api-key
+
+naver:
+  place:
+    clientId: test-naver-client-id
+    clientSecret: test-naver-client-secret
+
+NAVER_CLIENT_ID: test-naver-client-id
+NAVER_CLIENT_SECRET: test-naver-client-secret
+GOOGLE_PLACES_API_KEY: test-google-api-key
+GOVT_API_KEY: test-govt-api-key
+VWORLD_API_KEY: test-vworld-api-key
+SGIS_API_KEY: test-sgis-api-key
+OPENAI_API_KEY: test-openai-api-key
+GEMINI_API_KEY: test-gemini-api-key
+
+llm:
+  ollama:
+    base-url: http://localhost:11434
+    model: test-model
+
+app:
+  gemini:
+    api-key: test-gemini-api-key
+    base-url: https://generativelanguage.googleapis.com/v1beta
+  korean-api:
+    cache-enabled: false
+
+google:
+  places:
+    apiKey: test-google-api-key
+
 logging:
   level:
     com.mohe.spring: DEBUG
