@@ -47,7 +47,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       IS_OPENAI_ACTIVE: ${IS_OPENAI_ACTIVE}
       LLM_OLLAMA_BASE_URL: http://ollama:11434
-      LLM_OLLAMA_MODEL: gemma2:2b
+      LLM_OLLAMA_MODEL: huihui_ai/kanana-nano-2.1b-instruct
       JWT_SECRET: ${JWT_SECRET}
     env_file:
       - .env
