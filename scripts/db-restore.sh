@@ -139,10 +139,22 @@ if [ "$RESTORE_MODE" == "docker" ]; then
 
     echo -e "${GREEN}Restoring COMPLETE database...${NC}"
     echo -e "${YELLOW}This will:${NC}"
-    echo -e "${YELLOW}  1. Drop existing database${NC}"
-    echo -e "${YELLOW}  2. Create new database${NC}"
-    echo -e "${YELLOW}  3. Restore all tables, indexes, sequences${NC}"
-    echo -e "${YELLOW}  4. Restore all data${NC}"
+    echo -e "${YELLOW}  1. Terminate all connections to database${NC}"
+    echo -e "${YELLOW}  2. Drop existing database${NC}"
+    echo -e "${YELLOW}  3. Create new database${NC}"
+    echo -e "${YELLOW}  4. Restore all tables, indexes, sequences${NC}"
+    echo -e "${YELLOW}  5. Restore all data${NC}"
+    echo ""
+
+    # Terminate all connections to the database
+    echo -e "${BLUE}Terminating all connections to ${DB_NAME}...${NC}"
+    docker exec -i "$CONTAINER_NAME" psql -U "$DB_USER" -d postgres << EOF
+SELECT pg_terminate_backend(pg_stat_activity.pid)
+FROM pg_stat_activity
+WHERE pg_stat_activity.datname = '${DB_NAME}'
+  AND pid <> pg_backend_pid();
+EOF
+    echo -e "${GREEN}✓ Connections terminated${NC}"
     echo ""
 
     # Restore using postgres database (to allow DROP/CREATE of mohe_db)
@@ -186,7 +198,7 @@ else
 
     PGPASSWORD="${DB_PASSWORD:-mohe_password}" psql \
         -h localhost \
-        -p 5432 \
+        -p 16239 \
         -U "$DB_USER" \
         -d postgres \
         < "$BACKUP_FILE"
