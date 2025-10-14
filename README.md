@@ -167,7 +167,23 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 ```bash
 # API를 통한 배치 실행
 curl -X POST http://localhost:8080/api/batch/jobs/place-collection
+curl -X POST http://localhost:8080/api/batch/jobs/update-crawled-data
 ```
+
+### 배치 작업 상태 플래그
+
+배치 작업(`UpdateCrawledDataJob`)은 각 장소의 처리 상태를 두 가지 플래그로 관리합니다:
+
+| 상황 | `crawler_found` | `ready` | 설명 |
+|------|----------------|---------|------|
+| **크롤링 실패** | `false` | `false` | 크롤러가 네이버 지도에서 장소를 찾지 못함 (404, 타임아웃 등) |
+| **정보 부족** | `true` | `false` | 크롤링은 성공했지만 설명 데이터가 없음 |
+| **AI 처리 실패** | `true` | `false` | 크롤링은 성공했지만 Ollama 키워드/벡터 생성 실패 |
+| **처리 완료** | `true` | `true` | 모든 처리 성공, API에서 사용 가능 |
+
+**재시도 정책:**
+- `crawler_found = false` → 크롤러 개선 후 재시도 권장
+- `crawler_found = true, ready = false` → AI 모델 개선 후 재시도 권장
 
 자세한 내용은 [BATCH_GUIDE.md](BATCH_GUIDE.md) 참고
 

@@ -5,6 +5,7 @@ import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceBusinessHour;
 import com.mohe.spring.entity.PlaceDescription;
 import com.mohe.spring.entity.PlaceImage;
+import com.mohe.spring.entity.PlaceReview;
 import com.mohe.spring.entity.PlaceSns;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.service.crawling.CrawlingService;
@@ -70,8 +71,8 @@ public class UpdateCrawledDataJobConfig {
     public RepositoryItemReader<Place> placeReader() {
         RepositoryItemReader<Place> reader = new RepositoryItemReader<>();
         reader.setRepository(placeRepository);
-        reader.setMethodName("findByReady");
-        reader.setArguments(List.of(false));
+        reader.setMethodName("findPlacesForBatchProcessing");
+        reader.setArguments(List.of()); // No arguments needed - query handles filtering
         reader.setPageSize(10);
         reader.setSort(Map.of("id", Sort.Direction.ASC));
         return reader;
@@ -109,39 +110,52 @@ public class UpdateCrawledDataJobConfig {
             description.setPlace(place);
             description.setOriginalDescription(crawledData.getOriginalDescription());
 
-            // Check if AI summary is available, otherwise use original description
+            // Check if AI summary is available, otherwise use original description, then reviews
             String aiSummaryText = "";
             if (crawledData.getAiSummary() != null && !crawledData.getAiSummary().isEmpty()) {
                 aiSummaryText = String.join("\n", crawledData.getAiSummary());
             }
 
-            // If AI summary is empty, fall back to original description
+            // Fallback logic: AI summary -> original description -> reviews
             String textForOllama;
-            if (aiSummaryText.trim().isEmpty()) {
+            if (aiSummaryText != null && !aiSummaryText.trim().isEmpty()) {
+                textForOllama = aiSummaryText;
+                System.out.println("✅ Using AI summary for '" + place.getName() + "'");
+            } else if (crawledData.getOriginalDescription() != null && !crawledData.getOriginalDescription().trim().isEmpty()) {
                 textForOllama = crawledData.getOriginalDescription();
                 System.out.println("⚠️ No AI summary for '" + place.getName() + "', using original description instead");
+            } else if (crawledData.getReviews() != null && !crawledData.getReviews().isEmpty()) {
+                // Use first 3 reviews as description source
+                int reviewCount = Math.min(crawledData.getReviews().size(), 3);
+                textForOllama = String.join("\n", crawledData.getReviews().subList(0, reviewCount));
+                System.out.println("⚠️ No AI summary or original description for '" + place.getName() + "', using reviews instead");
             } else {
-                textForOllama = aiSummaryText;
+                textForOllama = null;
             }
 
             // Validate that we have some text to work with
             if (textForOllama == null || textForOllama.trim().isEmpty()) {
-                System.err.println("Skipping place '" + place.getName() + "' - no description text available (both AI summary and original description are empty)");
+                System.err.println("⚠️ Lack of information for '" + place.getName() + "' - no description text available (AI summary, original description, and reviews are all empty)");
+                // Crawling succeeded but lack of information -> crawler_found = true, ready = false
+                place.setCrawlerFound(true);
+                place.setReady(false);
+                placeRepository.save(place);
                 return null;
             }
 
             description.setAiSummary(aiSummaryText);
             description.setSearchQuery(searchQuery);
 
-            // Generate Mohe description using Ollama
+            // Generate Mohe description using Ollama (pass reviews for context)
             String categoryStr = place.getCategory() != null ? String.join(",", place.getCategory()) : "";
             System.out.println("🤖 Generating Ollama description for '" + place.getName() + "'...");
             String moheDescription = ollamaService.generateMoheDescription(
                 textForOllama,
                 categoryStr,
-                place.getPetFriendly() != null ? place.getPetFriendly() : false
+                place.getPetFriendly() != null ? place.getPetFriendly() : false,
+                crawledData.getReviews()
             );
-            System.out.println("✅ Ollama description generated for '" + place.getName() + "'");
+            System.out.println("✅ Ollama description generated for '" + place.getName() + "': " + moheDescription);
 
             // CRITICAL: ollama_description must NEVER be empty
             // If Ollama generation failed, use the original text as fallback
@@ -175,6 +189,10 @@ public class UpdateCrawledDataJobConfig {
             description.setOllamaDescription(moheDescription);
             place.getDescriptions().add(description);
 
+            // 📝 Log Mohe AI description before saving to database
+            System.out.println("📝 Mohe AI Summary for '" + place.getName() + "' (will be saved to DB):");
+            System.out.println("   " + moheDescription);
+
             // Generate and set keywords using Ollama (use the same text we used for description)
             System.out.println("🔑 Generating keywords for '" + place.getName() + "'...");
             String[] keywords = ollamaService.generateKeywords(
@@ -194,8 +212,12 @@ public class UpdateCrawledDataJobConfig {
             }
 
             if (allKeywordsAreDefault) {
-                System.err.println("Skipping place '" + place.getName() + "' - Ollama keyword generation failed (all default)");
-                return null; // Skip this item - don't save to DB
+                System.err.println("⚠️ AI issue for '" + place.getName() + "' - Ollama keyword generation failed (all default)");
+                // Crawling succeeded but AI issue -> crawler_found = true, ready = false
+                place.setCrawlerFound(true);
+                place.setReady(false);
+                placeRepository.save(place);
+                return null;
             }
 
             place.setKeyword(Arrays.asList(keywords));
@@ -215,8 +237,12 @@ public class UpdateCrawledDataJobConfig {
             }
 
             if (isDefaultVector) {
-                System.err.println("Skipping place '" + place.getName() + "' - Ollama vectorization failed (default empty vector)");
-                return null; // Skip this item - don't save to DB
+                System.err.println("⚠️ AI issue for '" + place.getName() + "' - Ollama vectorization failed (default empty vector)");
+                // Crawling succeeded but AI issue -> crawler_found = true, ready = false
+                place.setCrawlerFound(true);
+                place.setReady(false);
+                placeRepository.save(place);
+                return null;
             }
 
             place.setKeywordVector(Arrays.toString(keywordVector));
@@ -288,6 +314,26 @@ public class UpdateCrawledDataJobConfig {
                 }
             }
 
+            // Create and set PlaceReview (save up to 10 reviews)
+            place.getReviews().clear();
+            if (crawledData.getReviews() != null && !crawledData.getReviews().isEmpty()) {
+                // Limit to 10 reviews
+                int reviewCount = Math.min(crawledData.getReviews().size(), 10);
+                System.out.println("💬 Saving " + reviewCount + " reviews for '" + place.getName() + "'");
+
+                for (int i = 0; i < reviewCount; i++) {
+                    String reviewText = crawledData.getReviews().get(i);
+                    if (reviewText != null && !reviewText.trim().isEmpty()) {
+                        PlaceReview review = new PlaceReview();
+                        review.setPlace(place);
+                        review.setReviewText(reviewText);
+                        review.setOrderIndex(i + 1);
+                        place.getReviews().add(review);
+                    }
+                }
+                System.out.println("✅ Saved " + place.getReviews().size() + " reviews for '" + place.getName() + "'");
+            }
+
                 // Mark place as ready and crawler_found as true after successful processing
                 place.setReady(true);
                 place.setCrawlerFound(true);
@@ -302,21 +348,24 @@ public class UpdateCrawledDataJobConfig {
 
                 return place;
             } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
-                // 404 에러 = 크롤러에서 해당 장소를 찾을 수 없음 -> crawler_found = false
+                // HTTP 에러 = 크롤링 실패 -> crawler_found = false, ready = false
                 if (e.getStatusCode().value() == 404) {
-                    System.err.println("Skipping place '" + place.getName() + "' - not found by crawler (404)");
-                    place.setCrawlerFound(false);
-                    placeRepository.save(place);
+                    System.err.println("❌ Crawling failed for '" + place.getName() + "' - not found by crawler (404)");
                 } else {
-                    // 다른 HTTP 에러 (500, 503 등) = 크롤링 서버 문제 -> crawler_found = null (변경하지 않음)
-                    System.err.println("Skipping place '" + place.getName() + "' due to crawler server error: " + e.getStatusCode());
+                    System.err.println("❌ Crawling failed for '" + place.getName() + "' - crawler server error: " + e.getStatusCode());
                 }
-                return null; // Returning null will skip this item
+                place.setCrawlerFound(false);
+                place.setReady(false);
+                placeRepository.save(place);
+                return null;
             } catch (Exception e) {
-                // 기타 예외 (connection refused, timeout 등) = 크롤링 서버 죽음 -> crawler_found = null (변경하지 않음)
-                System.err.println("Skipping place '" + place.getName() + "' due to error: " + e.getMessage());
+                // 기타 예외 (connection refused, timeout 등) = 크롤링 실패 -> crawler_found = false, ready = false
+                System.err.println("❌ Crawling failed for '" + place.getName() + "' due to error: " + e.getMessage());
                 e.printStackTrace();
-                return null; // Returning null will skip this item
+                place.setCrawlerFound(false);
+                place.setReady(false);
+                placeRepository.save(place);
+                return null;
             }
         };
     }

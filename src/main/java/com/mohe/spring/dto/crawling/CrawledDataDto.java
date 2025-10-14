@@ -37,4 +37,6 @@ public class CrawledDataDto {
 
     @JsonProperty("sns_urls")
     private Map<String, String> snsUrls;
+
+    private List<String> reviews;
 }

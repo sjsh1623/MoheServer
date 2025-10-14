@@ -16,45 +16,35 @@ import java.util.Optional;
 
 @Repository
 public interface PlaceRepository extends JpaRepository<Place, Long> {
-    
+
     Page<Place> findByCategory(String category, Pageable pageable);
-    
+
     @Query("SELECT p FROM Place p WHERE p.rating >= :minRating ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findTopRatedPlaces(@Param("minRating") Double minRating, Pageable pageable);
 
     @Query("SELECT p FROM Place p ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findPopularPlaces(Pageable pageable);
-    
+
     @Query("SELECT p FROM Place p WHERE " +
            "LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
            "LOWER(p.roadAddress) LIKE LOWER(CONCAT('%', :query, '%'))")
     Page<Place> searchPlaces(@Param("query") String query, Pageable pageable);
-    
-    // Disabled: complex array member check not supported
-    // @Query("SELECT p FROM Place p WHERE " +
-    //        "(:category IS NULL OR :category MEMBER OF p.category) AND " +
-    //        "(:location IS NULL OR LOWER(p.roadAddress) LIKE LOWER(CONCAT('%', :location, '%')))")
-    // Page<Place> findPlacesWithFilters(
-    //     @Param("category") String category,
-    //     @Param("location") String location,
-    //     Pageable pageable
-    // );
-    
+
     @Query("SELECT p FROM Place p WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL")
     List<Place> findPlacesWithLocation();
-    
+
     @Query("SELECT DISTINCT p.category FROM Place p WHERE p.category IS NOT NULL")
     List<String> findAllCategories();
-    
+
     // New methods for enhanced place management
     Optional<Place> findByName(String name);
 
     boolean existsByRoadAddress(String roadAddress);
 
     @Query("""
-        SELECT p FROM Place p 
-        WHERE p.name = :name 
-        AND ABS(p.latitude - :latitude) < :radius 
+        SELECT p FROM Place p
+        WHERE p.name = :name
+        AND ABS(p.latitude - :latitude) < :radius
         AND ABS(p.longitude - :longitude) < :radius
         ORDER BY (
             ABS(p.latitude - :latitude) + ABS(p.longitude - :longitude)
@@ -66,28 +56,28 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("longitude") BigDecimal longitude,
         @Param("radius") BigDecimal radius
     );
-    
+
     // New methods for age-based filtering and dynamic fetching
     @Query("""
-        SELECT COUNT(*) FROM Place p 
+        SELECT COUNT(*) FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
     """)
     long countRecommendablePlaces();
-    
+
     @Query("""
-        SELECT COUNT(*) FROM Place p 
+        SELECT COUNT(*) FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
         AND (:category IS NULL OR p.category = :category)
     """)
     long countRecommendablePlacesByCategory(@Param("category") String category);
-    
+
     @Query("""
-        SELECT p FROM Place p 
+        SELECT p FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
         ORDER BY p.rating DESC, p.name ASC
     """)
     Page<Place> findRecommendablePlaces(Pageable pageable);
-    
+
     // Disabled: Place entity doesn't have shouldRecheckRating and lastRatingCheck fields
     // @Query("""
     //     SELECT p FROM Place p
@@ -108,10 +98,10 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
 
     @Query("SELECT p FROM Place p WHERE p.latitude IS NULL OR p.longitude IS NULL")
     List<Place> findPlacesWithoutCoordinates();
-    
+
     List<Place> findByLatitudeBetweenAndLongitudeBetween(
         BigDecimal minLatitude,
-        BigDecimal maxLatitude, 
+        BigDecimal maxLatitude,
         BigDecimal minLongitude,
         BigDecimal maxLongitude
     );
@@ -121,8 +111,8 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
         AND (
             6371 * acos(
-                cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) * 
-                cos(radians(CAST(p.longitude AS DOUBLE PRECISION)) - radians(:longitude)) + 
+                cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
+                cos(radians(CAST(p.longitude AS DOUBLE PRECISION)) - radians(:longitude)) +
                 sin(radians(:latitude)) * sin(radians(CAST(p.latitude AS DOUBLE PRECISION)))
             )
         ) <= :distance
@@ -134,16 +124,16 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("longitude") Double longitude,
         @Param("distance") Double distance
     );
-    
+
     /**
      * Find places near location that match time-based preferences
      */
     @Query(value = """
         SELECT p.* FROM places p
-        WHERE p.latitude IS NOT NULL 
+        WHERE p.latitude IS NOT NULL
         AND p.longitude IS NOT NULL
         AND (
-            ABS(CAST(p.latitude AS DOUBLE PRECISION) - :latitude) * 111000 + 
+            ABS(CAST(p.latitude AS DOUBLE PRECISION) - :latitude) * 111000 +
             ABS(CAST(p.longitude AS DOUBLE PRECISION) - :longitude) * 111000 * COS(RADIANS(:latitude))
         ) <= :distance
         AND (
@@ -164,7 +154,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("distance") Double distance,
         Pageable pageable
     );
-    
+
     /**
      * Find places that match time-based preferences (no location filter)
      */
@@ -233,4 +223,16 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     List<Place> findPlacesWithoutImages();
 
     Page<Place> findByReady(boolean ready, Pageable pageable);
+
+    /**
+     * Find places where both crawler_found and ready are null or false
+     * Used by batch job to process places that haven't been crawled yet
+     */
+    @Query("""
+        SELECT p FROM Place p
+        WHERE (p.crawlerFound IS NULL OR p.crawlerFound = false)
+        AND (p.ready IS NULL OR p.ready = false)
+        ORDER BY p.id ASC
+    """)
+    Page<Place> findPlacesForBatchProcessing(Pageable pageable);
 }

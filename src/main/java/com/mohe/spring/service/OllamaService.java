@@ -52,30 +52,86 @@ public class OllamaService implements LlmService {
         return new OllamaRecommendationResponse();
     }
 
-    public String generateMoheDescription(String aiSummary, String category, boolean petFriendly) {
+    public String generateMoheDescription(String aiSummary, String category, boolean petFriendly, List<String> reviews) {
         // Input validation
         if (aiSummary == null || aiSummary.trim().isEmpty()) {
             System.err.println("Failed to generate Mohe description: AI summary is empty");
             return "AI 설명을 생성할 수 없습니다.";
         }
 
-        String prompt = String.format(
-            "다음 장소에 대한 친근한 문체의 설명을 작성해주세요.\n\n" +
-            "AI 요약: %s\n" +
-            "카테고리: %s\n" +
-            "반려동물 동반 가능: %s\n\n" +
-            "중요한 규칙:\n" +
-            "1. 100-130자 사이로 작성하세요 (너무 길면 문장이 끊깁니다)\n" +
-            "2. 반드시 완전한 문장으로 끝내세요 (마침표, 느낌표, 물음표로 끝나야 함)\n" +
-            "3. 문장이 중간에 끊기지 않도록 주의하세요\n" +
-            "4. 친근하고 매력적인 문체를 사용하세요\n" +
-            "5. 다른 설명 없이 장소 설명문만 출력하세요\n" +
-            "6. 이모지를 절대 사용하지 마세요 (❌, ✨, 💕, 🌟 등 모든 이모지 금지)\n\n" +
-            "예시: 서촌의 숨은 보석 같은 카페입니다. 조용한 분위기와 맛있는 커피로 힐링하기 좋아요. 반려동물과 함께 방문할 수 있어서 더욱 특별합니다.",
-            aiSummary,
-            category,
-            petFriendly ? "가능" : "불가능"
-        );
+        // Prepare review summary
+        String reviewSummary = "";
+        if (reviews != null && !reviews.isEmpty()) {
+            // Limit to first 5 reviews to avoid token overflow
+            int reviewCount = Math.min(reviews.size(), 5);
+            reviewSummary = String.join("\n", reviews.subList(0, reviewCount));
+        } else {
+            reviewSummary = "리뷰 정보 없음";
+        }
+
+        String prompt;
+
+        if (petFriendly) {
+            prompt = String.format(
+                "당신은 여행지와 공간을 자연스럽고 친근하게 소개하는 작가입니다.\n" +
+                    "문장은 정보 중심으로 시작하고, 마지막은 부드럽게 감성을 담아 마무리해주세요.\n" +
+                    "감정을 직접 표현하지 말고, 읽는 사람이 느낄 수 있도록 써주세요.\n" +
+                    "자연스러운 구어체(~좋아요, ~좋을 것 같아요, ~느껴져요)는 가능하지만, '~있더군요', '~하더라고요' 같은 관찰체 표현은 금지입니다.\n\n" +
+
+                    "AI 요약: %s\n" +
+                    "카테고리: %s\n" +
+                    "리뷰 요약: %s\n\n" +
+
+                    "📌 작성 가이드:\n" +
+                    "1. 160~230자 이내의 한 문단으로 작성하세요.\n" +
+                    "2. 첫 문장은 장소의 위치나 특징 등 **정보 중심**으로 시작하세요.\n" +
+                    "3. 사람들의 후기를 참고하되 객관적인 사실만 담으세요.\n" +
+                    "4. '~좋아요', '~좋을 것 같아요', '~느껴져요'처럼 자연스러운 어미를 사용하세요.\n" +
+                    "5. 문맥상 자연스럽게 반려동물 동반 가능 여부를 포함하세요.\n" +
+                    "6. **강조할 주요 명사(예: 인기 메뉴, 시설, 특징 등)는 '**'로 감싸 Bold 처리하세요. (최대 3개)**\n" +
+                    "7. 장소명은 Bold 처리하지 마세요.\n" +
+                    "8. 이모지는 절대 사용하지 마세요.\n" +
+                    "9. 장소 설명문만 출력하세요.\n\n" +
+
+                    "예시:\n" +
+                    "서촌 골목 안쪽에 자리한 카페예요. 사람들은 **라떼**와 **당근케이크**의 조화가 좋다고 말해요. 반려동물과 함께 들러도 조용히 머물기 좋은 곳이에요.\n\n" +
+                    "예시 2:\n" +
+                    "한적한 거리에 자리한 브런치 카페예요. 사람들은 **브런치 세트**와 **크루아상**이 맛있다고 해요. 반려동물과 함께 여유로운 시간을 보내기 좋은 곳이에요.",
+                aiSummary,
+                category,
+                reviewSummary
+            );
+        } else {
+            prompt = String.format(
+                "당신은 여행지와 공간을 자연스럽고 친근하게 소개하는 작가입니다.\n" +
+                    "문장은 정보 중심으로 시작하고, 마지막은 부드럽게 감성을 담아 마무리해주세요.\n" +
+                    "감정을 직접 표현하지 말고, 읽는 사람이 느낄 수 있도록 써주세요.\n" +
+                    "자연스러운 구어체(~좋아요, ~좋을 것 같아요, ~느껴져요)는 가능하지만, '~있더군요', '~하더라고요' 같은 관찰체 표현은 금지입니다.\n\n" +
+
+                    "AI 요약: %s\n" +
+                    "카테고리: %s\n" +
+                    "리뷰 요약: %s\n\n" +
+
+                    "📌 작성 가이드:\n" +
+                    "1. 160~230자 이내의 한 문단으로 작성하세요.\n" +
+                    "2. 첫 문장은 장소의 위치나 특징 등 **정보 중심**으로 시작하세요.\n" +
+                    "3. 사람들의 후기를 참고하되 객관적인 사실만 담으세요.\n" +
+                    "4. '~좋아요', '~좋을 것 같아요', '~느껴져요'처럼 자연스러운 어미를 사용하세요.\n" +
+                    "5. 문장 내에 반려동물 관련 표현은 포함하지 마세요.\n" +
+                    "6. **강조할 주요 명사(예: 인기 메뉴, 시설, 특징 등)는 '**'로 감싸 Bold 처리하세요. (최대 3개)**\n" +
+                    "7. 장소명은 Bold 처리하지 마세요.\n" +
+                    "8. 이모지는 절대 사용하지 마세요.\n" +
+                    "9. 장소 설명문만 출력하세요.\n\n" +
+
+                    "예시:\n" +
+                    "서촌 중심부에 자리한 카페예요. 사람들은 **아메리카노**와 **오트라떼**의 균형 잡힌 맛이 좋다고 말해요. 조용한 분위기 속에서 잠시 쉬어가기 좋은 곳이에요.\n\n" +
+                    "예시 2:\n" +
+                    "바다 전망이 보이는 레스토랑이에요. 사람들은 **스테이크**와 **와인 리스트** 구성이 알차다고 말해요. 식사 후 창가에 앉아 여유를 즐기기 좋아요.",
+                aiSummary,
+                category,
+                reviewSummary
+            );
+        }
 
         Map<String, Object> request = new HashMap<>();
         request.put("model", llmProperties.getOllama().getModel());
@@ -172,15 +228,20 @@ public class OllamaService implements LlmService {
         }
 
         String prompt = String.format(
-            "다음 장소에 대한 키워드를 정확히 6개 생성해주세요.\n\n" +
+            "다음 장소의 특징을 나타내는 한글 단어 키워드를 정확히 6개 생성해주세요.\n\n" +
             "AI 요약: %s\n" +
             "카테고리: %s\n" +
             "반려동물 동반 가능: %s\n\n" +
-            "키워드는 쉼표(,)로 구분하여 정확히 6개만 출력하세요.\n" +
-            "중괄호, 대괄호, 따옴표 등 특수문자 없이 키워드만 출력하세요.\n" +
-            "이모지를 절대 사용하지 마세요 (❌, ✨, 💕, 🌟 등 모든 이모지 금지).\n" +
-            "예시: 카페,조용한,작업하기좋은,와이파이,커피맛집,힐링\n" +
-            "절대 {키워드1,키워드2} 형식으로 출력하지 마세요.",
+            "📌 중요 규칙:\n" +
+            "1. 반드시 한글로만 작성하세요 (영어, 숫자, 특수문자 금지)\n" +
+            "2. 각 키워드는 단일 단어여야 합니다 (문장이나 구절 금지)\n" +
+            "3. 쉼표(,)로 구분하여 정확히 6개만 출력하세요\n" +
+            "4. 중괄호, 대괄호, 따옴표 등 특수문자 없이 키워드만 출력하세요\n" +
+            "5. 이모지를 절대 사용하지 마세요\n" +
+            "6. 띄어쓰기가 포함된 키워드는 붙여서 작성하세요\n\n" +
+            "올바른 예시: 카페,조용함,힐링,와이파이,데이트,감성적\n" +
+            "잘못된 예시: 카페 (space),조용한 분위기,작업하기 좋은,wifi,coffee,데이트 코스\n\n" +
+            "위 규칙을 반드시 지켜서 키워드만 출력하세요:",
             aiSummary,
             category,
             petFriendly ? "가능" : "불가능"
