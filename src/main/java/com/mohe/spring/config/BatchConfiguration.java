@@ -55,7 +55,6 @@ import org.springframework.core.task.SimpleAsyncTaskExecutor;
  * @see org.springframework.batch.core.configuration.annotation.EnableBatchProcessing
  */
 @Configuration
-@EnableBatchProcessing
 public class BatchConfiguration extends DefaultBatchConfiguration {
 
     /**
