@@ -53,17 +53,19 @@ echo -e "${GREEN}Creating COMPLETE database backup...${NC}"
 echo -e "${YELLOW}Including: Database, Schemas, Tables, Indexes, Sequences, Constraints, Data${NC}"
 echo ""
 
-docker exec -t "$CONTAINER_NAME" pg_dump \
+docker exec "$CONTAINER_NAME" pg_dump \
     -U "$DB_USER" \
     -d "$DB_NAME" \
-    --verbose \
     --clean \
     --if-exists \
     --create \
     --encoding=UTF8 \
     --no-owner \
     --no-privileges \
-    2>&1 > "$BACKUP_PATH"
+    > "$BACKUP_PATH" 2>&1
+
+# Filter out verbose messages that are not SQL
+grep -v "^pg_dump:" "$BACKUP_PATH" > "${BACKUP_PATH}.tmp" && mv "${BACKUP_PATH}.tmp" "$BACKUP_PATH"
 
 if [ $? -eq 0 ]; then
     BACKUP_SIZE=$(du -h "$BACKUP_PATH" | cut -f1)
