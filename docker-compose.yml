@@ -35,13 +35,11 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
       ollama:
         condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: docker,ollama
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mohe_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       LLM_OLLAMA_BASE_URL: http://ollama:11434

@@ -11,6 +11,7 @@ import com.mohe.spring.entity.PlaceSns;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.service.DistributedJobLockService;
 import com.mohe.spring.service.OllamaService;
+import com.mohe.spring.service.OpenAiDescriptionService;
 import com.mohe.spring.service.crawling.CrawlingService;
 import com.mohe.spring.service.image.DistributedImageService;
 import org.springframework.batch.core.Job;
@@ -57,6 +58,7 @@ public class DistributedCrawlingJobConfig {
 
     private final CrawlingService crawlingService;
     private final OllamaService ollamaService;
+    private final OpenAiDescriptionService openAiDescriptionService;
     private final DistributedImageService distributedImageService;
     private final PlaceRepository placeRepository;
     private final DistributedJobLockService lockService;
@@ -67,12 +69,14 @@ public class DistributedCrawlingJobConfig {
     public DistributedCrawlingJobConfig(
         CrawlingService crawlingService,
         OllamaService ollamaService,
+        OpenAiDescriptionService openAiDescriptionService,
         DistributedImageService distributedImageService,
         PlaceRepository placeRepository,
         DistributedJobLockService lockService
     ) {
         this.crawlingService = crawlingService;
         this.ollamaService = ollamaService;
+        this.openAiDescriptionService = openAiDescriptionService;
         this.distributedImageService = distributedImageService;
         this.placeRepository = placeRepository;
         this.lockService = lockService;
@@ -170,23 +174,30 @@ public class DistributedCrawlingJobConfig {
                 if (textForOllama == null || textForOllama.trim().isEmpty()) {
                     System.err.println("⚠️ No description available for " + place.getName());
                     place.setCrawlerFound(true);
-                    place.setReady(false);
-                    placeRepository.save(place);
-                    return null;
-                }
+                place.setReady(false);
+                placeRepository.save(place);
+                return null;
+            }
 
                 description.setAiSummary(aiSummaryText);
                 description.setSearchQuery(searchQuery);
 
-                // Generate Mohe description using Ollama
+                // Generate Mohe description using OpenAI
                 String categoryStr = place.getCategory() != null ?
                     String.join(",", place.getCategory()) : "";
-                String moheDescription = ollamaService.generateMoheDescription(
-                    textForOllama,
-                    categoryStr,
-                    place.getPetFriendly() != null ? place.getPetFriendly() : false,
-                    crawledData.getReviews()
-                );
+                String reviewsForPrompt = prepareReviewSnippet(crawledData.getReviews());
+                OpenAiDescriptionService.DescriptionPayload payload =
+                    new OpenAiDescriptionService.DescriptionPayload(
+                        aiSummaryText,
+                        reviewsForPrompt,
+                        crawledData.getOriginalDescription(),
+                        categoryStr,
+                        place.getPetFriendly() != null ? place.getPetFriendly() : false
+                    );
+
+                String moheDescription = openAiDescriptionService.generateDescription(payload)
+                    .map(OpenAiDescriptionService.DescriptionResult::description)
+                    .orElse(null);
 
                 // Fallback if generation failed
                 if (moheDescription == null || moheDescription.trim().isEmpty() ||
@@ -359,5 +370,13 @@ public class DistributedCrawlingJobConfig {
             System.out.println("💾 [" + lockService.getWorkerHostname() + "] Saved " +
                 chunk.getItems().size() + " places");
         };
+    }
+
+    private String prepareReviewSnippet(List<String> reviews) {
+        if (reviews == null || reviews.isEmpty()) {
+            return "리뷰 정보 없음";
+        }
+        int limit = Math.min(reviews.size(), 10);
+        return String.join("\n", reviews.subList(0, limit));
     }
 }
