@@ -21,40 +21,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Clean build
 ./gradlew clean build
 
-# Run the application locally
+# Run the application locally (default: local profile)
 ./gradlew bootRun
+
+# Run with specific profile
+./gradlew bootRun -Dspring.profiles.active=docker
 ```
 
 ### Docker Development
 ```bash
-# Start PostgreSQL and Spring app
+# Start all services (PostgreSQL, Ollama, Spring app)
 docker compose up --build
 
 # Start only PostgreSQL for local development
 docker compose up postgres
 
+# Start PostgreSQL and Ollama (for AI features)
+docker compose up postgres ollama
+
 # Stop all services
 docker compose down
+
+# View logs
+docker compose logs -f app
+docker compose logs -f ollama
 ```
 
 ### Application URLs
 - **Health Check**: http://localhost:8080/health
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **OpenAPI Spec**: http://localhost:8080/v3/api-docs
+- **Ollama API**: http://localhost:11434 (when running via Docker)
 
 ## Architecture Overview
 
 ### Core Design Patterns
 
-**API Response Pattern**: All controllers use a standardized `ApiResponse<out T>` wrapper with covariant generic type to handle Kotlin variance issues. The pattern is:
-```kotlin
+**API Response Pattern**: All controllers use a standardized `ApiResponse<T>` wrapper for consistent responses. The pattern is:
+```java
 // Success response
 ResponseEntity.ok(ApiResponse.success(data))
 
-// Error response  
+// Error response
 ResponseEntity.badRequest().body(ApiResponse.error(code, message, path))
 
-// Unauthorized (not ResponseEntity.unauthorized() - doesn't exist)
+// Unauthorized
 ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 ```
 
@@ -62,28 +73,53 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - Access tokens (1 hour expiry) for API calls
 - Refresh tokens (30 days expiry) for token renewal
 - Spring Security filter chain with custom JWT authentication filter
-- Role-based access control with `@PreAuthorize("hasRole('USER')")`
+- Role-based access control with `@PreAuthorize("hasRole('USER')")` or `@PreAuthorize("hasRole('ADMIN')")`
 
 **Database Layer**: JPA/Hibernate with:
-- PostgreSQL for production/docker
-- H2 in-memory for tests (profile: `test`)
-- HikariCP connection pooling
-- Database initialization via `src/main/resources/db/init.sql`
+- PostgreSQL (with pgvector extension) for production/docker
+- H2 in-memory for tests (profile: `test`, automatic configuration)
+- HikariCP connection pooling (10 max connections, 5 min idle)
+- Flyway migrations for schema versioning (`src/main/resources/db/migration/V*.sql`)
+- Vector similarity search support via pgvector
 
 ### Package Structure
 
-- **config/**: Spring configuration classes (Security, OpenAPI, Application)
-- **controller/**: REST endpoints organized by domain (Auth, User, Place, Bookmark, Activity)
+- **batch/**: Spring Batch jobs for data collection and processing
+  - `job/`: Job configurations (PlaceCollectionJob, UpdateCrawledDataJob, DistributedCrawlingJob)
+  - `reader/`: Item readers for batch processing
+  - `processor/`: Item processors for data transformation
+  - `writer/`: Item writers for database persistence
+  - `service/`: External API services (Naver, Kakao place APIs)
+  - `location/`: Location registries (Seoul, Jeju, Yongin regions)
+  - `category/`: Search categories and excluded categories
+- **config/**: Spring configuration classes (Security, Batch, OpenAPI, LLM, Vector, Async)
+- **controller/**: REST endpoints organized by domain (20+ controllers including Auth, User, Place, Recommendation, Batch)
 - **dto/**: Data transfer objects with validation annotations
 - **entity/**: JPA entities representing database tables
-- **repository/**: Spring Data JPA repositories
-- **service/**: Business logic layer
+- **repository/**: Spring Data JPA repositories (with custom queries for vector search)
+- **service/**: Business logic layer (including OllamaService for AI integration)
 - **security/**: JWT handling, user authentication, custom filters
 - **exception/**: Global exception handler for consistent error responses
 
 ### Key Technical Details
 
 **Swagger Integration**: Uses SpringDoc OpenAPI 3 with comprehensive Korean documentation. All controllers use `@SwaggerApiResponse` (aliased to avoid conflict with custom `ApiResponse` class).
+
+**Spring Batch Architecture**: Large-scale data collection system using Spring Batch:
+- **PlaceCollectionJob**: Collects place data from Naver/Kakao APIs by location and category
+- **UpdateCrawledDataJob**: Enriches place data with crawled details, AI descriptions, and embeddings
+- **DistributedCrawlingJob**: Distributed batch processing across multiple worker instances
+- Batch jobs use chunk-oriented processing (configurable chunk size, default 50)
+- Job execution tracking via Spring Batch metadata tables
+- Batch controller at `/api/batch/jobs/*` for manual job triggering
+
+**Ollama AI Integration**: Local AI model integration via OllamaService:
+- Generates Korean place descriptions using `kanana-instruct` model (configurable)
+- Creates keyword embeddings using `mxbai-embed-large` model
+- Generates 6 keywords per place for search/recommendation
+- Vector embeddings stored in PostgreSQL with pgvector for similarity search
+- Timeout configuration: 10-minute response timeout for large model inference
+- Falls back to default values if Ollama is unavailable
 
 **MBTI-Based Recommendations**: Core business logic includes MBTI personality type matching for place recommendations. The `places` table includes MBTI scoring fields, and the recommendation algorithm considers user preferences and personality type. Advanced recommendation engine includes configurable weights for Jaccard/Cosine similarity, time decay, diversity, and scheduled similarity matrix updates.
 
@@ -94,22 +130,30 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 
 **Profile Management**: Users can set comprehensive preferences including MBTI type, age range, transportation method, and space preferences (workshop, exhibition, nature, etc.).
 
+**Web Crawler Integration**: External Python crawler service for place data enrichment:
+- Configured via `CRAWLER_SERVER_URL` (default: `http://localhost:5000`)
+- Provides detailed place information not available via public APIs
+- Batch jobs mark places as `crawler_found=true/false` and `ready=true/false` for data quality tracking
+
 ## Important Implementation Notes
 
-**Kotlin-Specific Considerations**: 
-- The `ApiResponse<out T>` uses covariant generics to resolve variance issues with Spring's ResponseEntity
-- Controller methods should not use explicit type parameters on ResponseEntity methods (they cause compilation errors)
-- Source code is in `src/main/java/` directory despite being Kotlin (project structure preference)
+**Language and Build System**:
+- Primary language: **Java 21** (not Kotlin)
+- Build tool: Gradle 8.5+ with Kotlin DSL (`build.gradle.kts`)
+- Source code location: `src/main/java/com/mohe/spring/`
+- Framework: Spring Boot 3.2.0
 
 **Database Connection**:
-- Docker profile uses `postgres:5432` hostname
-- Local profile uses `localhost:5432`
-- Test profile automatically uses H2 in-memory database
+- Docker profile: `postgres:5432` (internal Docker network hostname)
+- Local profile: `localhost:16239` (external port mapped from Docker)
+- Production: `DB_HOST:DB_PORT` (configurable via environment variables)
+- Test profile: H2 in-memory database (automatic, no configuration needed)
 
 **Environment Profiles**:
-- `docker`: Containerized deployment
-- `local`: Local development with external PostgreSQL  
-- `test`: Automated testing with H2 database
+- `docker`: Containerized deployment with Ollama integration
+- `local`: Local development with external PostgreSQL and Ollama
+- `test`: Automated testing with H2 database (no external dependencies)
+- `ollama`: Profile for Ollama-specific configurations (used with docker profile)
 
 **Security Configuration**: Public endpoints (no authentication required):
 - `/api/auth/**` - Authentication endpoints
@@ -117,14 +161,27 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - `/swagger-ui/**` - API documentation
 - `/v3/api-docs/**` - OpenAPI specification
 
-**External Integrations**: The application includes configuration for:
-- Naver Place API (client ID/secret required)
-- Google Places API (API key required)
-- Ollama AI model integration (configurable host/model)
-- Redis for token storage (optional)
+**External Integrations**: The application requires/supports:
+- **Naver Place API** (required): Client ID/secret for place search (`NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`)
+- **Kakao Local API** (required): API key for place data (`KAKAO_API_KEY`)
+- **Google Places API** (optional): API key for enhanced place data (`GOOGLE_PLACES_API_KEY`)
+- **Ollama** (optional): Local AI model for descriptions/embeddings (`LLM_OLLAMA_BASE_URL`, `LLM_OLLAMA_MODEL`)
+- **OpenAI API** (optional): Alternative to Ollama (`OPENAI_API_KEY`)
+- **Gemini API** (optional): Image generation (`GEMINI_API_KEY`)
+- **Redis** (optional): Token storage (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`)
+- **Web Crawler** (optional): Python crawler service (`CRAWLER_SERVER_URL`)
+- **Email SMTP** (optional): For OTP verification (`MAIL_USERNAME`, `MAIL_PASSWORD`)
 
-**Advanced Configuration**: Comprehensive tuning parameters available for:
-- Recommendation algorithm weights and thresholds
-- Similarity matrix scheduling and refresh intervals
-- Time decay functions for recommendation scoring
-- Database connection pooling with HikariCP
+**Environment Variables**: The `.env.example` file contains all available configuration options:
+- Database configuration (PostgreSQL connection details)
+- JWT secret (minimum 64 characters required)
+- API keys for external services
+- Ollama model configuration (default: `kanana-instruct`)
+- Batch job settings (chunk size, concurrency, scheduling)
+- Recommendation algorithm weights (Jaccard, Cosine, MBTI, time decay)
+- Image storage configuration (local vs remote)
+
+**Batch Job Status Tracking**: Places have two status flags:
+- `crawler_found`: Whether the web crawler successfully found the place
+- `ready`: Whether the place is fully processed and ready for API consumption
+- Failed places can be reprocessed by re-running the batch job

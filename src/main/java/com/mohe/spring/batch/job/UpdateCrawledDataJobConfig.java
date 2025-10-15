@@ -8,6 +8,7 @@ import com.mohe.spring.entity.PlaceImage;
 import com.mohe.spring.entity.PlaceReview;
 import com.mohe.spring.entity.PlaceSns;
 import com.mohe.spring.repository.PlaceRepository;
+import com.mohe.spring.service.OpenAiDescriptionService;
 import com.mohe.spring.service.crawling.CrawlingService;
 import com.mohe.spring.service.image.ImageService;
 import com.mohe.spring.service.OllamaService;
@@ -37,12 +38,20 @@ public class UpdateCrawledDataJobConfig {
 
     private final CrawlingService crawlingService;
     private final OllamaService ollamaService;
+    private final OpenAiDescriptionService openAiDescriptionService;
     private final ImageService imageService;
     private final PlaceRepository placeRepository;
 
-    public UpdateCrawledDataJobConfig(CrawlingService crawlingService, OllamaService ollamaService, ImageService imageService, PlaceRepository placeRepository) {
+    public UpdateCrawledDataJobConfig(
+        CrawlingService crawlingService,
+        OllamaService ollamaService,
+        OpenAiDescriptionService openAiDescriptionService,
+        ImageService imageService,
+        PlaceRepository placeRepository
+    ) {
         this.crawlingService = crawlingService;
         this.ollamaService = ollamaService;
+        this.openAiDescriptionService = openAiDescriptionService;
         this.imageService = imageService;
         this.placeRepository = placeRepository;
     }
@@ -146,21 +155,29 @@ public class UpdateCrawledDataJobConfig {
             description.setAiSummary(aiSummaryText);
             description.setSearchQuery(searchQuery);
 
-            // Generate Mohe description using Ollama (pass reviews for context)
+            // Generate Mohe description using OpenAI (pass reviews for context)
             String categoryStr = place.getCategory() != null ? String.join(",", place.getCategory()) : "";
-            System.out.println("🤖 Generating Ollama description for '" + place.getName() + "'...");
-            String moheDescription = ollamaService.generateMoheDescription(
-                textForOllama,
-                categoryStr,
-                place.getPetFriendly() != null ? place.getPetFriendly() : false,
-                crawledData.getReviews()
-            );
-            System.out.println("✅ Ollama description generated for '" + place.getName() + "': " + moheDescription);
+            System.out.println("🤖 Generating OpenAI description for '" + place.getName() + "'...");
+
+            String reviewsForPrompt = prepareReviewSnippet(crawledData.getReviews());
+            OpenAiDescriptionService.DescriptionPayload payload =
+                new OpenAiDescriptionService.DescriptionPayload(
+                    aiSummaryText,
+                    reviewsForPrompt,
+                    crawledData.getOriginalDescription(),
+                    categoryStr,
+                    place.getPetFriendly() != null ? place.getPetFriendly() : false
+                );
+
+            String moheDescription = openAiDescriptionService.generateDescription(payload)
+                .map(OpenAiDescriptionService.DescriptionResult::description)
+                .orElse(null);
+            System.out.println("✅ OpenAI description generated for '" + place.getName() + "': " + moheDescription);
 
             // CRITICAL: ollama_description must NEVER be empty
             // If Ollama generation failed, use the original text as fallback
             if (moheDescription == null || moheDescription.trim().isEmpty() || moheDescription.equals("AI 설명을 생성할 수 없습니다.")) {
-                System.err.println("⚠️ Ollama description generation failed for '" + place.getName() + "', using fallback description");
+                System.err.println("⚠️ OpenAI description generation failed for '" + place.getName() + "', using fallback description");
 
                 // Use original description as fallback, truncate to reasonable length if needed
                 String fallbackDescription = textForOllama;
@@ -378,5 +395,13 @@ public class UpdateCrawledDataJobConfig {
             // Log batch write success
             System.out.println("💾 Saved batch of " + chunk.getItems().size() + " places to database");
         };
+    }
+
+    private String prepareReviewSnippet(List<String> reviews) {
+        if (reviews == null || reviews.isEmpty()) {
+            return "리뷰 정보 없음";
+        }
+        int limit = Math.min(reviews.size(), 10);
+        return String.join("\n", reviews.subList(0, limit));
     }
 }
