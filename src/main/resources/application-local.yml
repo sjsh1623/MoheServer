@@ -10,6 +10,8 @@ spring:
 mohe:
   image:
     storage-path: ${MOHE_IMAGE_STORAGE_PATH:./images}
+    server-url: ${MOHE_IMAGE_SERVER_URL:http://100.99.236.50:8080}
+    use-remote: ${MOHE_IMAGE_USE_REMOTE:false}
 
 api:
   kakao:

@@ -11,6 +11,8 @@ spring:
 mohe:
   image:
     storage-path: /images
+    server-url: ${MOHE_IMAGE_SERVER_URL:http://100.99.236.50:8080}
+    use-remote: ${MOHE_IMAGE_USE_REMOTE:true}
 
 crawler:
   base-url: ${CRAWLER_SERVER_URL:http://localhost:4000}
