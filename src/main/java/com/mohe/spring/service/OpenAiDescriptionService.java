@@ -60,12 +60,44 @@ public class OpenAiDescriptionService {
         7. 장소명은 Bold 처리하지 마세요.
         8. 문맥상 자연스럽게 반려동물 관련 내용을 포함하세요 (pet_friendly가 true인 경우).
         9. 이모지나 불필요한 기호는 사용하지 마세요.
-        10. 키워드는 총 9개를 추출하며 다음 구성으로 생성합니다:
-            - 기분 관련 단어 2개
-            - 날씨 관련 단어 2개
-            - 분위기 관련 단어 2개
-            - 주요 명사 3개
+        10. 키워드는 총 9개를 추출하며 다음 구성으로 정확히 생성합니다:
+            - 기분 관련 단어 2개 (예: 편안함, 설렘)
+            - 날씨 관련 단어 2개 (예: 맑음, 흐림)
+            - 분위기 관련 단어 2개 (예: 조용함, 활기참)
+            - 주요 명사 3개 (예: 카페, 브런치, 바다)
         11. 출력은 반드시 JSON 형태로만 반환하며, 추가 텍스트는 포함하지 않습니다.
+
+        📝 예시 1:
+        입력:
+        {
+          "ai_summary": "바다 근처의 조용한 브런치 카페",
+          "review": "라떼가 부드럽고 분위기가 좋다는 평이 많아요.",
+          "description": "제주도 서쪽 해안에 위치한 감성 카페",
+          "category": "카페",
+          "pet_friendly": true
+        }
+
+        출력:
+        {
+          "description": "제주도 서쪽 해안에 위치한 **감성 카페**로, 바다 전망과 함께 조용한 시간을 보내기 좋아요. **라떼**가 부드럽고 분위기가 좋다는 평이 많으며, 반려동물과 함께 브런치를 즐기기에도 적합합니다. 바다 근처에서 여유로운 카페 타임을 원한다면 방문해보세요.",
+          "keywords": ["편안함", "여유로움", "맑음", "해안가", "감성적", "조용함", "카페", "브런치", "바다"]
+        }
+
+        📝 예시 2:
+        입력:
+        {
+          "ai_summary": "도심 속 힐링 공간, 조용한 서점 카페",
+          "review": "책을 읽으며 여유를 즐길 수 있고, 커피와 디저트가 맛있다는 후기가 많습니다.",
+          "description": "강남역 근처 독립서점과 카페가 결합된 복합문화공간",
+          "category": "서점,카페",
+          "pet_friendly": false
+        }
+
+        출력:
+        {
+          "description": "강남역 근처에 위치한 **독립서점**과 카페가 결합된 복합문화공간으로, 도심 속에서 조용히 책을 읽으며 힐링하기 좋아요. **커피**와 **디저트**가 맛있다는 평이 많으며, 혼자만의 시간이나 독서 모임을 갖기에 적합한 공간입니다.",
+          "keywords": ["평온함", "집중", "실내", "조용함", "문화적", "아늑함", "서점", "커피", "독서"]
+        }
         """;
 
     private final WebClient webClient;
@@ -124,13 +156,13 @@ public class OpenAiDescriptionService {
         try {
             Map<String, Object> requestBody = new LinkedHashMap<>();
             requestBody.put("model", MODEL);
-            requestBody.put("input", buildInput(payload, cacheMode));
+            requestBody.put("messages", buildMessages(payload, cacheMode));
             requestBody.put("response_format", buildResponseFormat());
             requestBody.put("temperature", 0.7);
-            requestBody.put("max_output_tokens", 600);
+            requestBody.put("max_completion_tokens", 600);
 
             String rawResponse = webClient.post()
-                .uri("/responses")
+                .uri("/chat/completions")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .bodyValue(requestBody)
                 .retrieve()
@@ -143,18 +175,21 @@ public class OpenAiDescriptionService {
             }
 
             JsonNode root = objectMapper.readTree(rawResponse);
-            int cachedTokens = root.path("usage").path("cached_tokens").asInt(0);
 
-            String outputText = extractOutputText(root);
-            if (outputText == null || outputText.isBlank()) {
-                log.error("OpenAI response did not include output_text. Raw response: {}", rawResponse);
+            // Extract cached tokens from usage.prompt_tokens_details.cached_tokens
+            int cachedTokens = root.path("usage").path("prompt_tokens_details").path("cached_tokens").asInt(0);
+
+            // Extract content from choices[0].message.content
+            String content = root.path("choices").path(0).path("message").path("content").asText(null);
+            if (content == null || content.isBlank()) {
+                log.error("OpenAI response missing content. Raw response: {}", rawResponse);
                 return null;
             }
 
-            JsonNode parsed = objectMapper.readTree(outputText);
+            JsonNode parsed = objectMapper.readTree(content);
             String description = parsed.path("description").asText(null);
             if (description == null || description.isBlank()) {
-                log.error("Parsed OpenAI response missing description. Payload: {}", outputText);
+                log.error("Parsed OpenAI response missing description. Payload: {}", content);
                 return null;
             }
 
@@ -184,32 +219,47 @@ public class OpenAiDescriptionService {
         }
     }
 
-    private List<Map<String, Object>> buildInput(DescriptionPayload payload, CacheMode cacheMode) throws Exception {
-        Map<String, Object> cacheControl = new LinkedHashMap<>();
-        cacheControl.put("type", cacheMode == CacheMode.PERSIST ? "persist" : "use_cache");
-        cacheControl.put("key", PROMPT_CACHE_KEY);
+    private List<Map<String, Object>> buildMessages(DescriptionPayload payload, CacheMode cacheMode) throws Exception {
+        List<Map<String, Object>> messages = new ArrayList<>();
 
-        Map<String, Object> systemContent = new LinkedHashMap<>();
-        systemContent.put("type", "text");
-        systemContent.put("text", cacheMode == CacheMode.PERSIST ? PROMPT_TEMPLATE : ""); // reuse cached prompt without resending instructions
-        systemContent.put("cache_control", cacheControl);
-
+        // System message with prompt caching
         Map<String, Object> systemMessage = new LinkedHashMap<>();
         systemMessage.put("role", "system");
-        systemMessage.put("content", Collections.singletonList(systemContent));
 
-        Map<String, Object> userContent = new LinkedHashMap<>();
-        userContent.put("type", "input_text");
-        userContent.put("text", objectMapper.writeValueAsString(payload.toJsonMap()));
+        if (cacheMode == CacheMode.PERSIST) {
+            // First call: send full prompt with ephemeral cache marker
+            Map<String, Object> textContent = new LinkedHashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", PROMPT_TEMPLATE);
 
+            Map<String, Object> cacheControl = new LinkedHashMap<>();
+            cacheControl.put("type", "ephemeral");
+            textContent.put("cache_control", cacheControl);
+
+            systemMessage.put("content", Collections.singletonList(textContent));
+        } else {
+            // Subsequent calls: send full prompt again (OpenAI will use cache automatically)
+            Map<String, Object> textContent = new LinkedHashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", PROMPT_TEMPLATE);
+
+            Map<String, Object> cacheControl = new LinkedHashMap<>();
+            cacheControl.put("type", "ephemeral");
+            textContent.put("cache_control", cacheControl);
+
+            systemMessage.put("content", Collections.singletonList(textContent));
+        }
+
+        messages.add(systemMessage);
+
+        // User message with input data
         Map<String, Object> userMessage = new LinkedHashMap<>();
         userMessage.put("role", "user");
-        userMessage.put("content", Collections.singletonList(userContent));
+        userMessage.put("content", objectMapper.writeValueAsString(payload.toJsonMap()));
 
-        List<Map<String, Object>> input = new ArrayList<>();
-        input.add(systemMessage);
-        input.add(userMessage);
-        return input;
+        messages.add(userMessage);
+
+        return messages;
     }
 
     private Map<String, Object> buildResponseFormat() {
@@ -247,69 +297,6 @@ public class OpenAiDescriptionService {
         return responseFormat;
     }
 
-    private String extractOutputText(JsonNode root) {
-        JsonNode outputNode = root.path("output");
-        if (outputNode.isArray()) {
-            for (JsonNode item : outputNode) {
-                if (item.has("content") && item.get("content").isArray()) {
-                    for (JsonNode content : item.get("content")) {
-                        String type = content.path("type").asText("");
-                        if (("output_text".equals(type) || "text".equals(type)) && content.has("text")) {
-                            String text = content.get("text").asText(null);
-                            if (text != null && !text.isBlank()) {
-                                return text;
-                            }
-                        }
-                    }
-                }
-
-                String itemType = item.path("type").asText("");
-                if ("output_text".equals(itemType) && item.has("text")) {
-                    String text = item.get("text").asText(null);
-                    if (text != null && !text.isBlank()) {
-                        return text;
-                    }
-                }
-            }
-        }
-
-        JsonNode directOutput = root.get("output_text");
-        if (directOutput != null) {
-            if (directOutput.isTextual()) {
-                return directOutput.asText();
-            }
-            if (directOutput.isArray() && directOutput.size() > 0) {
-                for (JsonNode node : directOutput) {
-                    if (node.isTextual()) {
-                        return node.asText();
-                    }
-                }
-            }
-        }
-
-        JsonNode choices = root.get("choices");
-        if (choices != null && choices.isArray()) {
-            for (JsonNode choice : choices) {
-                JsonNode message = choice.get("message");
-                if (message != null) {
-                    JsonNode content = message.get("content");
-                    if (content != null && content.isArray()) {
-                        for (JsonNode part : content) {
-                            String type = part.path("type").asText("");
-                            if (("output_text".equals(type) || "text".equals(type)) && part.has("text")) {
-                                String text = part.get("text").asText(null);
-                                if (text != null && !text.isBlank()) {
-                                    return text;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
 
     public record DescriptionPayload(
         String aiSummary,

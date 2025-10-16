@@ -1,0 +1,19 @@
+spring:
+  batch:
+    job:
+      enabled: false  # Disable automatic job execution in Docker
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+mohe:
+  image:
+    storage-path: /images
+
+crawler:
+  base-url: ${CRAWLER_SERVER_URL:http://localhost:4000}
+
+# OpenAI Configuration
+OPENAI_API_KEY: ${OPENAI_API_KEY:}

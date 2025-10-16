@@ -33,10 +33,10 @@ public class PlaceDataCollectionService {
 
     private static final Logger logger = LoggerFactory.getLogger(PlaceDataCollectionService.class);
 
-    @Value("${NAVER_CLIENT_ID:}")
+    @Value("${api.naver.client-id:}")
     private String naverClientId;
 
-    @Value("${NAVER_CLIENT_SECRET:}")
+    @Value("${api.naver.client-secret:}")
     private String naverClientSecret;
 
     @Value("${GOOGLE_PLACES_API_KEY:}")

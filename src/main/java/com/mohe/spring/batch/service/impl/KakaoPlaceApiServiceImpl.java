@@ -36,7 +36,7 @@ public class KakaoPlaceApiServiceImpl implements KakaoPlaceApiService {
     private static final int SIZE_PER_PAGE = 15; // Kakao API 최대값
     private static final int MAX_PAGE = 20; // 충분한 데이터 수집을 위해 20페이지
 
-    @Value("${kakao.api.key}")
+    @Value("${api.kakao.key}")
     private String kakaoApiKey;
 
     private final RestTemplate restTemplate;

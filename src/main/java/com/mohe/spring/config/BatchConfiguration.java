@@ -55,7 +55,7 @@ import org.springframework.core.task.SimpleAsyncTaskExecutor;
  * @see org.springframework.batch.core.configuration.annotation.EnableBatchProcessing
  */
 @Configuration
-public class BatchConfiguration extends DefaultBatchConfiguration {
+public class BatchConfiguration {
 
     /**
      * 비동기 JobLauncher를 생성합니다.
