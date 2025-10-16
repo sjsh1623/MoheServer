@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -44,7 +45,14 @@ public class OpenAiCacheTestController {
         this.ollamaService = ollamaService;
     }
 
-    @GetMapping("/openai-cache")
+    @GetMapping("/ping")
+    @Operation(summary = "핑 테스트", description = "컨트롤러 라우팅 테스트")
+    public ResponseEntity<String> ping() {
+        log.info("🏓 Ping endpoint called!");
+        return ResponseEntity.ok("pong");
+    }
+
+    @PostMapping("/openai-cache")
     @Operation(
         summary = "OpenAI 캐시 테스트",
         description = "5개 장소에 대해 크롤링 → OpenAI description 생성을 수행하고 캐시 동작을 테스트합니다. " +
