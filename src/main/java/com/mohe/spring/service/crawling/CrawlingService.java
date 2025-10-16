@@ -25,7 +25,7 @@ public class CrawlingService {
     private final ObjectMapper objectMapper;
 
     public CrawlingService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
-                          @Value("${crawler.base-url:http://host.docker.internal:4000}") String baseUrl) {
+                          @Value("${crawler.base-url:http://localhost:4000}") String baseUrl) {
         // HttpClient 설정: 타임아웃 증가 및 연결 풀 설정
         // 크롤러는 Selenium으로 실제 브라우저를 구동하므로 매우 긴 타임아웃 필요
         HttpClient httpClient = HttpClient.create()
@@ -59,6 +59,14 @@ public class CrawlingService {
                     CrawledDataDto data = objectMapper.convertValue(responseMap.get("data"), new TypeReference<CrawledDataDto>() {});
                     response.setData(data);
                     return response;
+                })
+                .onErrorResume(error -> {
+                    // Handle 404, 500, and other errors gracefully
+                    CrawlingResponse<CrawledDataDto> errorResponse = new CrawlingResponse<>();
+                    errorResponse.setSuccess(false);
+                    errorResponse.setMessage(error.getMessage());
+                    errorResponse.setData(null);
+                    return Mono.just(errorResponse);
                 });
     }
 }

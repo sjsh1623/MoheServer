@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/mohe_db}
+    username: ${SPRING_DATASOURCE_USERNAME:mohe_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:mohe_password}
+  batch:
+    job:
+      enabled: false
+
+mohe:
+  image:
+    storage-path: ${MOHE_IMAGE_STORAGE_PATH:./images}
+
+api:
+  kakao:
+    key: ${KAKAO_API_KEY:}
+
+  naver:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+
+crawler:
+  base-url: ${CRAWLER_SERVER_URL:http://localhost:4000}
+
+# OpenAI Configuration
+OPENAI_API_KEY: ${OPENAI_API_KEY}

@@ -235,4 +235,18 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         ORDER BY p.id ASC
     """)
     Page<Place> findPlacesForBatchProcessing(Pageable pageable);
+
+    /**
+     * Find top 5 places that are not ready for testing
+     */
+    @Query("""
+        SELECT p FROM Place p
+        WHERE p.ready = false OR p.ready IS NULL
+        ORDER BY p.id ASC
+    """)
+    List<Place> findTop5ByReadyFalseOrReadyIsNull(Pageable pageable);
+
+    default List<Place> findTop5ByReadyFalseOrReadyIsNull() {
+        return findTop5ByReadyFalseOrReadyIsNull(Pageable.ofSize(5));
+    }
 }
