@@ -52,6 +52,8 @@ services:
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       CRAWLER_SERVER_URL: http://host.docker.internal:4000
+      MOHE_IMAGE_SERVER_URL: ${MOHE_IMAGE_SERVER_URL:-http://100.99.236.50:8080}
+      MOHE_IMAGE_USE_REMOTE: ${MOHE_IMAGE_USE_REMOTE:-true}
     env_file:
       - .env
     networks:
