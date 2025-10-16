@@ -20,7 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Handles GPT-4.1-mini calls for batch description generation using prompt caching.
@@ -31,7 +30,7 @@ public class OpenAiDescriptionService {
     private static final Logger log = LoggerFactory.getLogger(OpenAiDescriptionService.class);
 
     private static final String MODEL = "gpt-4.1-mini";
-    private static final String PROMPT_CACHE_KEY = "mohe.batch.description.v1";
+    private static final String PROMPT_CACHE_KEY = "mohe.batch.description.v3";
     private static final String PROMPT_TEMPLATE = """
         당신은 여행지와 공간을 자연스럽고 친근하게 소개하는 작가이자 콘텐츠 생성 AI입니다.
         입력은 JSON 형식으로 제공됩니다:
@@ -56,7 +55,7 @@ public class OpenAiDescriptionService {
         3. 사람들의 후기를 참고하되 객관적인 사실만 담으세요.
         4. '~좋아요', '~좋을 것 같아요', '~느껴져요'처럼 자연스러운 어미를 사용하세요.
         5. 감정을 직접 표현하지 말고, 읽는 사람이 느낄 수 있도록 써주세요.
-        6. 강조할 주요 명사는 '**'로 감싸 Bold 처리하세요. (최소 1개, 최대 3개)
+        6. 강조할 주요 명사는 '##'로 감싸주세요. (최소 1개, 최대 3개)
         7. 장소명은 Bold 처리하지 마세요.
         8. 문맥상 자연스럽게 반려동물 관련 내용을 포함하세요 (pet_friendly가 true인 경우).
         9. 이모지나 불필요한 기호는 사용하지 마세요.
@@ -79,7 +78,7 @@ public class OpenAiDescriptionService {
 
         출력:
         {
-          "description": "제주도 서쪽 해안에 위치한 **감성 카페**로, 바다 전망과 함께 조용한 시간을 보내기 좋아요. **라떼**가 부드럽고 분위기가 좋다는 평이 많으며, 반려동물과 함께 브런치를 즐기기에도 적합합니다. 바다 근처에서 여유로운 카페 타임을 원한다면 방문해보세요.",
+          "description": "제주도 서쪽 해안에 위치한 ##감성 카페##로, 바다 전망과 함께 조용한 시간을 보내기 좋아요. ##라떼##가 부드럽고 분위기가 좋다는 평이 많으며, 반려동물과 함께 브런치를 즐기기에도 적합합니다. 바다 근처에서 여유로운 카페 타임을 원한다면 방문해보세요.",
           "keywords": ["편안함", "여유로움", "맑음", "해안가", "감성적", "조용함", "카페", "브런치", "바다"]
         }
 
@@ -95,14 +94,13 @@ public class OpenAiDescriptionService {
 
         출력:
         {
-          "description": "강남역 근처에 위치한 **독립서점**과 카페가 결합된 복합문화공간으로, 도심 속에서 조용히 책을 읽으며 힐링하기 좋아요. **커피**와 **디저트**가 맛있다는 평이 많으며, 혼자만의 시간이나 독서 모임을 갖기에 적합한 공간입니다.",
+          "description": "강남역 근처에 위치한 ##독립서점##과 카페가 결합된 복합문화공간으로, 도심 속에서 조용히 책을 읽으며 힐링하기 좋아요. ##커피##와 ##디저트##가 맛있다는 평이 많으며, 혼자만의 시간이나 독서 모임을 갖기에 적합한 공간입니다.",
           "keywords": ["평온함", "집중", "실내", "조용함", "문화적", "아늑함", "서점", "커피", "독서"]
         }
         """;
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
-    private final AtomicBoolean cachePrimed = new AtomicBoolean(false);
     private final String apiKey;
 
     public OpenAiDescriptionService(
@@ -130,33 +128,28 @@ public class OpenAiDescriptionService {
             return Optional.empty();
         }
 
-        CacheMode initialMode = cachePrimed.get() ? CacheMode.USE_CACHED : CacheMode.PERSIST;
-        DescriptionResult result = executeRequest(payload, initialMode);
+        // With cache_key, OpenAI automatically manages cache hit/miss
+        DescriptionResult result = executeRequest(payload);
 
         if (result == null) {
             return Optional.empty();
         }
 
-        if (initialMode == CacheMode.USE_CACHED && result.cachedTokens() == 0) {
-            log.info("OpenAI prompt cache expired. Re-registering prompt with persist mode.");
-            cachePrimed.set(false);
-            result = executeRequest(payload, CacheMode.PERSIST);
-            if (result == null) {
-                return Optional.empty();
-            }
-            cachePrimed.set(true);
-        } else if (initialMode == CacheMode.PERSIST) {
-            cachePrimed.set(true);
+        // Log cache status
+        if (result.cachedTokens() > 0) {
+            log.debug("OpenAI prompt cache hit: {} tokens reused", result.cachedTokens());
+        } else {
+            log.debug("OpenAI prompt cache miss: registering prompt for cache_key={}", PROMPT_CACHE_KEY);
         }
 
         return Optional.of(result);
     }
 
-    private DescriptionResult executeRequest(DescriptionPayload payload, CacheMode cacheMode) {
+    private DescriptionResult executeRequest(DescriptionPayload payload) {
         try {
             Map<String, Object> requestBody = new LinkedHashMap<>();
             requestBody.put("model", MODEL);
-            requestBody.put("messages", buildMessages(payload, cacheMode));
+            requestBody.put("messages", buildMessages(payload));
             requestBody.put("response_format", buildResponseFormat());
             requestBody.put("temperature", 0.7);
             requestBody.put("max_completion_tokens", 600);
@@ -219,36 +212,24 @@ public class OpenAiDescriptionService {
         }
     }
 
-    private List<Map<String, Object>> buildMessages(DescriptionPayload payload, CacheMode cacheMode) throws Exception {
+    private List<Map<String, Object>> buildMessages(DescriptionPayload payload) throws Exception {
         List<Map<String, Object>> messages = new ArrayList<>();
 
         // System message with prompt caching
         Map<String, Object> systemMessage = new LinkedHashMap<>();
         systemMessage.put("role", "system");
 
-        if (cacheMode == CacheMode.PERSIST) {
-            // First call: send full prompt with ephemeral cache marker
-            Map<String, Object> textContent = new LinkedHashMap<>();
-            textContent.put("type", "text");
-            textContent.put("text", PROMPT_TEMPLATE);
+        // Always send full prompt with ephemeral cache marker and cache key
+        Map<String, Object> textContent = new LinkedHashMap<>();
+        textContent.put("type", "text");
+        textContent.put("text", PROMPT_TEMPLATE);
 
-            Map<String, Object> cacheControl = new LinkedHashMap<>();
-            cacheControl.put("type", "ephemeral");
-            textContent.put("cache_control", cacheControl);
+        Map<String, Object> cacheControl = new LinkedHashMap<>();
+        cacheControl.put("type", "ephemeral");
+        cacheControl.put("cache_key", PROMPT_CACHE_KEY);
+        textContent.put("cache_control", cacheControl);
 
-            systemMessage.put("content", Collections.singletonList(textContent));
-        } else {
-            // Subsequent calls: send full prompt again (OpenAI will use cache automatically)
-            Map<String, Object> textContent = new LinkedHashMap<>();
-            textContent.put("type", "text");
-            textContent.put("text", PROMPT_TEMPLATE);
-
-            Map<String, Object> cacheControl = new LinkedHashMap<>();
-            cacheControl.put("type", "ephemeral");
-            textContent.put("cache_control", cacheControl);
-
-            systemMessage.put("content", Collections.singletonList(textContent));
-        }
+        systemMessage.put("content", Collections.singletonList(textContent));
 
         messages.add(systemMessage);
 
@@ -328,11 +309,6 @@ public class OpenAiDescriptionService {
         public DescriptionResult {
             keywords = CollectionUtils.isEmpty(keywords) ? List.of() : List.copyOf(keywords);
         }
-    }
-
-    private enum CacheMode {
-        PERSIST,
-        USE_CACHED
     }
 
     private String sanitizeDescription(String text) {
