@@ -55,8 +55,9 @@ public class OpenAiDescriptionService {
         3. 사람들의 후기를 참고하되 객관적인 사실만 담으세요.
         4. '~좋아요', '~좋을 것 같아요', '~느껴져요'처럼 자연스러운 어미를 사용하세요.
         5. 감정을 직접 표현하지 말고, 읽는 사람이 느낄 수 있도록 써주세요.
-        6. 강조할 주요 명사는 '##'로 감싸주세요. (최소 1개, 최대 3개)
-        7. 장소명은 Bold 처리하지 마세요.
+        6. 강조할 주요 명사(메뉴명 또는 카테고리)는 '##'로 감싸주세요. (최소 1개, 최대 3개)
+           - ex) 케이크, 커피, 레몬에이드 등등
+        7. 장소명은 ##으로 절대 감싸지 마세요.
         8. 문맥상 자연스럽게 반려동물 관련 내용을 포함하세요 (pet_friendly가 true인 경우).
         9. 이모지나 불필요한 기호는 사용하지 마세요.
         10. 키워드는 총 9개를 추출하며 다음 구성으로 정확히 생성합니다:
@@ -315,6 +316,9 @@ public class OpenAiDescriptionService {
         if (text == null) {
             return "";
         }
-        return text.replaceAll("[\\p{So}\\p{Cn}]", "").trim();
+        // Replace ## with ** for markdown bold
+        String replaced = text.replace("##", "**");
+        // Remove emojis and other unwanted characters
+        return replaced.replaceAll("[\\p{So}\\p{Cn}]", "").trim();
     }
 }
