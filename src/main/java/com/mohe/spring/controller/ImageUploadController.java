@@ -44,12 +44,21 @@ public class ImageUploadController {
     private final Path imageStorageLocation;
 
     public ImageUploadController(@Value("${mohe.image.storage-path:/images}") String storagePath) {
-        this.imageStorageLocation = Paths.get(storagePath);
+        // Ensure absolute path - if starts with /, it's absolute
+        if (storagePath.startsWith("/")) {
+            this.imageStorageLocation = Paths.get(storagePath);
+        } else {
+            // Relative path - resolve from root
+            this.imageStorageLocation = Paths.get("/" + storagePath);
+        }
+
         try {
             Files.createDirectories(this.imageStorageLocation);
             logger.info("📁 Image storage initialized: {}", imageStorageLocation.toAbsolutePath());
+            logger.info("   Writable: {}", Files.isWritable(imageStorageLocation));
         } catch (Exception ex) {
-            throw new RuntimeException("Could not create image storage directory", ex);
+            logger.error("❌ Could not create image storage directory: {}", storagePath, ex);
+            throw new RuntimeException("Could not create image storage directory: " + storagePath, ex);
         }
     }
 
