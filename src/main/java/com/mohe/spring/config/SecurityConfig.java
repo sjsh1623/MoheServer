@@ -87,6 +87,7 @@ public class SecurityConfig {
                     "/api/korean-regions/**",
                     "/api/home/**",
                     "/api/mock/**",
+                    "/api/images/**",
                     "/image/**",
                     "/images/**",
                     "/health",
