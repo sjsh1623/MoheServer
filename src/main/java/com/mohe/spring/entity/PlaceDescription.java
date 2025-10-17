@@ -26,7 +26,7 @@ public class PlaceDescription {
     private String aiSummary;
 
     @Column(columnDefinition = "TEXT")
-    private String ollamaDescription;
+    private String moheDescription;
 
     @Column(length = 500)
     private String searchQuery;
