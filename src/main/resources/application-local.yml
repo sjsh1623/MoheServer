@@ -12,6 +12,8 @@ mohe:
     storage-path: ${MOHE_IMAGE_STORAGE_PATH:./images}
     server-url: ${MOHE_IMAGE_SERVER_URL:http://100.99.236.50:8080}
     use-remote: ${MOHE_IMAGE_USE_REMOTE:false}
+  image-processor:
+    url: ${IMAGE_PROCESSOR_URL:http://100.99.236.50:5200}
 
 api:
   kakao:

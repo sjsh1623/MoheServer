@@ -1,7 +1,11 @@
 # Build stage
-FROM gradle:8.5-jdk21 AS build
+FROM gradle:8.11.1-jdk21 AS build
 
 WORKDIR /app
+
+# Copy gradle wrapper (skip gradle.properties as it contains local paths)
+COPY gradle gradle
+COPY gradlew .
 
 # Copy gradle files
 COPY build.gradle settings.gradle ./
@@ -10,7 +14,7 @@ COPY build.gradle settings.gradle ./
 COPY src ./src
 
 # Build the application
-RUN gradle clean build -x test --no-daemon
+RUN ./gradlew clean build -x test --no-daemon
 
 # Runtime stage
 FROM eclipse-temurin:21-jre
