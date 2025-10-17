@@ -44,12 +44,13 @@ public class ImageUploadController {
     private final Path imageStorageLocation;
 
     public ImageUploadController(@Value("${mohe.image.storage-path:/images}") String storagePath) {
-        // Ensure absolute path - if starts with /, it's absolute
+        // Determine path type - absolute or relative
         if (storagePath.startsWith("/")) {
+            // Absolute path (production)
             this.imageStorageLocation = Paths.get(storagePath);
         } else {
-            // Relative path - resolve from root
-            this.imageStorageLocation = Paths.get("/" + storagePath);
+            // Relative path (test environment) - use current working directory
+            this.imageStorageLocation = Paths.get(System.getProperty("user.dir"), storagePath);
         }
 
         try {

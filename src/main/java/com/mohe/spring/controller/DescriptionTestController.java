@@ -4,7 +4,7 @@ import com.mohe.spring.dto.crawling.CrawledDataDto;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.service.OpenAiDescriptionService;
-import com.mohe.spring.service.OllamaService;
+import com.mohe.spring.service.KeywordEmbeddingService;
 import com.mohe.spring.service.crawling.CrawlingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,18 +30,18 @@ public class DescriptionTestController {
     private final PlaceRepository placeRepository;
     private final CrawlingService crawlingService;
     private final OpenAiDescriptionService openAiDescriptionService;
-    private final OllamaService ollamaService;
+    private final KeywordEmbeddingService keywordEmbeddingService;
 
     public DescriptionTestController(
         PlaceRepository placeRepository,
         CrawlingService crawlingService,
         OpenAiDescriptionService openAiDescriptionService,
-        OllamaService ollamaService
+        KeywordEmbeddingService keywordEmbeddingService
     ) {
         this.placeRepository = placeRepository;
         this.crawlingService = crawlingService;
         this.openAiDescriptionService = openAiDescriptionService;
-        this.ollamaService = ollamaService;
+        this.keywordEmbeddingService = keywordEmbeddingService;
     }
 
     @PostMapping("/description-generation")
@@ -145,9 +145,9 @@ public class DescriptionTestController {
                     log.info("  📊 Cached tokens: {}", descriptionResult.cachedTokens());
                     log.info("  🔑 Keywords: {}", String.join(", ", descriptionResult.keywords()));
 
-                    // Step 4: Generate keywords with Ollama (unchanged)
-                    log.info("  🔑 Generating keywords with Ollama...");
-                    String[] keywords = ollamaService.generateKeywords(
+                    // Step 4: Generate keywords with embedding service
+                    log.info("  🔑 Generating keywords...");
+                    String[] keywords = keywordEmbeddingService.generateKeywords(
                         textForAI,
                         categoryStr,
                         place.getPetFriendly() != null ? place.getPetFriendly() : false
@@ -157,7 +157,7 @@ public class DescriptionTestController {
                     placeResult.put("success", true);
                     placeResult.put("description", descriptionResult.description());
                     placeResult.put("openaiKeywords", descriptionResult.keywords());
-                    placeResult.put("ollamaKeywords", List.of(keywords));
+                    placeResult.put("generatedKeywords", List.of(keywords));
                     placeResult.put("cachedTokens", descriptionResult.cachedTokens());
                     placeResult.put("category", categoryStr);
                     placeResult.put("petFriendly", place.getPetFriendly());
