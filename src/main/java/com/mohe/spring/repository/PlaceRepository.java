@@ -3,6 +3,7 @@ package com.mohe.spring.repository;
 import com.mohe.spring.entity.Place;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -227,11 +228,11 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     /**
      * Find places where both crawler_found and ready are null or false
      * Used by batch job to process places that haven't been crawled yet
-     * LEFT JOIN FETCH to eagerly load descriptions collection to avoid LazyInitializationException
+     * @EntityGraph to eagerly load all related collections to avoid LazyInitializationException
      */
+    @EntityGraph(attributePaths = {"descriptions", "images", "businessHours", "sns", "reviews"})
     @Query("""
         SELECT DISTINCT p FROM Place p
-        LEFT JOIN FETCH p.descriptions
         WHERE (p.crawlerFound IS NULL OR p.crawlerFound = false)
         AND (p.ready IS NULL OR p.ready = false)
         ORDER BY p.id ASC
