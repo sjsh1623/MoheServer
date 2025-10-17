@@ -68,8 +68,18 @@ public class ImageProcessorService {
             try {
                 String savedFileName = saveImageToProcessor(imageUrl, fileName);
                 if (savedFileName != null) {
-                    // ImageProcessor는 자동으로 확장자를 추가하므로, 반환된 파일명을 사용
-                    String savedPath = "/images/" + savedFileName;
+                    // ImageProcessor가 반환한 파일명을 사용
+                    // 확장자가 없으면 원본 URL에서 추출하여 추가
+                    String finalFileName = savedFileName;
+                    if (!savedFileName.contains(".")) {
+                        String extension = extractExtensionFromUrl(imageUrl);
+                        if (extension != null && !extension.isEmpty()) {
+                            finalFileName = savedFileName + "." + extension;
+                            logger.debug("Added extension to fileName: {} -> {}", savedFileName, finalFileName);
+                        }
+                    }
+
+                    String savedPath = "/images/" + finalFileName;
                     savedPaths.add(savedPath);
                     logger.debug("✅ Saved via ImageProcessor: {} from {}", savedPath, imageUrl);
                 } else {
@@ -106,6 +116,8 @@ public class ImageProcessorService {
 
             HttpEntity<ImageSaveRequest> entity = new HttpEntity<>(request, headers);
 
+            logger.debug("📤 Calling ImageProcessor: url={}, fileName={}", imageUrl, fileName);
+
             // API 호출
             ResponseEntity<ImageSaveResponse> response = restTemplate.postForEntity(
                     url,
@@ -115,15 +127,15 @@ public class ImageProcessorService {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 String savedFileName = response.getBody().getFileName();
-                logger.debug("✅ ImageProcessor saved: {}", savedFileName);
+                logger.info("✅ ImageProcessor saved: {} (original URL: {})", savedFileName, imageUrl);
                 return savedFileName;
             } else {
-                logger.error("❌ ImageProcessor returned non-2xx: {}", response.getStatusCode());
+                logger.error("❌ ImageProcessor returned non-2xx: {} for URL: {}", response.getStatusCode(), imageUrl);
                 return null;
             }
 
         } catch (Exception e) {
-            logger.error("❌ Failed to call ImageProcessor API: {}", e.getMessage());
+            logger.error("❌ Failed to call ImageProcessor API for URL: {} - Error: {}", imageUrl, e.getMessage(), e);
             return null;
         }
     }
@@ -163,6 +175,37 @@ public class ImageProcessorService {
         String sanitizedName = placeName.replaceAll("[^a-zA-Z0-9가-힣]", "_");
         // 확장자는 ImageProcessor가 자동으로 추가하므로 제외
         return placeId + "_" + sanitizedName + "_" + index;
+    }
+
+    /**
+     * URL에서 확장자 추출
+     *
+     * @param url 이미지 URL
+     * @return 확장자 (예: "jpg", "png") 또는 기본값 "jpg"
+     */
+    private String extractExtensionFromUrl(String url) {
+        try {
+            // URL에서 쿼리 파라미터 제거
+            String urlWithoutQuery = url.split("\\?")[0];
+
+            // 마지막 "." 이후 문자열 추출
+            int lastDotIndex = urlWithoutQuery.lastIndexOf(".");
+            if (lastDotIndex != -1 && lastDotIndex < urlWithoutQuery.length() - 1) {
+                String extension = urlWithoutQuery.substring(lastDotIndex + 1).toLowerCase();
+
+                // 유효한 이미지 확장자인지 확인
+                if (extension.matches("(jpg|jpeg|png|gif|webp|bmp|svg)")) {
+                    return extension;
+                }
+            }
+
+            // 기본값: jpg
+            logger.debug("Could not extract extension from URL: {}, using default: jpg", url);
+            return "jpg";
+        } catch (Exception e) {
+            logger.warn("Error extracting extension from URL: {}, using default: jpg", url);
+            return "jpg";
+        }
     }
 
     /**
