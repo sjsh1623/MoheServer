@@ -55,9 +55,6 @@ dependencies {
     // PostgreSQL driver
     runtimeOnly 'org.postgresql:postgresql'
 
-    // Flyway for database migrations
-    implementation 'org.flywaydb:flyway-core:9.16.3'
-    
     // BCrypt is already included in spring-boot-starter-security
     
     // Redis for token storage (optional)
@@ -76,12 +73,13 @@ dependencies {
     // HTML sanitization for email content and HTML tag removal
     implementation 'org.jsoup:jsoup:1.17.2'
     
+    // OpenAI client with compatible versions for Java 21
     implementation 'com.aallam.openai:openai-client:3.8.0'
     implementation 'io.ktor:ktor-client-okhttp:2.3.9'
 
-    // HTTP Client Libraries - 가장 유명하고 안정적인 라이브러리들
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'  // 가장 인기 있는 HTTP 클라이언트
-    implementation 'org.apache.httpcomponents.client5:httpclient5:5.3' // Apache HttpClient 5
+    // HTTP Client Libraries - compatible versions for Java 21
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.2.1'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok'

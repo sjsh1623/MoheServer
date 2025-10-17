@@ -13,6 +13,8 @@ mohe:
     storage-path: /images
     server-url: ${MOHE_IMAGE_SERVER_URL:http://100.99.236.50:8080}
     use-remote: ${MOHE_IMAGE_USE_REMOTE:true}
+  image-processor:
+    url: ${IMAGE_PROCESSOR_URL:http://100.99.236.50:5200}
 
 crawler:
   base-url: ${CRAWLER_SERVER_URL:http://localhost:4000}
