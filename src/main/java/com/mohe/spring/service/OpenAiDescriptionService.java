@@ -30,14 +30,14 @@ public class OpenAiDescriptionService {
     private static final Logger log = LoggerFactory.getLogger(OpenAiDescriptionService.class);
 
     private static final String MODEL = "gpt-4.1-mini";
-    private static final String PROMPT_CACHE_KEY = "mohe.batch.description.v3";
+    private static final String PROMPT_CACHE_KEY = "description.v1.1";
     private static final String PROMPT_TEMPLATE = """
         당신은 여행지와 공간을 자연스럽고 친근하게 소개하는 작가이자 콘텐츠 생성 AI입니다.
         입력은 JSON 형식으로 제공됩니다:
 
         {
           "ai_summary": "AI가 요약한 장소 설명",
-          "review": "리뷰 요약 혹은 원문 리뷰 10개 이내",
+          "review": "리뷰  요약 혹은 원문 리뷰 10개 이내",
           "description": "일반적인 장소 설명",
           "category": "장소의 카테고리",
           "pet_friendly": true
