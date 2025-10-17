@@ -18,12 +18,12 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Service
-public class OllamaService implements LlmService {
+public class KeywordEmbeddingService implements LlmService {
     private final LlmProperties llmProperties;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
 
-    public OllamaService(
+    public KeywordEmbeddingService(
         LlmProperties llmProperties,
         WebClient.Builder webClientBuilder,
         ObjectMapper objectMapper
@@ -164,39 +164,56 @@ public class OllamaService implements LlmService {
         // Input validation
         if (keywords == null || keywords.length == 0) {
             System.err.println("Failed to vectorize keywords: Keywords array is null or empty");
-            return new float[1024];
+            return new float[1792];  // kanana-nano-2.1b-embedding vector size
         }
 
         String combinedKeywords = String.join(" ", keywords);
 
         if (combinedKeywords.trim().isEmpty()) {
             System.err.println("Failed to vectorize keywords: Combined keywords string is empty");
-            return new float[1024];
+            return new float[1792];
         }
 
+        // New embedding service request format (OpenAI-compatible)
         Map<String, Object> request = new HashMap<>();
-        request.put("model", "mxbai-embed-large");
-        request.put("prompt", combinedKeywords);
+        request.put("model", "kanana-nano-2.1b-embedding");
+        request.put("input", combinedKeywords);
 
         try {
-            String response = webClient.post()
-                .uri("/api/embeddings")
+            // Get embedding service URL from environment
+            String embeddingServiceUrl = System.getenv().getOrDefault(
+                "EMBEDDING_SERVICE_URL",
+                "http://localhost:8001"
+            );
+
+            String response = WebClient.builder()
+                .baseUrl(embeddingServiceUrl)
+                .build()
+                .post()
+                .uri("/v1/embeddings")
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(String.class)
                 .block();
 
             if (response == null || response.trim().isEmpty()) {
-                System.err.println("Failed to vectorize keywords: Empty response from Ollama");
-                return new float[1024];
+                System.err.println("Failed to vectorize keywords: Empty response from embedding service");
+                return new float[1792];
             }
 
             JsonNode jsonNode = objectMapper.readTree(response);
-            JsonNode embeddingNode = jsonNode.get("embedding");
+            JsonNode dataNode = jsonNode.get("data");
+
+            if (dataNode == null || !dataNode.isArray() || dataNode.size() == 0) {
+                System.err.println("Failed to vectorize keywords: No valid 'data' field in response. Raw response: " + response);
+                return new float[1792];
+            }
+
+            JsonNode embeddingNode = dataNode.get(0).get("embedding");
 
             if (embeddingNode == null || embeddingNode.isNull() || !embeddingNode.isArray()) {
-                System.err.println("Failed to vectorize keywords: No valid 'embedding' field in Ollama output. Raw response: " + response);
-                return new float[1024];
+                System.err.println("Failed to vectorize keywords: No valid 'embedding' field in response data");
+                return new float[1792];
             }
 
             float[] vector = new float[embeddingNode.size()];
@@ -206,18 +223,18 @@ public class OllamaService implements LlmService {
 
             return vector;
         } catch (org.springframework.web.reactive.function.client.WebClientRequestException e) {
-            System.err.println("Failed to vectorize keywords: Cannot connect to Ollama - " + e.getMessage());
-            return new float[1024];
+            System.err.println("Failed to vectorize keywords: Cannot connect to embedding service - " + e.getMessage());
+            return new float[1792];
         } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
-            System.err.println("Failed to vectorize keywords: Ollama returned error " + e.getStatusCode() + " - " + e.getMessage());
-            return new float[1024];
+            System.err.println("Failed to vectorize keywords: Embedding service returned error " + e.getStatusCode() + " - " + e.getMessage());
+            return new float[1792];
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            System.err.println("Failed to vectorize keywords: Invalid JSON response from Ollama - " + e.getMessage());
-            return new float[1024];
+            System.err.println("Failed to vectorize keywords: Invalid JSON response from embedding service - " + e.getMessage());
+            return new float[1792];
         } catch (Exception e) {
             System.err.println("Failed to vectorize keywords: Unexpected error - " + e.getClass().getName() + ": " + e.getMessage());
             e.printStackTrace();
-            return new float[1024];
+            return new float[1792];
         }
     }
 }
