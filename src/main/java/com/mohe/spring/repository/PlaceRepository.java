@@ -249,4 +249,19 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     default List<Place> findTop5ByReadyFalseOrReadyIsNull() {
         return findTop5ByReadyFalseOrReadyIsNull(Pageable.ofSize(5));
     }
+
+    /**
+     * Find places for vector embedding batch processing
+     * Conditions: crawler_found = true, ready = false, mohe_description IS NOT NULL
+     */
+    @Query("""
+        SELECT p FROM Place p
+        JOIN p.descriptions d
+        WHERE p.crawlerFound = true
+        AND p.ready = false
+        AND d.moheDescription IS NOT NULL
+        AND d.moheDescription != ''
+        ORDER BY p.id ASC
+    """)
+    Page<Place> findPlacesForVectorEmbedding(Pageable pageable);
 }
