@@ -63,23 +63,18 @@ public class ImageProcessorService {
 
         for (int i = 0; i < imageUrls.size(); i++) {
             String imageUrl = imageUrls.get(i);
-            String fileName = generateFileName(placeId, placeName, i + 1);
+
+            // 확장자 추출
+            String extension = extractExtensionFromUrl(imageUrl);
+
+            // 파일명 생성 (확장자 포함 - ImageProcessor API 요구사항)
+            String fileName = generateFileName(placeId, placeName, i + 1) + "." + extension;
 
             try {
                 String savedFileName = saveImageToProcessor(imageUrl, fileName);
                 if (savedFileName != null) {
-                    // ImageProcessor가 반환한 파일명을 사용
-                    // 확장자가 없으면 원본 URL에서 추출하여 추가
-                    String finalFileName = savedFileName;
-                    if (!savedFileName.contains(".")) {
-                        String extension = extractExtensionFromUrl(imageUrl);
-                        if (extension != null && !extension.isEmpty()) {
-                            finalFileName = savedFileName + "." + extension;
-                            logger.debug("Added extension to fileName: {} -> {}", savedFileName, finalFileName);
-                        }
-                    }
-
-                    String savedPath = "/images/" + finalFileName;
+                    // ImageProcessor가 반환한 파일명을 그대로 사용
+                    String savedPath = "/images/" + savedFileName;
                     savedPaths.add(savedPath);
                     logger.debug("✅ Saved via ImageProcessor: {} from {}", savedPath, imageUrl);
                 } else {
@@ -100,7 +95,7 @@ public class ImageProcessorService {
      * ImageProcessor API를 호출하여 이미지 저장
      *
      * @param imageUrl 다운로드할 이미지 URL
-     * @param fileName 저장할 파일명 (확장자 제외)
+     * @param fileName 저장할 파일명 (확장자 포함 필수)
      * @return 저장된 파일명 (확장자 포함) 또는 null (실패 시)
      */
     private String saveImageToProcessor(String imageUrl, String fileName) {
@@ -169,11 +164,15 @@ public class ImageProcessorService {
 
     /**
      * 파일명 생성 (확장자 제외)
+     *
+     * @param placeId Place ID
+     * @param placeName Place 이름
+     * @param index 이미지 순번
+     * @return 파일명 (확장자 제외, 예: "123_카페_1")
      */
     private String generateFileName(Long placeId, String placeName, int index) {
         // 파일명에서 특수문자 제거
         String sanitizedName = placeName.replaceAll("[^a-zA-Z0-9가-힣]", "_");
-        // 확장자는 ImageProcessor가 자동으로 추가하므로 제외
         return placeId + "_" + sanitizedName + "_" + index;
     }
 
