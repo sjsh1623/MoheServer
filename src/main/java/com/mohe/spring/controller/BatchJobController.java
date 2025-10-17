@@ -25,11 +25,13 @@ public class BatchJobController {
     private final JobLauncher asyncJobLauncher;
     private final Job placeCollectionJob;
     private final Job updateCrawledDataJob;
+    private final Job vectorEmbeddingJob;
 
-    public BatchJobController(JobLauncher asyncJobLauncher, Job placeCollectionJob, Job updateCrawledDataJob) {
+    public BatchJobController(JobLauncher asyncJobLauncher, Job placeCollectionJob, Job updateCrawledDataJob, Job vectorEmbeddingJob) {
         this.asyncJobLauncher = asyncJobLauncher;
         this.placeCollectionJob = placeCollectionJob;
         this.updateCrawledDataJob = updateCrawledDataJob;
+        this.vectorEmbeddingJob = vectorEmbeddingJob;
     }
 
     @PostMapping("/place-collection")
@@ -94,7 +96,8 @@ public class BatchJobController {
     @Operation(
         summary = "크롤링 데이터 업데이트 배치 실행",
         description = "Crawling 서버와 연동하여 장소 데이터를 업데이트하고 DB에 저장합니다. " +
-                      "배치 작업은 백그라운드에서 비동기로 실행됩니다."
+                      "배치 작업은 백그라운드에서 비동기로 실행됩니다. " +
+                      "이 작업은 description만 생성하고 crawler_found=true, ready=false로 설정합니다."
     )
     public ResponseEntity<ApiResponse<Map<String, Object>>> runUpdateCrawledDataJob() {
         try {
@@ -126,6 +129,46 @@ public class BatchJobController {
 
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("BATCH_JOB_ERROR", error.get("message").toString(), "/api/batch/jobs/update-crawled-data"));
+        }
+    }
+
+    @PostMapping("/vector-embedding")
+    @Operation(
+        summary = "벡터 임베딩 배치 실행",
+        description = "mohe_description을 기반으로 키워드 생성 및 벡터화를 수행합니다. " +
+                      "배치 작업은 백그라운드에서 비동기로 실행됩니다. " +
+                      "조건: crawler_found=true, ready=false, mohe_description IS NOT NULL"
+    )
+    public ResponseEntity<ApiResponse<Map<String, Object>>> runVectorEmbeddingJob() {
+        try {
+            long startTime = System.currentTimeMillis();
+
+            logger.info("🧮 Triggering Vector Embedding Batch Job");
+
+            JobParameters jobParameters = new JobParametersBuilder()
+                    .addLong("startTime", startTime)
+                    .toJobParameters();
+
+            // 비동기 실행 - 즉시 반환
+            asyncJobLauncher.run(vectorEmbeddingJob, jobParameters);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("status", "STARTED");
+            result.put("message", "Vector Embedding Job has been triggered and is running in the background");
+            result.put("startTime", startTime);
+
+            logger.info("✅ Vector Embedding Job triggered");
+            return ResponseEntity.ok(ApiResponse.success(result));
+
+        } catch (Exception e) {
+            logger.error("❌ Failed to trigger Vector Embedding Batch Job", e);
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "FAILED");
+            error.put("message", "Failed to trigger batch job: " + e.getMessage());
+
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("BATCH_JOB_ERROR", error.get("message").toString(), "/api/batch/jobs/vector-embedding"));
         }
     }
 }
