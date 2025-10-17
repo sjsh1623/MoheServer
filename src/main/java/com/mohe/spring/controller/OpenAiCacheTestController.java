@@ -4,7 +4,7 @@ import com.mohe.spring.dto.crawling.CrawledDataDto;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.service.OpenAiDescriptionService;
-import com.mohe.spring.service.OllamaService;
+import com.mohe.spring.service.KeywordEmbeddingService;
 import com.mohe.spring.service.crawling.CrawlingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,18 +31,18 @@ public class OpenAiCacheTestController {
     private final PlaceRepository placeRepository;
     private final CrawlingService crawlingService;
     private final OpenAiDescriptionService openAiDescriptionService;
-    private final OllamaService ollamaService;
+    private final KeywordEmbeddingService keywordEmbeddingService;
 
     public OpenAiCacheTestController(
         PlaceRepository placeRepository,
         CrawlingService crawlingService,
         OpenAiDescriptionService openAiDescriptionService,
-        OllamaService ollamaService
+        KeywordEmbeddingService keywordEmbeddingService
     ) {
         this.placeRepository = placeRepository;
         this.crawlingService = crawlingService;
         this.openAiDescriptionService = openAiDescriptionService;
-        this.ollamaService = ollamaService;
+        this.keywordEmbeddingService = keywordEmbeddingService;
     }
 
     @GetMapping("/ping")
@@ -193,9 +193,9 @@ public class OpenAiCacheTestController {
             }
             log.info("=" .repeat(80));
 
-            // Step 3: Generate keywords using Ollama
-            log.info("🔑 Generating Ollama keywords for '{}'", place.getName());
-            String[] keywords = ollamaService.generateKeywords(
+            // Step 3: Generate keywords
+            log.info("🔑 Generating keywords for '{}'", place.getName());
+            String[] keywords = keywordEmbeddingService.generateKeywords(
                 textForProcessing,
                 categoryStr,
                 crawledData.isPetFriendly()
@@ -203,7 +203,7 @@ public class OpenAiCacheTestController {
             result.ollamaKeywords = Arrays.asList(keywords);
 
             log.info("=" .repeat(80));
-            log.info("OLLAMA KEYWORDS for '{}':", place.getName());
+            log.info("GENERATED KEYWORDS for '{}':", place.getName());
             log.info("  Keywords: {}", String.join(", ", keywords));
             log.info("=" .repeat(80));
 
