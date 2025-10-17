@@ -18,6 +18,10 @@ spring:
   flyway:
     enabled: false
 
+  batch:
+    job:
+      enabled: false
+
 jwt:
   secret: testSecretKey123456789012345678901234567890123456789012345678901234567890
   access-token-expiration: 3600000

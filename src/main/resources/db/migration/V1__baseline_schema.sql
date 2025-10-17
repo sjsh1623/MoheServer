@@ -536,7 +536,7 @@ CREATE TABLE public.place_descriptions (
     place_id bigint NOT NULL,
     original_description text,
     ai_summary text,
-    ollama_description text,
+    mohe_description text,
     search_query character varying(500),
     updated_at timestamp without time zone DEFAULT now()
 );
