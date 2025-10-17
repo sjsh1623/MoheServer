@@ -30,28 +30,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Docker Development
 ```bash
-# Start all services (PostgreSQL, Ollama, Spring app)
+# Start all services (PostgreSQL, Embedding Server, Spring app)
 docker compose up --build
 
 # Start only PostgreSQL for local development
 docker compose up postgres
 
-# Start PostgreSQL and Ollama (for AI features)
-docker compose up postgres ollama
+# Start PostgreSQL and Embedding service (for AI features)
+docker compose up postgres embedding
 
 # Stop all services
 docker compose down
 
 # View logs
 docker compose logs -f app
-docker compose logs -f ollama
+docker compose logs -f embedding
 ```
 
 ### Application URLs
 - **Health Check**: http://localhost:8080/health
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **OpenAPI Spec**: http://localhost:8080/v3/api-docs
-- **Ollama API**: http://localhost:11434 (when running via Docker)
+- **Embedding API**: http://localhost:8001 (when running via Docker)
 
 ## Architecture Overview
 
@@ -113,13 +113,15 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - Job execution tracking via Spring Batch metadata tables
 - Batch controller at `/api/batch/jobs/*` for manual job triggering
 
-**Ollama AI Integration**: Local AI model integration via OllamaService:
-- Generates Korean place descriptions using `kanana-instruct` model (configurable)
-- Creates keyword embeddings using `mxbai-embed-large` model
-- Generates 6 keywords per place for search/recommendation
+**Embedding Service Integration**: FastAPI-based embedding service:
+- Uses `kanana-nano-2.1b-embedding` model from Kakao Corp (https://huggingface.co/kakaocorp/kanana-nano-2.1b-embedding)
+- Korean-optimized text embeddings (1792 dimensions)
+- OpenAI-compatible API endpoints (`/v1/embeddings`)
+- Generates keyword embeddings for place recommendations
 - Vector embeddings stored in PostgreSQL with pgvector for similarity search
-- Timeout configuration: 10-minute response timeout for large model inference
-- Falls back to default values if Ollama is unavailable
+- Automatic model download during Docker build
+- Falls back to default values if service is unavailable
+- Service accessible at `http://embedding:8000` (Docker) or `http://localhost:8001` (host)
 
 **MBTI-Based Recommendations**: Core business logic includes MBTI personality type matching for place recommendations. The `places` table includes MBTI scoring fields, and the recommendation algorithm considers user preferences and personality type. Advanced recommendation engine includes configurable weights for Jaccard/Cosine similarity, time decay, diversity, and scheduled similarity matrix updates.
 
@@ -150,10 +152,9 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - Test profile: H2 in-memory database (automatic, no configuration needed)
 
 **Environment Profiles**:
-- `docker`: Containerized deployment with Ollama integration
-- `local`: Local development with external PostgreSQL and Ollama
+- `docker`: Containerized deployment with embedding service integration
+- `local`: Local development with external PostgreSQL and embedding service
 - `test`: Automated testing with H2 database (no external dependencies)
-- `ollama`: Profile for Ollama-specific configurations (used with docker profile)
 
 **Security Configuration**: Public endpoints (no authentication required):
 - `/api/auth/**` - Authentication endpoints
@@ -164,9 +165,9 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 **External Integrations**: The application requires/supports:
 - **Naver Place API** (required): Client ID/secret for place search (`NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`)
 - **Kakao Local API** (required): API key for place data (`KAKAO_API_KEY`)
+- **Embedding Service** (required): FastAPI service for text embeddings (`EMBEDDING_SERVICE_URL`)
 - **Google Places API** (optional): API key for enhanced place data (`GOOGLE_PLACES_API_KEY`)
-- **Ollama** (optional): Local AI model for descriptions/embeddings (`LLM_OLLAMA_BASE_URL`, `LLM_OLLAMA_MODEL`)
-- **OpenAI API** (optional): Alternative to Ollama (`OPENAI_API_KEY`)
+- **OpenAI API** (optional): Text generation (`OPENAI_API_KEY`)
 - **Gemini API** (optional): Image generation (`GEMINI_API_KEY`)
 - **Redis** (optional): Token storage (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`)
 - **Web Crawler** (optional): Python crawler service (`CRAWLER_SERVER_URL`)
@@ -176,7 +177,7 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - Database configuration (PostgreSQL connection details)
 - JWT secret (minimum 64 characters required)
 - API keys for external services
-- Ollama model configuration (default: `kanana-instruct`)
+- Embedding service configuration (default: `http://embedding:8000`)
 - Batch job settings (chunk size, concurrency, scheduling)
 - Recommendation algorithm weights (Jaccard, Cosine, MBTI, time decay)
 - Image storage configuration (local vs remote)
