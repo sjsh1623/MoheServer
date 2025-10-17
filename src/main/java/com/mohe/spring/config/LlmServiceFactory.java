@@ -3,7 +3,7 @@ package com.mohe.spring.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mohe.spring.service.LlmService;
-import com.mohe.spring.service.OllamaService;
+import com.mohe.spring.service.KeywordEmbeddingService;
 import com.mohe.spring.service.OpenAiService;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -23,6 +23,6 @@ public class LlmServiceFactory {
     @Bean(name = "llmService")
     @Profile("ollama")
     public LlmService ollamaLlmService(LlmProperties llmProperties, WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
-        return new OllamaService(llmProperties, webClientBuilder, objectMapper);
+        return new KeywordEmbeddingService(llmProperties, webClientBuilder, objectMapper);
     }
 }

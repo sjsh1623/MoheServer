@@ -11,7 +11,7 @@ import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.service.OpenAiDescriptionService;
 import com.mohe.spring.service.crawling.CrawlingService;
 import com.mohe.spring.service.image.ImageService;
-import com.mohe.spring.service.OllamaService;
+import com.mohe.spring.service.KeywordEmbeddingService;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -37,20 +37,20 @@ import java.util.Map;
 public class UpdateCrawledDataJobConfig {
 
     private final CrawlingService crawlingService;
-    private final OllamaService ollamaService;
+    private final KeywordEmbeddingService keywordEmbeddingService;
     private final OpenAiDescriptionService openAiDescriptionService;
     private final ImageService imageService;
     private final PlaceRepository placeRepository;
 
     public UpdateCrawledDataJobConfig(
         CrawlingService crawlingService,
-        OllamaService ollamaService,
+        KeywordEmbeddingService keywordEmbeddingService,
         OpenAiDescriptionService openAiDescriptionService,
         ImageService imageService,
         PlaceRepository placeRepository
     ) {
         this.crawlingService = crawlingService;
-        this.ollamaService = ollamaService;
+        this.keywordEmbeddingService = keywordEmbeddingService;
         this.openAiDescriptionService = openAiDescriptionService;
         this.imageService = imageService;
         this.placeRepository = placeRepository;
@@ -66,7 +66,7 @@ public class UpdateCrawledDataJobConfig {
     @Bean
     public Step updateCrawledDataStep(JobRepository jobRepository, PlatformTransactionManager transactionManager, ItemReader<Place> placeReader, ItemProcessor<Place, Place> placeProcessor, ItemWriter<Place> placeWriter) {
         return new StepBuilder("updateCrawledDataStep", jobRepository)
-                .<Place, Place>chunk(10, transactionManager)
+                .<Place, Place>chunk(5, transactionManager)
                 .reader(placeReader)
                 .processor(placeProcessor)
                 .writer(placeWriter)
@@ -101,7 +101,18 @@ public class UpdateCrawledDataJobConfig {
                 }
 
                 System.out.println("🔍 Starting crawl for '" + place.getName() + "' with query: '" + searchQuery + "'");
-                CrawledDataDto crawledData = crawlingService.crawlPlaceData(searchQuery, place.getName()).block().getData();
+                var response = crawlingService.crawlPlaceData(searchQuery, place.getName()).block();
+
+                if (response == null || response.getData() == null) {
+                    System.err.println("❌ Crawling failed for '" + place.getName() + "' - null response from crawler");
+                    place.setCrawlerFound(false);
+                    place.setReady(false);
+                    placeRepository.save(place);
+                    System.out.println("💾 Saved place '" + place.getName() + "' with crawler_found=false to database");
+                    return null;
+                }
+
+                CrawledDataDto crawledData = response.getData();
                 System.out.println("📥 Crawl response received for '" + place.getName() + "'");
 
             // Update Place entity with crawled data
@@ -169,10 +180,14 @@ public class UpdateCrawledDataJobConfig {
                     place.getPetFriendly() != null ? place.getPetFriendly() : false
                 );
 
-            String moheDescription = openAiDescriptionService.generateDescription(payload)
-                .map(OpenAiDescriptionService.DescriptionResult::description)
+            OpenAiDescriptionService.DescriptionResult descriptionResult = openAiDescriptionService.generateDescription(payload)
                 .orElse(null);
+
+            String moheDescription = descriptionResult != null ? descriptionResult.description() : null;
+            List<String> keywords = descriptionResult != null ? descriptionResult.keywords() : List.of();
+
             System.out.println("✅ OpenAI description generated for '" + place.getName() + "': " + moheDescription);
+            System.out.println("✅ OpenAI keywords extracted for '" + place.getName() + "': " + String.join(", ", keywords));
 
             // CRITICAL: ollama_description must NEVER be empty
             // If Ollama generation failed, use the original text as fallback
@@ -203,66 +218,46 @@ public class UpdateCrawledDataJobConfig {
                 System.err.println("🚨 CRITICAL: Using minimal fallback for '" + place.getName() + "'");
             }
 
-            description.setOllamaDescription(moheDescription);
+            description.setMoheDescription(moheDescription);
             place.getDescriptions().add(description);
 
             // 📝 Log Mohe AI description before saving to database
             System.out.println("📝 Mohe AI Summary for '" + place.getName() + "' (will be saved to DB):");
             System.out.println("   " + moheDescription);
 
-            // Generate and set keywords using Ollama (use the same text we used for description)
-            System.out.println("🔑 Generating keywords for '" + place.getName() + "'...");
-            String[] keywords = ollamaService.generateKeywords(
-                textForOllama,
-                categoryStr,
-                place.getPetFriendly() != null ? place.getPetFriendly() : false
-            );
-            System.out.println("✅ Keywords generated for '" + place.getName() + "': " + String.join(", ", keywords));
+            // Validate keywords from OpenAI response - check if empty or invalid
+            if (keywords.isEmpty() || keywords.size() != 9) {
+                System.err.println("⚠️ AI issue for '" + place.getName() + "' - Keyword extraction failed (expected 9, got " + keywords.size() + ")");
+                // Fallback: generate keywords using embedding service
+                System.out.println("🔑 Falling back to keyword embedding service for '" + place.getName() + "'...");
+                String[] fallbackKeywords = keywordEmbeddingService.generateKeywords(
+                    textForOllama,
+                    categoryStr,
+                    place.getPetFriendly() != null ? place.getPetFriendly() : false
+                );
+                keywords = Arrays.asList(fallbackKeywords);
+                System.out.println("✅ Fallback keywords generated for '" + place.getName() + "': " + String.join(", ", keywords));
 
-            // Validate keywords - check if all are default placeholders
-            boolean allKeywordsAreDefault = true;
-            for (int i = 0; i < keywords.length; i++) {
-                if (!keywords[i].equals("키워드" + (i + 1))) {
-                    allKeywordsAreDefault = false;
-                    break;
+                // Validate fallback keywords - check if all are default placeholders
+                boolean allKeywordsAreDefault = true;
+                for (int i = 0; i < fallbackKeywords.length; i++) {
+                    if (!fallbackKeywords[i].equals("키워드" + (i + 1))) {
+                        allKeywordsAreDefault = false;
+                        break;
+                    }
+                }
+
+                if (allKeywordsAreDefault) {
+                    System.err.println("⚠️ AI issue for '" + place.getName() + "' - Fallback keyword generation also failed (all default)");
+                    // Crawling succeeded but AI issue -> crawler_found = true, ready = false
+                    place.setCrawlerFound(true);
+                    place.setReady(false);
+                    placeRepository.save(place);
+                    return null;
                 }
             }
 
-            if (allKeywordsAreDefault) {
-                System.err.println("⚠️ AI issue for '" + place.getName() + "' - Ollama keyword generation failed (all default)");
-                // Crawling succeeded but AI issue -> crawler_found = true, ready = false
-                place.setCrawlerFound(true);
-                place.setReady(false);
-                placeRepository.save(place);
-                return null;
-            }
-
-            place.setKeyword(Arrays.asList(keywords));
-
-            // Vectorize keywords using Ollama embedding
-            System.out.println("🧮 Vectorizing keywords for '" + place.getName() + "'...");
-            float[] keywordVector = ollamaService.vectorizeKeywords(keywords);
-            System.out.println("✅ Vector generated for '" + place.getName() + "' (dimension: " + keywordVector.length + ")");
-
-            // Validate vector - check if it's the default empty vector
-            boolean isDefaultVector = true;
-            for (float v : keywordVector) {
-                if (v != 0.0f) {
-                    isDefaultVector = false;
-                    break;
-                }
-            }
-
-            if (isDefaultVector) {
-                System.err.println("⚠️ AI issue for '" + place.getName() + "' - Ollama vectorization failed (default empty vector)");
-                // Crawling succeeded but AI issue -> crawler_found = true, ready = false
-                place.setCrawlerFound(true);
-                place.setReady(false);
-                placeRepository.save(place);
-                return null;
-            }
-
-            place.setKeywordVector(Arrays.toString(keywordVector));
+            place.setKeyword(keywords);
 
             // Download and save images
             place.getImages().clear();
@@ -351,9 +346,9 @@ public class UpdateCrawledDataJobConfig {
                 System.out.println("✅ Saved " + place.getReviews().size() + " reviews for '" + place.getName() + "'");
             }
 
-                // Mark place as ready and crawler_found as true after successful processing
-                place.setReady(true);
+                // Mark place as crawler_found=true (description generated), but ready=false (vectorization not done yet)
                 place.setCrawlerFound(true);
+                place.setReady(false);
 
                 // ✅ Success logging
                 System.out.println("✅ Successfully crawled '" + place.getName() + "' - " +
@@ -361,7 +356,8 @@ public class UpdateCrawledDataJobConfig {
                     "Images: " + place.getImages().size() + ", " +
                     "Keywords: " + String.join(", ", place.getKeyword()) + ", " +
                     "Parking: " + (place.getParkingAvailable() != null ? place.getParkingAvailable() : "Unknown") + ", " +
-                    "Pet-friendly: " + (place.getPetFriendly() != null ? place.getPetFriendly() : "Unknown"));
+                    "Pet-friendly: " + (place.getPetFriendly() != null ? place.getPetFriendly() : "Unknown") + ", " +
+                    "crawler_found=true, ready=false (awaiting vectorization)");
 
                 return place;
             } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
@@ -390,10 +386,23 @@ public class UpdateCrawledDataJobConfig {
     @Bean
     public ItemWriter<Place> placeWriter() {
         return chunk -> {
-            // Spring Batch 5.x uses Chunk instead of List
-            placeRepository.saveAll(chunk.getItems());
+            System.out.println("📝 Starting to save batch of " + chunk.getItems().size() + " places...");
+            // Save places individually and flush after each to avoid Hibernate session conflicts
+            int savedCount = 0;
+            for (Place place : chunk.getItems()) {
+                try {
+                    placeRepository.saveAndFlush(place);
+                    savedCount++;
+                    System.out.println("💾 [" + savedCount + "/" + chunk.getItems().size() + "] Saved place '" + place.getName() +
+                        "' (ID: " + place.getId() + ", crawler_found=" + place.getCrawlerFound() +
+                        ", ready=" + place.getReady() + ") to database");
+                } catch (Exception e) {
+                    System.err.println("❌ Failed to save place '" + place.getName() + "': " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
             // Log batch write success
-            System.out.println("💾 Saved batch of " + chunk.getItems().size() + " places to database");
+            System.out.println("✅ Successfully saved batch: " + savedCount + "/" + chunk.getItems().size() + " places written to database");
         };
     }
 
