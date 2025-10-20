@@ -14,7 +14,7 @@ public class ResetPasswordRequest {
     @JsonProperty("new_password")
     @NotBlank(message = "새 비밀번호는 필수입니다")
     @Size(min = 8, max = 50, message = "비밀번호는 8자 이상 50자 이하여야 합니다")
-    @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]",
+    @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$",
              message = "비밀번호는 대문자, 소문자, 숫자, 특수문자를 모두 포함해야 합니다")
     private String newPassword;
     

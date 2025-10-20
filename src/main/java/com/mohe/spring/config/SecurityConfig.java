@@ -75,6 +75,7 @@ public class SecurityConfig {
                 // Public endpoints
                 .requestMatchers(
                     "/api/auth/**",
+                    "/api/terms/**",
                     "/api/batch/**",
                     "/api/batch/internal/**",
                     "/api/test/**",
