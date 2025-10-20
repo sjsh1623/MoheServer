@@ -1,6 +1,7 @@
 package com.mohe.spring.service;
 
 import com.mohe.spring.dto.*;
+import com.mohe.spring.entity.TermsAgreement;
 import com.mohe.spring.entity.User;
 import com.mohe.spring.repository.UserRepository;
 import com.mohe.spring.security.UserPrincipal;
@@ -8,6 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.Collections;
 
 @Service
@@ -99,6 +101,62 @@ public class UserService {
         return response;
     }
     
+    public UserDto.AgreementsResponse saveAgreements(UserDto.AgreementsRequest request) {
+        User currentUser = getCurrentUser();
+
+        // Clear existing agreements
+        currentUser.getTermsAgreements().clear();
+
+        // Save new agreements
+        if (Boolean.TRUE.equals(request.terms())) {
+            TermsAgreement termsAgreement = new TermsAgreement();
+            termsAgreement.setUser(currentUser);
+            termsAgreement.setTermsCode("service-terms");
+            termsAgreement.setAgreed(true);
+            termsAgreement.setAgreedAt(OffsetDateTime.now());
+            currentUser.getTermsAgreements().add(termsAgreement);
+        }
+
+        if (Boolean.TRUE.equals(request.privacy())) {
+            TermsAgreement privacyAgreement = new TermsAgreement();
+            privacyAgreement.setUser(currentUser);
+            privacyAgreement.setTermsCode("privacy-policy");
+            privacyAgreement.setAgreed(true);
+            privacyAgreement.setAgreedAt(OffsetDateTime.now());
+            currentUser.getTermsAgreements().add(privacyAgreement);
+        }
+
+        if (Boolean.TRUE.equals(request.location())) {
+            TermsAgreement locationAgreement = new TermsAgreement();
+            locationAgreement.setUser(currentUser);
+            locationAgreement.setTermsCode("location-terms");
+            locationAgreement.setAgreed(true);
+            locationAgreement.setAgreedAt(OffsetDateTime.now());
+            currentUser.getTermsAgreements().add(locationAgreement);
+        }
+
+        if (Boolean.TRUE.equals(request.age14())) {
+            TermsAgreement ageAgreement = new TermsAgreement();
+            ageAgreement.setUser(currentUser);
+            ageAgreement.setTermsCode("age-verification");
+            ageAgreement.setAgreed(true);
+            ageAgreement.setAgreedAt(OffsetDateTime.now());
+            currentUser.getTermsAgreements().add(ageAgreement);
+        }
+
+        userRepository.save(currentUser);
+
+        return new UserDto.AgreementsResponse("약관 동의 완료");
+    }
+
+    public UserDto.OnboardingCompleteResponse completeOnboarding(UserDto.OnboardingCompleteRequest request) {
+        User currentUser = getCurrentUser();
+        currentUser.setIsOnboardingCompleted(true);
+        userRepository.save(currentUser);
+
+        return new UserDto.OnboardingCompleteResponse("온보딩 완료");
+    }
+
     private User getCurrentUser() {
         UserPrincipal userPrincipal = (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return userRepository.findById(userPrincipal.getId())

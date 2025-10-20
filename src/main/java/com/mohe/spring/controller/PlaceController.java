@@ -451,4 +451,38 @@ public class PlaceController {
             );
         }
     }
+
+    @GetMapping("/new")
+    @Operation(
+        summary = "새로운 장소 추천",
+        description = "추천 리스트를 갱신하여 새로운 장소들을 제공합니다. 기본 추천 API와 동일하게 동작합니다."
+    )
+    @ApiResponses(
+        value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "새로운 추천 장소 조회 성공",
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = PlaceRecommendationsResponse.class)
+                )
+            )
+        }
+    )
+    public ResponseEntity<ApiResponse<PlaceRecommendationsResponse>> getNewRecommendations(
+            HttpServletRequest httpRequest) {
+        try {
+            // Same as /recommendations - provides fresh recommendations
+            PlaceRecommendationsResponse response = placeService.getRecommendations();
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.INTERNAL_SERVER_ERROR,
+                    e.getMessage() != null ? e.getMessage() : "새로운 추천 장소 조회에 실패했습니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        }
+    }
 }

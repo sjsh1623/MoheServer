@@ -23,6 +23,8 @@ Swagger UI(`http://localhost:8080/swagger-ui.html`)와 OpenAPI 스펙(`http://lo
 | PUT | `/api/user/preferences` | Bearer (ROLE_USER) | MBTI, 연령대, 공간/이동 선호도를 저장합니다. |
 | GET | `/api/user/profile` | Bearer (ROLE_USER) | 로그인한 사용자의 프로필을 조회합니다. |
 | PUT | `/api/user/profile` | Bearer (ROLE_USER) | 닉네임, 프로필 이미지를 수정합니다. |
+| POST | `/api/user/agreements` | Bearer (ROLE_USER) | 이용약관, 개인정보, 위치정보, 연령 확인 동의를 저장합니다. |
+| POST | `/api/user/onboarding/complete` | Bearer (ROLE_USER) | 모든 온보딩 과정을 완료하고 상태를 업데이트합니다. |
 | GET | `/api/user/recent-places` | Bearer (ROLE_USER) | 최근에 조회한 장소 목록을 반환합니다. |
 | POST | `/api/user/recent-places` | Bearer (ROLE_USER) | 장소 상세 조회 시 최근 이력으로 기록합니다. |
 | GET | `/api/user/my-places` | Bearer (ROLE_USER) | 사용자가 직접 등록한 장소 목록을 조회합니다. |
@@ -40,6 +42,7 @@ Swagger UI(`http://localhost:8080/swagger-ui.html`)와 OpenAPI 스펙(`http://lo
 | 메서드 | 경로 | 권한 | 설명 |
 | --- | --- | --- | --- |
 | GET | `/api/places/recommendations` | 공개 | 게스트/회원 구분 없이 추천 장소를 제공합니다. |
+| GET | `/api/places/new` | 공개 | 새로운 추천 장소 리스트를 갱신하여 반환합니다(추천 API와 동일). |
 | GET | `/api/places` | 공개 | 페이지네이션, 정렬, 카테고리 필터가 있는 장소 목록을 조회합니다. |
 | GET | `/api/places/{id}` | 공개 | 장소 상세 정보와 조회 이력을 반환합니다. |
 | GET | `/api/places/search` | 공개 | 검색어와 날씨/시간 컨텍스트 기반으로 장소를 검색합니다. |
@@ -78,6 +81,12 @@ Swagger UI(`http://localhost:8080/swagger-ui.html`)와 OpenAPI 스펙(`http://lo
 | POST | `/api/korean-regions/clear-cache` | 공개 | 지역 데이터 캐시를 비웁니다(인증 없음 주의). |
 | GET | `/api/korean-regions/cache-status` | 공개 | 캐시 현황과 데이터 출처를 확인합니다. |
 
+## 앱 정보 & 고객 지원
+| 메서드 | 경로 | 권한 | 설명 |
+| --- | --- | --- | --- |
+| GET | `/api/app/version` | 공개 | 현재 앱 버전과 출시일을 조회합니다. |
+| POST | `/api/support/contact` | Bearer (ROLE_USER) | 사용자 문의 또는 피드백을 접수합니다. |
+
 ## 벡터 & 유사도 관리
 | 메서드 | 경로 | 권한 | 설명 |
 | --- | --- | --- | --- |
@@ -107,6 +116,10 @@ Swagger UI(`http://localhost:8080/swagger-ui.html`)와 OpenAPI 스펙(`http://lo
 | POST | `/api/batch/jobs/place-collection` | 공개 | 장소 수집 배치 작업을 비동기로 시작합니다. |
 | POST | `/api/batch/jobs/place-collection/{region}` | 공개 | 특정 지역에 한정해 장소 수집 배치를 실행합니다. |
 | POST | `/api/batch/jobs/update-crawled-data` | 공개 | 크롤링된 장소 데이터를 최신으로 갱신합니다. |
+| POST | `/api/batch/jobs/vector-embedding` | 공개 | 키워드 벡터 임베딩 배치 작업을 실행합니다. |
+| GET | `/api/batch/jobs/running` | 공개 | 현재 실행 중인 모든 배치 작업 정보를 조회합니다. |
+| POST | `/api/batch/jobs/stop/{executionId}` | 공개 | 특정 실행 ID의 배치 작업을 중지합니다. |
+| POST | `/api/batch/jobs/stop-all` | 공개 | 실행 중인 모든 배치 작업을 일괄 중지합니다. |
 
 ---
 

@@ -203,4 +203,98 @@ public class UserController {
             );
         }
     }
+
+    @PostMapping("/agreements")
+    @Operation(
+        summary = "약관 동의 저장",
+        description = "사용자의 이용약관, 개인정보, 위치정보, 연령 확인 등 약관 동의 정보를 저장합니다."
+    )
+    @ApiResponses(
+        value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "약관 동의 저장 성공",
+                content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                        value = """
+                        {
+                          "success": true,
+                          "message": "약관 동의 완료"
+                        }
+                        """
+                    )
+                )
+            )
+        }
+    )
+    public ResponseEntity<ApiResponse<UserDto.AgreementsResponse>> saveAgreements(
+            @Parameter(description = "약관 동의 요청", required = true)
+            @Valid @RequestBody UserDto.AgreementsRequest request,
+            HttpServletRequest httpRequest) {
+        try {
+            UserDto.AgreementsResponse response = userService.saveAgreements(request);
+            return ResponseEntity.ok(
+                ApiResponse.success(
+                    response,
+                    response.message()
+                )
+            );
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.VALIDATION_ERROR,
+                    e.getMessage() != null ? e.getMessage() : "약관 동의 저장에 실패했습니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        }
+    }
+
+    @PostMapping("/onboarding/complete")
+    @Operation(
+        summary = "온보딩 완료 처리",
+        description = "모든 온보딩 데이터 입력 후 온보딩 완료 상태로 변경합니다."
+    )
+    @ApiResponses(
+        value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "온보딩 완료 처리 성공",
+                content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                        value = """
+                        {
+                          "success": true,
+                          "message": "온보딩 완료"
+                        }
+                        """
+                    )
+                )
+            )
+        }
+    )
+    public ResponseEntity<ApiResponse<UserDto.OnboardingCompleteResponse>> completeOnboarding(
+            @Parameter(description = "온보딩 완료 요청", required = true)
+            @Valid @RequestBody UserDto.OnboardingCompleteRequest request,
+            HttpServletRequest httpRequest) {
+        try {
+            UserDto.OnboardingCompleteResponse response = userService.completeOnboarding(request);
+            return ResponseEntity.ok(
+                ApiResponse.success(
+                    response,
+                    response.message()
+                )
+            );
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.VALIDATION_ERROR,
+                    e.getMessage() != null ? e.getMessage() : "온보딩 완료 처리에 실패했습니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        }
+    }
 }
