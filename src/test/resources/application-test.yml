@@ -27,15 +27,35 @@ jwt:
   access-token-expiration: 3600000
   refresh-token-expiration: 2592000000
 
-mohe:
-  image:
-    storage-path: build/test-images
+api:
+  kakao:
+    key: test-kakao-api-key
+  naver:
+    client-id: test-naver-client-id
+    client-secret: test-naver-client-secret
+  google:
+    places-api-key: test-google-api-key
+    custom-search:
+      api-key: test-google-custom-search-key
+      engine-id: test-engine-id
+  gemini:
+    api-key: test-gemini-api-key
+    base-url: https://generativelanguage.googleapis.com/v1beta
+  openweathermap:
+    api-key: test-openweather-key
+  government:
+    api-key: test-govt-key
+    vworld-api-key: test-vworld-key
+    sgis-api-key: test-sgis-key
 
 kakao:
   api:
     key: test-kakao-api-key
+  api-key: test-kakao-api-key
 
 naver:
+  client-id: test-naver-client-id
+  client-secret: test-naver-client-secret
   place:
     clientId: test-naver-client-id
     clientSecret: test-naver-client-secret
@@ -64,6 +84,49 @@ app:
 google:
   places:
     apiKey: test-google-api-key
+
+crawler:
+  server-url: http://localhost:5000
+  api-path: /api/crawl
+  enhance-with-google: false
+
+batch:
+  chunk-size: 10
+  skip-limit: 10000
+  api:
+    page-size: 100
+    max-pages: 50
+    timeout: 30
+  auto-start: false
+  scheduling:
+    enabled: false
+    cron: "0 */1 * * * ?"
+  continuous:
+    enabled: false
+  max-concurrency: 4
+
+mohe:
+  image:
+    storage-path: build/test-images
+    use-remote: false
+    server-url: http://localhost:8080
+  image-processor:
+    url: http://localhost:5001
+  recommendation:
+    top-k: 100
+    min-places-threshold: 50
+    weights:
+      jaccard: 0.7
+      cosine: 0.3
+      mbti-boost: 0.3
+      popularity-penalty: 0.1
+      same-mbti: 2.0
+      diff-mbti: 1.0
+    time-decay:
+      tau-days: 30
+    features:
+      mbti-specific-enabled: false
+      diversity-enabled: true
 
 logging:
   level:
