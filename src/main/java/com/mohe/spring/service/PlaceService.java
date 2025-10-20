@@ -376,6 +376,14 @@ public class PlaceService {
         dto.setIsBookmarked(false); // TODO: Check if bookmarked by current user
         dto.setIsDemo(false);
 
+        // Set mohe_description only
+        String moheDescription = place.getDescriptions().stream()
+            .filter(desc -> desc.getMoheDescription() != null && !desc.getMoheDescription().isEmpty())
+            .map(desc -> desc.getMoheDescription())
+            .findFirst()
+            .orElse(null);
+        dto.setDescription(moheDescription);
+
         return dto;
     }
     

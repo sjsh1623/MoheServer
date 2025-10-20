@@ -150,7 +150,7 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 ### 문서 & 빠른 링크
 - [API 가이드 (한글)](API_GUIDE.md) - 컨트롤러별 엔드포인트와 권한 요약
 - [BATCH_GUIDE.md](BATCH_GUIDE.md) - 배치 작업 설정 및 운영 팁
-- [REGION_GUIDE.md](REGION_GUIDE.md) - 행정구역 데이터 수집과 캐시 정책
+- [CLAUDE.md](CLAUDE.md) - Claude Code 사용 가이드 및 troubleshooting
 
 ### 대표 API 그룹
 - **인증/온보딩**: `POST /api/auth/login`, `POST /api/auth/signup`, `POST /api/auth/verify-email`
@@ -236,8 +236,18 @@ curl -X POST http://localhost:8080/api/batch/jobs/stop-all
 - [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - 상세 프로젝트 구조
 - [API_GUIDE.md](API_GUIDE.md) - REST API 개요 및 권한 체계
 - [BATCH_GUIDE.md](BATCH_GUIDE.md) - Spring Batch 가이드
-- [REGION_GUIDE.md](REGION_GUIDE.md) - 한국 행정구역 데이터 처리 가이드
-- [CLAUDE.md](CLAUDE.md) - Claude Code 사용 가이드
+- [CLAUDE.md](CLAUDE.md) - Claude Code 사용 가이드 및 troubleshooting
+
+## 📝 주요 변경사항
+
+### Place Description API
+- 장소 상세 정보 API에서 **mohe_description만 반환**하도록 최적화
+- `PlaceService.convertToSimplePlaceDto()` 메서드가 `mohe_description` 필드만 추출
+- 불필요한 description 필드 제거로 API 응답 크기 감소
+
+### 날씨 정보
+- WeatherController 제거 (날씨 정보는 프론트엔드에서 직접 처리)
+- 추천 API에서 날씨 기반 필터링은 프론트엔드에서 위치 기반으로 구현 가능
 
 ## 👤 작성자
 
