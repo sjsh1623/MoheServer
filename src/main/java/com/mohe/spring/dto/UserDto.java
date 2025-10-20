@@ -87,4 +87,25 @@ public class UserDto {
         String nickname,
         String profileImage
     ) {}
+
+    // Agreements (약관 동의)
+    public record AgreementsRequest(
+        Boolean terms,     // 이용약관 동의
+        Boolean privacy,   // 개인정보 수집 및 이용 동의
+        Boolean location,  // 위치 정보 이용약관 동의
+        Boolean age14      // 만 14세 이상 확인
+    ) {}
+
+    public record AgreementsResponse(
+        String message
+    ) {}
+
+    // Onboarding Complete (온보딩 완료)
+    public record OnboardingCompleteRequest(
+        Long userId
+    ) {}
+
+    public record OnboardingCompleteResponse(
+        String message
+    ) {}
 }
