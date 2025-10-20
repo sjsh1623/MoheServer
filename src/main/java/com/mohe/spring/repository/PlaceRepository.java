@@ -226,18 +226,26 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     Page<Place> findByReady(boolean ready, Pageable pageable);
 
     /**
-     * Find places where both crawler_found and ready are null or false
-     * Used by batch job to process places that haven't been crawled yet
-     * @EntityGraph to eagerly load all related collections to avoid LazyInitializationException
+     * Find place IDs where both crawler_found and ready are null or false
+     * Returns only IDs to avoid pagination issues with collection fetching
+     * Step 1: Get IDs with pagination (efficient)
      */
-    @EntityGraph(attributePaths = {"descriptions", "images", "businessHours", "sns", "reviews"})
     @Query("""
-        SELECT DISTINCT p FROM Place p
+        SELECT p.id FROM Place p
         WHERE (p.crawlerFound IS NULL OR p.crawlerFound = false)
         AND (p.ready IS NULL OR p.ready = false)
         ORDER BY p.id ASC
     """)
-    Page<Place> findPlacesForBatchProcessing(Pageable pageable);
+    Page<Long> findPlaceIdsForBatchProcessing(Pageable pageable);
+
+    /**
+     * Find a single Place by ID with all collections eagerly loaded
+     * Step 2: Load full entity with collections (no pagination issue)
+     * Note: Split into multiple queries to avoid MultipleBagFetchException
+     */
+    @EntityGraph(attributePaths = {"descriptions"})
+    @Query("SELECT p FROM Place p WHERE p.id = :id")
+    Optional<Place> findByIdWithCollections(@Param("id") Long id);
 
     /**
      * Find top 5 places that are not ready for testing
