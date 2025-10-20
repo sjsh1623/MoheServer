@@ -5,15 +5,16 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.batch.core.Job;
-import org.springframework.batch.core.JobParameters;
-import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.*;
+import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.launch.JobOperator;
+import org.springframework.batch.core.launch.NoSuchJobExecutionException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/batch/jobs")
@@ -23,12 +24,22 @@ public class BatchJobController {
     private static final Logger logger = LoggerFactory.getLogger(BatchJobController.class);
 
     private final JobLauncher asyncJobLauncher;
+    private final JobOperator jobOperator;
+    private final JobExplorer jobExplorer;
     private final Job placeCollectionJob;
     private final Job updateCrawledDataJob;
     private final Job vectorEmbeddingJob;
 
-    public BatchJobController(JobLauncher asyncJobLauncher, Job placeCollectionJob, Job updateCrawledDataJob, Job vectorEmbeddingJob) {
+    public BatchJobController(
+            JobLauncher asyncJobLauncher,
+            JobOperator jobOperator,
+            JobExplorer jobExplorer,
+            Job placeCollectionJob,
+            Job updateCrawledDataJob,
+            Job vectorEmbeddingJob) {
         this.asyncJobLauncher = asyncJobLauncher;
+        this.jobOperator = jobOperator;
+        this.jobExplorer = jobExplorer;
         this.placeCollectionJob = placeCollectionJob;
         this.updateCrawledDataJob = updateCrawledDataJob;
         this.vectorEmbeddingJob = vectorEmbeddingJob;
@@ -169,6 +180,146 @@ public class BatchJobController {
 
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("BATCH_JOB_ERROR", error.get("message").toString(), "/api/batch/jobs/vector-embedding"));
+        }
+    }
+
+    @GetMapping("/running")
+    @Operation(
+        summary = "실행 중인 배치 작업 조회",
+        description = "현재 실행 중인 모든 배치 작업의 정보를 반환합니다"
+    )
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getRunningJobs() {
+        try {
+            Set<JobExecution> runningExecutions = jobExplorer.findRunningJobExecutions(null);
+
+            List<Map<String, Object>> runningJobs = runningExecutions.stream()
+                .map(execution -> {
+                    Map<String, Object> jobInfo = new HashMap<>();
+                    jobInfo.put("jobName", execution.getJobInstance().getJobName());
+                    jobInfo.put("executionId", execution.getId());
+                    jobInfo.put("status", execution.getStatus().name());
+                    jobInfo.put("startTime", execution.getStartTime());
+                    jobInfo.put("createTime", execution.getCreateTime());
+
+                    // Add step information
+                    Collection<StepExecution> stepExecutions = execution.getStepExecutions();
+                    if (!stepExecutions.isEmpty()) {
+                        List<Map<String, Object>> steps = stepExecutions.stream()
+                            .map(step -> {
+                                Map<String, Object> stepInfo = new HashMap<>();
+                                stepInfo.put("stepName", step.getStepName());
+                                stepInfo.put("status", step.getStatus().name());
+                                stepInfo.put("readCount", step.getReadCount());
+                                stepInfo.put("writeCount", step.getWriteCount());
+                                return stepInfo;
+                            })
+                            .collect(Collectors.toList());
+                        jobInfo.put("steps", steps);
+                    }
+
+                    return jobInfo;
+                })
+                .collect(Collectors.toList());
+
+            logger.info("📊 Found {} running batch jobs", runningJobs.size());
+            return ResponseEntity.ok(ApiResponse.success(runningJobs));
+
+        } catch (Exception e) {
+            logger.error("❌ Failed to get running batch jobs", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("BATCH_JOB_ERROR", "Failed to get running jobs: " + e.getMessage(), "/api/batch/jobs/running"));
+        }
+    }
+
+    @PostMapping("/stop/{executionId}")
+    @Operation(
+        summary = "배치 작업 중지",
+        description = "실행 중인 배치 작업을 중지합니다. executionId는 /running 엔드포인트에서 조회할 수 있습니다"
+    )
+    public ResponseEntity<ApiResponse<Map<String, Object>>> stopJob(@PathVariable Long executionId) {
+        try {
+            logger.info("🛑 Attempting to stop batch job with executionId: {}", executionId);
+
+            // Stop the job
+            boolean stopped = jobOperator.stop(executionId);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("executionId", executionId);
+            result.put("stopped", stopped);
+
+            if (stopped) {
+                result.put("status", "STOPPING");
+                result.put("message", "Batch job stop request sent successfully. The job will stop after completing the current chunk.");
+                logger.info("✅ Successfully sent stop request for executionId: {}", executionId);
+            } else {
+                result.put("status", "FAILED");
+                result.put("message", "Failed to stop the batch job. It may have already completed or stopped.");
+                logger.warn("⚠️ Failed to stop job with executionId: {}", executionId);
+            }
+
+            return ResponseEntity.ok(ApiResponse.success(result));
+
+        } catch (NoSuchJobExecutionException e) {
+            logger.error("❌ Job execution not found: {}", executionId);
+            Map<String, Object> error = new HashMap<>();
+            error.put("executionId", executionId);
+            error.put("message", "Job execution not found");
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("JOB_NOT_FOUND", "Job execution not found: " + executionId, "/api/batch/jobs/stop/" + executionId));
+        } catch (Exception e) {
+            logger.error("❌ Failed to stop batch job: {}", executionId, e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("BATCH_JOB_ERROR", "Failed to stop batch job: " + e.getMessage(), "/api/batch/jobs/stop/" + executionId));
+        }
+    }
+
+    @PostMapping("/stop-all")
+    @Operation(
+        summary = "모든 실행 중인 배치 작업 중지",
+        description = "현재 실행 중인 모든 배치 작업을 중지합니다"
+    )
+    public ResponseEntity<ApiResponse<Map<String, Object>>> stopAllRunningJobs() {
+        try {
+            logger.info("🛑 Attempting to stop all running batch jobs");
+
+            Set<JobExecution> runningExecutions = jobExplorer.findRunningJobExecutions(null);
+            int totalJobs = runningExecutions.size();
+            int stoppedCount = 0;
+            List<Long> stoppedExecutionIds = new ArrayList<>();
+            List<Long> failedExecutionIds = new ArrayList<>();
+
+            for (JobExecution execution : runningExecutions) {
+                try {
+                    boolean stopped = jobOperator.stop(execution.getId());
+                    if (stopped) {
+                        stoppedCount++;
+                        stoppedExecutionIds.add(execution.getId());
+                        logger.info("✅ Stopped job: {} (executionId: {})",
+                            execution.getJobInstance().getJobName(), execution.getId());
+                    } else {
+                        failedExecutionIds.add(execution.getId());
+                        logger.warn("⚠️ Failed to stop job executionId: {}", execution.getId());
+                    }
+                } catch (Exception e) {
+                    failedExecutionIds.add(execution.getId());
+                    logger.error("❌ Error stopping job executionId: {}", execution.getId(), e);
+                }
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("totalJobs", totalJobs);
+            result.put("stoppedCount", stoppedCount);
+            result.put("stoppedExecutionIds", stoppedExecutionIds);
+            result.put("failedExecutionIds", failedExecutionIds);
+            result.put("message", String.format("Stop request sent to %d out of %d running jobs", stoppedCount, totalJobs));
+
+            logger.info("✅ Stop request sent to {}/{} running jobs", stoppedCount, totalJobs);
+            return ResponseEntity.ok(ApiResponse.success(result));
+
+        } catch (Exception e) {
+            logger.error("❌ Failed to stop all batch jobs", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("BATCH_JOB_ERROR", "Failed to stop all batch jobs: " + e.getMessage(), "/api/batch/jobs/stop-all"));
         }
     }
 }
