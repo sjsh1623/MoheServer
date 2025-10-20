@@ -186,3 +186,91 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - `crawler_found`: Whether the web crawler successfully found the place
 - `ready`: Whether the place is fully processed and ready for API consumption
 - Failed places can be reprocessed by re-running the batch job
+
+**Batch Job Control**: Monitor and control running batch jobs:
+- GET `/api/batch/jobs/running` - List all running jobs with executionId, status, and step details
+- POST `/api/batch/jobs/stop/{executionId}` - Stop specific job gracefully after current chunk
+- POST `/api/batch/jobs/stop-all` - Stop all running jobs
+
+## Common Issues and Solutions
+
+### Batch Processing with Hibernate
+
+**Problem**: `LazyInitializationException` when accessing collections in batch jobs
+- **Cause**: Collections are accessed outside of Hibernate session
+- **Solution**: Use custom ItemReader with two-step query approach:
+  1. Load Place IDs page-by-page with pagination
+  2. Fetch full entities individually with `@EntityGraph` for critical collections
+  3. Force-load remaining collections with `.size()` calls
+
+**Problem**: `MultipleBagFetchException` - "cannot simultaneously fetch multiple bags"
+- **Cause**: Cannot use multiple `LEFT JOIN FETCH` or `@EntityGraph` for multiple List collections simultaneously
+- **Solution**: Only use `@EntityGraph` for one critical collection (e.g., `descriptions`), then force-load others individually:
+```java
+Place place = placeRepository.findByIdWithCollections(id).orElse(null);
+// Force-load collections individually
+place.getImages().size();
+place.getBusinessHours().size();
+place.getSns().size();
+place.getReviews().size();
+```
+
+**Problem**: `HHH90003004` - "firstResult/maxResults specified with collection fetch; applying in memory"
+- **Cause**: Using `LEFT JOIN FETCH` or `@EntityGraph` with pagination causes Hibernate to load all data into memory
+- **Solution**: Implement two-step query pattern:
+  1. Query IDs only with pagination: `SELECT p.id FROM Place p WHERE ... ORDER BY p.id`
+  2. Fetch entities one by one: `findByIdWithCollections(id)`
+
+**Problem**: `NonSkippableReadException` - Method invocation failure in RepositoryItemReader
+- **Cause**: `setArguments(List.of())` conflicts with method requiring Pageable parameter
+- **Solution**: Remove `setArguments()` call or use custom ItemReader
+
+**Example Implementation** (UpdateCrawledDataReader):
+```java
+// Step 1: Load IDs page-by-page
+private void loadNextPageIds() {
+    Pageable pageable = PageRequest.of(currentPage, pageSize, Sort.by("id").ascending());
+    Page<Long> idsPage = placeRepository.findPlaceIdsForBatchProcessing(pageable);
+    currentPageIds = new ArrayList<>(idsPage.getContent());
+    hasMorePages = idsPage.hasNext();
+    currentPage++;
+}
+
+// Step 2: Fetch entity with collections
+public Place read() throws Exception {
+    Long placeId = currentPageIds.get(currentIdIndex);
+    Place place = placeRepository.findByIdWithCollections(placeId).orElse(null);
+
+    if (place != null) {
+        // Force-load collections to avoid LazyInitializationException
+        place.getImages().size();
+        place.getBusinessHours().size();
+        place.getSns().size();
+        place.getReviews().size();
+    }
+    return place;
+}
+```
+
+**Repository Methods**:
+```java
+// Method 1: Return IDs only (efficient pagination)
+@Query("""
+    SELECT p.id FROM Place p
+    WHERE (p.crawlerFound IS NULL OR p.crawlerFound = false)
+    AND (p.ready IS NULL OR p.ready = false)
+    ORDER BY p.id ASC
+""")
+Page<Long> findPlaceIdsForBatchProcessing(Pageable pageable);
+
+// Method 2: Load single entity with descriptions
+@EntityGraph(attributePaths = {"descriptions"})
+@Query("SELECT p FROM Place p WHERE p.id = :id")
+Optional<Place> findByIdWithCollections(@Param("id") Long id);
+```
+
+**Key Benefits**:
+- **Memory Efficient**: Only loads 10 IDs at a time (configurable page size)
+- **No Pagination Issues**: Avoids Hibernate's in-memory pagination warning
+- **No MultipleBagFetchException**: Fetches collections separately
+- **No LazyInitializationException**: All collections force-loaded in session
