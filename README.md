@@ -168,7 +168,25 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 # API를 통한 배치 실행
 curl -X POST http://localhost:8080/api/batch/jobs/place-collection
 curl -X POST http://localhost:8080/api/batch/jobs/update-crawled-data
+curl -X POST http://localhost:8080/api/batch/jobs/vector-embedding
+
+# 실행 중인 배치 작업 조회
+curl http://localhost:8080/api/batch/jobs/running
+
+# 특정 배치 작업 중지 (executionId는 /running에서 조회)
+curl -X POST http://localhost:8080/api/batch/jobs/stop/123
+
+# 모든 실행 중인 배치 작업 중지
+curl -X POST http://localhost:8080/api/batch/jobs/stop-all
 ```
+
+### 배치 작업 제어
+
+| 엔드포인트 | 메서드 | 설명 |
+|-----------|--------|------|
+| `/api/batch/jobs/running` | GET | 실행 중인 배치 작업 목록 조회 (executionId, 상태, Step 진행률 포함) |
+| `/api/batch/jobs/stop/{executionId}` | POST | 특정 배치 작업 중지 (현재 청크 완료 후 안전하게 종료) |
+| `/api/batch/jobs/stop-all` | POST | 모든 실행 중인 배치 작업 중지 |
 
 ### 배치 작업 상태 플래그
 
@@ -178,12 +196,21 @@ curl -X POST http://localhost:8080/api/batch/jobs/update-crawled-data
 |------|----------------|---------|------|
 | **크롤링 실패** | `false` | `false` | 크롤러가 네이버 지도에서 장소를 찾지 못함 (404, 타임아웃 등) |
 | **정보 부족** | `true` | `false` | 크롤링은 성공했지만 설명 데이터가 없음 |
-| **AI 처리 실패** | `true` | `false` | 크롤링은 성공했지만 Ollama 키워드/벡터 생성 실패 |
+| **AI 처리 실패** | `true` | `false` | 크롤링은 성공했지만 AI 키워드/벡터 생성 실패 |
 | **처리 완료** | `true` | `true` | 모든 처리 성공, API에서 사용 가능 |
 
 **재시도 정책:**
 - `crawler_found = false` → 크롤러 개선 후 재시도 권장
 - `crawler_found = true, ready = false` → AI 모델 개선 후 재시도 권장
+
+### 배치 처리 최적화
+
+배치 작업은 메모리 효율성과 안정성을 위해 다음과 같이 최적화되었습니다:
+
+- **Two-Step Query**: ID만 먼저 로드 후 엔티티 조회 (Hibernate pagination 이슈 해결)
+- **Page-by-Page Loading**: 한 번에 10개씩만 메모리에 로드 (메모리 효율)
+- **Collection Lazy Loading**: 여러 컬렉션을 개별 쿼리로 로드하여 MultipleBagFetchException 방지
+- **Graceful Shutdown**: 현재 청크 완료 후 안전하게 종료
 
 자세한 내용은 [BATCH_GUIDE.md](BATCH_GUIDE.md) 참고
 
