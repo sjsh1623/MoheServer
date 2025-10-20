@@ -103,36 +103,48 @@ public class DistributedPlaceReader implements ItemReader<Place> {
             // 만료된 락 정리 (매 청크마다 체크)
             lockService.markExpiredLocksAsFailed(jobName);
 
-            // 다음 페이지의 Place 조회
-            Page<Place> page = placeRepository.findPlacesForBatchProcessing(
+            // 다음 페이지의 Place ID 조회
+            Page<Long> idsPage = placeRepository.findPlaceIdsForBatchProcessing(
                 PageRequest.of(currentPage, chunkSize, Sort.by("id").ascending())
             );
 
-            if (page.isEmpty()) {
+            if (idsPage.isEmpty()) {
                 logger.info("✅ No more places to process");
                 return null;
             }
 
-            List<Place> places = page.getContent();
-            Long firstId = places.get(0).getId();
-            Long lastId = places.get(places.size() - 1).getId();
+            List<Long> placeIds = idsPage.getContent();
+            Long firstId = placeIds.get(0);
+            Long lastId = placeIds.get(placeIds.size() - 1);
             String chunkId = String.format("place_%d-%d", firstId, lastId);
 
-            logger.info("🔍 Attempting to acquire lock for chunk: {} (page {}, {} places)",
-                chunkId, currentPage, places.size());
+            logger.info("🔍 Attempting to acquire lock for chunk: {} (page {}, {} place IDs)",
+                chunkId, currentPage, placeIds.size());
 
             // 락 획득 시도
             boolean lockAcquired = lockService.tryAcquireLock(jobName, chunkId);
 
             if (lockAcquired) {
-                // 락 획득 성공 - 이 청크 처리
+                // 락 획득 성공 - Place 엔티티 로드 (컬렉션 포함)
+                List<Place> places = new ArrayList<>();
+                for (Long id : placeIds) {
+                    placeRepository.findByIdWithCollections(id).ifPresent(place -> {
+                        // Force-load other collections to avoid LazyInitializationException
+                        place.getImages().size();
+                        place.getBusinessHours().size();
+                        place.getSns().size();
+                        place.getReviews().size();
+                        places.add(place);
+                    });
+                }
+
                 currentChunk = places;
                 currentIndex = 0;
                 currentChunkId = chunkId;
 
                 lockService.markAsProcessing(jobName, chunkId);
 
-                logger.info("🔒 Lock acquired! Processing chunk: {} ({} places)",
+                logger.info("🔒 Lock acquired! Processing chunk: {} ({} places loaded)",
                     chunkId, places.size());
 
                 // 첫 번째 Place 반환

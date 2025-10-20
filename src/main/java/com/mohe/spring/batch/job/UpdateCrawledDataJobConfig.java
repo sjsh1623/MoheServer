@@ -1,5 +1,6 @@
 package com.mohe.spring.batch.job;
 
+import com.mohe.spring.batch.reader.UpdateCrawledDataReader;
 import com.mohe.spring.dto.crawling.CrawledDataDto;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceBusinessHour;
@@ -20,10 +21,8 @@ import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.data.RepositoryItemReader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.domain.Sort;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.math.BigDecimal;
@@ -77,14 +76,10 @@ public class UpdateCrawledDataJobConfig {
     }
 
     @Bean
-    public RepositoryItemReader<Place> placeReader() {
-        RepositoryItemReader<Place> reader = new RepositoryItemReader<>();
-        reader.setRepository(placeRepository);
-        reader.setMethodName("findPlacesForBatchProcessing");
-        reader.setArguments(List.of()); // No arguments needed - query handles filtering
-        reader.setPageSize(10);
-        reader.setSort(Map.of("id", Sort.Direction.ASC));
-        return reader;
+    public ItemReader<Place> placeReader() {
+        // Use custom reader to avoid Hibernate HHH90003004 warning
+        // Two-step approach: 1) Load IDs with pagination, 2) Load entities with collections
+        return new UpdateCrawledDataReader(placeRepository, 10);
     }
 
     @Bean
