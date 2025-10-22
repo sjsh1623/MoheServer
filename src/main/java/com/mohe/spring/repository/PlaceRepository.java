@@ -232,7 +232,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
      */
     @Query("""
         SELECT p.id FROM Place p
-        WHERE (p.crawlerFound IS NULL OR p.crawlerFound = false)
+        WHERE (p.crawlerFound IS NULL)
         AND (p.ready IS NULL OR p.ready = false)
         ORDER BY p.id ASC
     """)

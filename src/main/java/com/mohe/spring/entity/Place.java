@@ -48,9 +48,6 @@ public class Place {
     @Column(name = "keyword", columnDefinition = "varchar[]")
     private List<String> keyword;
 
-    @Column(name = "keyword_vector", columnDefinition = "TEXT")
-    private String keywordVector;
-
     private Boolean parkingAvailable;
 
     private Boolean petFriendly;
