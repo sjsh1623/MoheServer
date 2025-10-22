@@ -121,8 +121,6 @@ public class VectorEmbeddingJobConfig {
                     return null;
                 }
 
-                place.setKeywordVector(Arrays.toString(keywordVector));
-
                 // Mark place as ready after successful vectorization
                 place.setReady(true);
 
