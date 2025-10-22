@@ -1,38 +1,19 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Keep feature code in `src/main/java/com/mohe/spring`, moving controller → service → repository per `PROJECT_STRUCTURE.md`.
-- Park DTOs under `dto`; services own business rules, repositories stay persistence-only.
-- Add batch jobs to `src/main/java/com/mohe/spring/batch/{job,reader,processor,writer}` and reuse the job name across folders.
-- Configuration and security live in `config` and `security`; YAML, SQL, and static assets live in `src/main/resources`.
-- Mirror package paths under `src/test/java/com/mohe/spring`, and share fixtures or Spring profiles from `src/test/resources`.
+Source lives under `src/main/java/com/mohe/spring`, following controller → service → repository layers per package. DTOs belong in `dto`, configuration in `config`, security in `security`, and Spring Batch jobs under `batch/{job,reader,processor,writer}` using a shared job name. Place integration resources (YAML, SQL, static assets) in `src/main/resources`. Tests mirror the main tree at `src/test/java/com/mohe/spring`, with shared fixtures and Spring profiles in `src/test/resources`.
 
 ## Build, Test, and Development Commands
-- `./gradlew bootRun` starts the Spring API; pair it with `docker-compose up postgres -d` to launch PostgreSQL.
-- `./gradlew build` compiles, runs verification, and emits the fat JAR under `build/libs/`.
-- `./gradlew test` executes the JUnit 5 suite; add `clean` if the Gradle cache stalls.
-- `docker-compose up --build` rebuilds the stack from `docker-compose.yml`; `docker-compose down` stops services.
-- `./run-with-env.sh ./gradlew <task>` sources `.env` before running Gradle so secrets stay out of your shell history.
+Use `./gradlew build` for compilation, lint warnings, and the fat JAR in `build/libs/`. Run `./gradlew test` (or `./run-with-env.sh ./gradlew test`) to execute the JUnit 5 suite. Start the API locally with `./gradlew bootRun`, and pair it with `docker-compose up postgres -d` to launch Postgres. Rebuild the stack via `docker-compose up --build`; shut it down with `docker-compose down`.
 
 ## Coding Style & Naming Conventions
-- Target Java 21, four-space indentation, UTF-8 encoding, and avoid wildcard imports.
-- Keep controllers thin, route logic through services, and leave repositories data-only.
-- Name classes using established patterns (`PlaceController`, `PlaceService`, `PlaceRepository`, `CreatePlaceRequest`, `PlaceResponse`).
-- Expose DTOs instead of entities in API layers, and run `./gradlew build` before pushing to catch `-Xlint` warnings.
+Target Java 21 with four-space indentation, UTF-8 encoding, and explicit imports. Keep controllers thin, delegating business rules to services and persistence logic to repositories. Name types following established patterns such as `PlaceController`, `PlaceService`, `CreatePlaceRequest`, and `PlaceResponse`. Run `./gradlew build` before pushing to surface `-Xlint` issues early.
 
 ## Testing Guidelines
-- Use JUnit 5 with Spring Boot test slices and Testcontainers for PostgreSQL work.
-- Name unit tests `{Subject}Test` and integration tests `{Subject}IntegrationTest`, mirroring source packages.
-- Configure database credentials via `src/test/resources/application-test.yml` and store stubs in `src/test/resources`.
-- Cover happy and failure paths, especially for validation, security, and external integrations.
+Tests use JUnit 5 and Spring Boot test slices; leverage Testcontainers for PostgreSQL interactions. Name unit tests `{Subject}Test` and integration tests `{Subject}IntegrationTest`, aligning packages with production code. Configure database credentials in `src/test/resources/application-test.yml`, and store reusable stubs alongside. Cover both success paths and expected failures for validation, security, and external integrations.
 
 ## Commit & Pull Request Guidelines
-- Follow `<type>: <imperative summary>` (e.g., `refactor: streamline batch reader`, `feat(place): add region caching`).
-- Bundle schema or configuration changes with the code that requires them.
-- Link PRs to the tracking issue, describe functional impact, and list verification steps (`./gradlew test`, `docker-compose up --build`).
-- Request review after automation passes and attach screenshots or logs when UX or integration behavior shifts.
+Compose commits as `<type>: <imperative summary>` (e.g., `feat(place): add region caching`). Bundle schema or config changes with the code that needs them. Pull requests should link tracking issues, describe functional impact, list verification steps (e.g., `./gradlew test`, `docker-compose up --build`), and include screenshots or logs for UX or integration shifts. Request review only after automation passes.
 
-## Environment & Configuration
-- Keep secrets in `.env`; run commands through `run-with-env.sh` to source them safely.
-- Document new keys in `README.md` and provide sane defaults via `application-*.yml`.
-- Guard optional providers (OpenAI, Naver, Google) with `@ConditionalOnProperty` and disable them in tests by default.
+## Security & Configuration Tips
+Keep secrets in `.env` and run Gradle through `./run-with-env.sh` to avoid leaking credentials. Document new configuration keys in `README.md`, supply sane defaults via `application-*.yml`, and guard optional providers (OpenAI, Naver, Google) with `@ConditionalOnProperty`; disable them in tests by default.

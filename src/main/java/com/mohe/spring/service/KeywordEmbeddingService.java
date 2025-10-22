@@ -174,24 +174,22 @@ public class KeywordEmbeddingService implements LlmService {
             return new float[1792];
         }
 
-        // New embedding service request format (OpenAI-compatible)
-        Map<String, Object> request = new HashMap<>();
-        request.put("model", "kanana-nano-2.1b-embedding");
-        request.put("input", combinedKeywords);
+        // Create request as array of strings for /embed endpoint
+        List<String> texts = List.of(combinedKeywords);
 
         try {
             // Get embedding service URL from environment
             String embeddingServiceUrl = System.getenv().getOrDefault(
                 "EMBEDDING_SERVICE_URL",
-                "http://localhost:8001"
+                "http://localhost:2000"
             );
 
             String response = WebClient.builder()
                 .baseUrl(embeddingServiceUrl)
                 .build()
                 .post()
-                .uri("/v1/embeddings")
-                .bodyValue(request)
+                .uri("/embed")
+                .bodyValue(texts)
                 .retrieve()
                 .bodyToMono(String.class)
                 .block();
@@ -202,17 +200,17 @@ public class KeywordEmbeddingService implements LlmService {
             }
 
             JsonNode jsonNode = objectMapper.readTree(response);
-            JsonNode dataNode = jsonNode.get("data");
+            JsonNode embeddingsNode = jsonNode.get("embeddings");
 
-            if (dataNode == null || !dataNode.isArray() || dataNode.size() == 0) {
-                System.err.println("Failed to vectorize keywords: No valid 'data' field in response. Raw response: " + response);
+            if (embeddingsNode == null || !embeddingsNode.isArray() || embeddingsNode.size() == 0) {
+                System.err.println("Failed to vectorize keywords: No valid 'embeddings' field in response. Raw response: " + response);
                 return new float[1792];
             }
 
-            JsonNode embeddingNode = dataNode.get(0).get("embedding");
+            JsonNode embeddingNode = embeddingsNode.get(0);
 
             if (embeddingNode == null || embeddingNode.isNull() || !embeddingNode.isArray()) {
-                System.err.println("Failed to vectorize keywords: No valid 'embedding' field in response data");
+                System.err.println("Failed to vectorize keywords: No valid embedding vector in response data");
                 return new float[1792];
             }
 

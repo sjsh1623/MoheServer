@@ -121,7 +121,7 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - Vector embeddings stored in PostgreSQL with pgvector for similarity search
 - Automatic model download during Docker build
 - Falls back to default values if service is unavailable
-- Service accessible at `http://embedding:8000` (Docker) or `http://localhost:8001` (host)
+- Service accessible at `http://embedding:2000` (Docker) or `http://localhost:2000` (host)
 
 **MBTI-Based Recommendations**: Core business logic includes MBTI personality type matching for place recommendations. The `places` table includes MBTI scoring fields, and the recommendation algorithm considers user preferences and personality type. Advanced recommendation engine includes configurable weights for Jaccard/Cosine similarity, time decay, diversity, and scheduled similarity matrix updates.
 
@@ -177,7 +177,7 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - Database configuration (PostgreSQL connection details)
 - JWT secret (minimum 64 characters required)
 - API keys for external services
-- Embedding service configuration (default: `http://embedding:8000`)
+- Embedding service configuration (default: `http://embedding:2000`)
 - Batch job settings (chunk size, concurrency, scheduling)
 - Recommendation algorithm weights (Jaccard, Cosine, MBTI, time decay)
 - Image storage configuration (local vs remote)
