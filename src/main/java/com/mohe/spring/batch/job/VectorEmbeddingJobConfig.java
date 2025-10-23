@@ -1,5 +1,6 @@
 package com.mohe.spring.batch.job;
 
+import com.mohe.spring.batch.reader.VectorEmbeddingReader;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.service.KeywordEmbeddingService;
@@ -11,15 +12,11 @@ import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.data.RepositoryItemReader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.domain.Sort;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 @Configuration
 public class VectorEmbeddingJobConfig {
@@ -46,7 +43,7 @@ public class VectorEmbeddingJobConfig {
     public Step vectorEmbeddingStep(
         JobRepository jobRepository,
         PlatformTransactionManager transactionManager,
-        ItemReader<Place> vectorEmbeddingReader,
+        VectorEmbeddingReader vectorEmbeddingReader,
         ItemProcessor<Place, Place> vectorEmbeddingProcessor,
         ItemWriter<Place> vectorEmbeddingWriter
     ) {
@@ -59,17 +56,6 @@ public class VectorEmbeddingJobConfig {
                 .skip(Exception.class)
                 .skipLimit(Integer.MAX_VALUE)
                 .build();
-    }
-
-    @Bean
-    public RepositoryItemReader<Place> vectorEmbeddingReader() {
-        RepositoryItemReader<Place> reader = new RepositoryItemReader<>();
-        reader.setRepository(placeRepository);
-        reader.setMethodName("findPlacesForVectorEmbedding");
-        reader.setArguments(List.of()); // No arguments needed - query handles filtering
-        reader.setPageSize(10);
-        reader.setSort(Map.of("id", Sort.Direction.ASC));
-        return reader;
     }
 
     @Bean
