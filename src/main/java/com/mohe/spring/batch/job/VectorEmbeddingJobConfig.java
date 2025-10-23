@@ -2,8 +2,12 @@ package com.mohe.spring.batch.job;
 
 import com.mohe.spring.batch.reader.VectorEmbeddingReader;
 import com.mohe.spring.entity.Place;
+import com.mohe.spring.entity.PlaceKeywordEmbedding;
 import com.mohe.spring.repository.PlaceRepository;
-import com.mohe.spring.service.KeywordEmbeddingService;
+import com.mohe.spring.repository.PlaceKeywordEmbeddingRepository;
+import com.mohe.spring.service.EmbeddingClient;
+import com.mohe.spring.service.KeywordEmbeddingSaveService;
+import com.mohe.spring.dto.embedding.EmbeddingResponse;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -17,19 +21,23 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.util.List;
+import java.util.ArrayList;
 
 @Configuration
 public class VectorEmbeddingJobConfig {
 
-    private final KeywordEmbeddingService keywordEmbeddingService;
+    private final EmbeddingClient embeddingClient;
     private final PlaceRepository placeRepository;
+    private final KeywordEmbeddingSaveService embeddingSaveService;
 
     public VectorEmbeddingJobConfig(
-        KeywordEmbeddingService keywordEmbeddingService,
-        PlaceRepository placeRepository
+        EmbeddingClient embeddingClient,
+        PlaceRepository placeRepository,
+        KeywordEmbeddingSaveService embeddingSaveService
     ) {
-        this.keywordEmbeddingService = keywordEmbeddingService;
+        this.embeddingClient = embeddingClient;
         this.placeRepository = placeRepository;
+        this.embeddingSaveService = embeddingSaveService;
     }
 
     @Bean
@@ -83,37 +91,69 @@ public class VectorEmbeddingJobConfig {
                     return null;
                 }
 
-                String[] keywords = existingKeywords.toArray(new String[0]);
-                System.out.println("🔑 Using existing keywords for '" + place.getName() + "': " + String.join(", ", keywords));
+                // Take only first 9 keywords
+                List<String> keywordsToProcess = existingKeywords.size() > 9
+                    ? existingKeywords.subList(0, 9)
+                    : existingKeywords;
 
-                // Vectorize keywords using Ollama embedding
-                System.out.println("🧮 Vectorizing keywords for '" + place.getName() + "'...");
-                float[] keywordVector = keywordEmbeddingService.vectorizeKeywords(keywords);
-                System.out.println("✅ Vector generated for '" + place.getName() + "' (dimension: " + keywordVector.length + ")");
+                System.out.println("🔑 Processing " + keywordsToProcess.size() + " keywords for '" + place.getName() + "': " + String.join(", ", keywordsToProcess));
 
-                // Validate vector - check if it's the default empty vector
-                boolean isDefaultVector = true;
-                for (float v : keywordVector) {
-                    if (v != 0.0f) {
-                        isDefaultVector = false;
-                        break;
-                    }
-                }
+                // Delete existing embeddings for this place (if re-processing)
+                embeddingSaveService.deleteEmbeddingsForPlace(place.getId());
 
-                if (isDefaultVector) {
-                    System.err.println("⚠️ AI issue for '" + place.getName() + "' - Ollama vectorization failed (default empty vector)");
-                    // Keep crawler_found=true, ready=false
-                    placeRepository.save(place);
+                // Call embedding service to get individual embeddings for each keyword
+                System.out.println("🚀 Calling embedding service for place_id=" + place.getId() + " with " + keywordsToProcess.size() + " keywords");
+                EmbeddingResponse response = embeddingClient.getEmbeddings(keywordsToProcess);
+
+                // Validate response
+                if (!response.hasValidEmbeddings()) {
+                    System.err.println("⚠️ No valid embeddings returned for '" + place.getName() + "' - skipping");
                     return null;
                 }
+
+                List<float[]> embeddings = response.getEmbeddingsAsFloatArrays();
+                System.out.println("✅ Received " + embeddings.size() + " embeddings for '" + place.getName() + "'");
+
+                if (embeddings.size() != keywordsToProcess.size()) {
+                    System.err.println("⚠️ Embedding count mismatch for '" + place.getName() + "': expected " + keywordsToProcess.size() + ", got " + embeddings.size());
+                    // Continue with available embeddings
+                }
+
+                // Validate embeddings - check if they're non-empty
+                int validEmbeddings = 0;
+                for (float[] embedding : embeddings) {
+                    boolean isNonZero = false;
+                    for (float v : embedding) {
+                        if (v != 0.0f) {
+                            isNonZero = true;
+                            break;
+                        }
+                    }
+                    if (isNonZero) validEmbeddings++;
+                }
+
+                if (validEmbeddings == 0) {
+                    System.err.println("⚠️ All embeddings are zero vectors for '" + place.getName() + "' - embedding service may have failed");
+                    return null;
+                }
+
+                // Save embeddings using service with new transaction
+                int savedCount = embeddingSaveService.saveEmbeddings(
+                    place.getId(),
+                    keywordsToProcess,
+                    embeddings
+                );
+
+                System.out.println("💾 Saved " + savedCount + " embeddings for place_id=" + place.getId());
 
                 // Mark place as ready after successful vectorization
                 place.setReady(true);
 
                 // ✅ Success logging
                 System.out.println("✅ Successfully vectorized '" + place.getName() + "' - " +
-                    "Keywords: " + String.join(", ", place.getKeyword()) + ", " +
-                    "Vector dimension: " + keywordVector.length + ", " +
+                    "Keywords: " + String.join(", ", keywordsToProcess) + ", " +
+                    "Vector dimension: 1792, " +
+                    "Saved " + savedCount + " embeddings, " +
                     "ready=true");
 
                 return place;
