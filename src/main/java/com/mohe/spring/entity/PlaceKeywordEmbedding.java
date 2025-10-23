@@ -1,11 +1,13 @@
 package com.mohe.spring.entity;
 
+import com.mohe.spring.config.PGvectorType;
 import com.pgvector.PGvector;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Type;
 
 import java.time.LocalDateTime;
 
@@ -32,6 +34,7 @@ public class PlaceKeywordEmbedding {
     private String keyword;
 
     @Column(name = "embedding", columnDefinition = "vector(1792)")
+    @Type(PGvectorType.class)
     private PGvector embedding;
 
     @Column(name = "created_at", nullable = false, updatable = false)
