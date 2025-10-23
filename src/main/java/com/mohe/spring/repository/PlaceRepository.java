@@ -79,18 +79,6 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     """)
     Page<Place> findRecommendablePlaces(Pageable pageable);
 
-    // Disabled: Place entity doesn't have shouldRecheckRating and lastRatingCheck fields
-    // @Query("""
-    //     SELECT p FROM Place p
-    //     WHERE p.shouldRecheckRating = true
-    //     AND p.lastRatingCheck < :recheckThreshold
-    //     ORDER BY p.lastRatingCheck ASC NULLS FIRST
-    // """)
-    // Page<Place> findPlacesNeedingRatingRecheck(
-    //     @Param("recheckThreshold") OffsetDateTime recheckThreshold,
-    //     Pageable pageable
-    // );
-
     @Query("SELECT p FROM Place p WHERE p.createdAt < :oldDate AND p.rating < :ratingThreshold")
     List<Place> findOldLowRatedPlaces(
         @Param("oldDate") OffsetDateTime oldDate,
@@ -155,21 +143,6 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("distance") Double distance,
         Pageable pageable
     );
-
-    /**
-     * Find places that match time-based preferences (no location filter)
-     */
-    // Disabled: Place entity doesn't have isNewPlace field
-    // @Query("""
-    //     SELECT p FROM Place p
-    //     WHERE LOWER(p.category) IN :categories
-    //     AND (p.rating >= 3.0 OR p.rating IS NULL)
-    //     ORDER BY p.rating DESC, p.reviewCount DESC
-    // """)
-    // List<Place> findPlacesByTimePreference(
-    //     @Param("categories") List<String> categories,
-    //     Pageable pageable
-    // );
 
     /**
      * Find nearby places ordered by distance (for LLM recommendations)
@@ -275,4 +248,24 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         ORDER BY p.id ASC
     """)
     Page<Place> findPlacesForVectorEmbedding(Pageable pageable);
+
+    /**
+     * Find place IDs for keyword embedding batch processing
+     * Step 1: Get IDs with pagination (efficient)
+     * Conditions: crawler_found = true
+     */
+    @Query("""
+        SELECT p.id FROM Place p
+        WHERE p.crawlerFound = true
+        ORDER BY p.id ASC
+    """)
+    Page<Long> findPlaceIdsForKeywordEmbedding(Pageable pageable);
+
+    /**
+     * Find a single Place by ID (for keyword embedding)
+     * Step 2: Load entity - no need to fetch collections for keyword embedding
+     * We only need the keyword field from the Place entity
+     */
+    @Query("SELECT p FROM Place p WHERE p.id = :id")
+    Optional<Place> findByIdForKeywordEmbedding(@Param("id") Long id);
 }
