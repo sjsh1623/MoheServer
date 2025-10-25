@@ -64,7 +64,7 @@ Swagger UI(`http://localhost:8080/swagger-ui.html`)와 OpenAPI 스펙(`http://lo
 | GET | `/api/recommendations/enhanced` | Bearer (ROLE_USER) | 북마크 + MBTI 가중치를 반영한 개인화 추천을 제공합니다. |
 | GET | `/api/recommendations/mbti/{mbtiType}` | Bearer (ROLE_USER) | 특정 MBTI에 맞춘 추천 리스트를 반환합니다. |
 | GET | `/api/recommendations/explanation` | Bearer (ROLE_USER) | 추천 결과가 생성된 이유를 설명합니다. |
-| GET | `/api/recommendations/contextual` | 공개 | 위경도/쿼리를 받아 상황별 추천을 생성합니다(로그인 시 북마크·MBTI 반영). |
+| GET | `/api/recommendations/contextual` | 공개 | 좌표 기준 15km 70%+30km 30% 후보를 만든 뒤 날씨·시간·쿼리를 결합한 벡터 검색 결과를 반환합니다. |
 | POST | `/api/recommendations/query` | 공개 | 레거시 POST 입력을 받아 상황별 추천 엔드포인트를 위임 호출합니다. |
 | GET | `/api/recommendations/current-time` | 공개 | 현재 시간대 추천(PlaceController와 동일 로직)을 제공합니다. |
 | GET | `/api/recommendations/bookmark-based` | 공개 | 위치 기반 북마크 인기 장소를 제공합니다. |

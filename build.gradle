@@ -39,6 +39,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 
+    // DevTools for hot reload in development
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
     // Spring Batch
     implementation('org.springframework.boot:spring-boot-starter-batch') {
         exclude group: 'org.springframework.boot', module: 'spring-boot-starter-jdbc'

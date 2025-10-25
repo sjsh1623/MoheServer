@@ -1,5 +1,7 @@
 package com.mohe.spring.service;
 
+import com.mohe.spring.dto.WeatherResponse;
+import com.mohe.spring.util.GeoGridConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +12,7 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -265,39 +268,248 @@ class OpenMeteoProvider implements WeatherProvider {
 }
 
 /**
+ * Korean Meteorological Administration (KMA) implementation of WeatherProvider
+ */
+@Service
+class KMAWeatherProvider implements WeatherProvider {
+
+    private static final Logger logger = LoggerFactory.getLogger(KMAWeatherProvider.class);
+    private static final String BASE_URL = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst";
+
+    private final WebClient webClient;
+    private final String serviceKey;
+
+    public KMAWeatherProvider(
+            WebClient webClient,
+            @Value("${api.kma.service-key:}") String serviceKey) {
+        this.webClient = webClient;
+        this.serviceKey = serviceKey;
+    }
+
+    @Override
+    public WeatherData getCurrentWeather(double lat, double lon) {
+        if (serviceKey == null || serviceKey.isBlank()) {
+            throw new RuntimeException("KMA API service key is not configured");
+        }
+
+        if (!GeoGridConverter.isValidKoreanCoordinate(lat, lon)) {
+            throw new RuntimeException("Coordinates are outside Korean territory");
+        }
+
+        try {
+            GeoGridConverter.GridCoordinate grid = GeoGridConverter.toGrid(lat, lon);
+
+            LocalDateTime now = LocalDateTime.now();
+            // KMA API provides data at hourly intervals, use current hour
+            String baseDate = now.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String baseTime = now.format(DateTimeFormatter.ofPattern("HH00"));
+
+            // Build query URL
+            String url = BASE_URL +
+                "?serviceKey=" + serviceKey +
+                "&pageNo=1" +
+                "&numOfRows=100" +
+                "&dataType=JSON" +
+                "&base_date=" + baseDate +
+                "&base_time=" + baseTime +
+                "&nx=" + grid.getNx() +
+                "&ny=" + grid.getNy();
+
+            logger.info("Fetching KMA weather data: baseDate={}, baseTime={}, nx={}, ny={}",
+                       baseDate, baseTime, grid.getNx(), grid.getNy());
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = webClient.get()
+                .uri(url)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .retryWhen(
+                    Retry.backoff(2, Duration.ofSeconds(1))
+                        .maxBackoff(Duration.ofSeconds(3))
+                        .filter(throwable -> throwable instanceof WebClientResponseException)
+                )
+                .block(Duration.ofSeconds(10));
+
+            if (response == null) {
+                throw new RuntimeException("Empty response from KMA API");
+            }
+
+            return parseKMAResponse(response);
+
+        } catch (Exception e) {
+            logger.error("Failed to fetch weather data from KMA for lat={}, lon={}: {}", lat, lon, e.getMessage());
+            throw new RuntimeException("Unable to retrieve weather data from KMA: " + e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private WeatherData parseKMAResponse(Map<String, Object> response) {
+        Map<String, Object> responseObj = (Map<String, Object>) response.get("response");
+        if (responseObj == null) {
+            throw new RuntimeException("No response object in KMA API response");
+        }
+
+        Map<String, Object> header = (Map<String, Object>) responseObj.get("header");
+        if (header != null) {
+            String resultCode = (String) header.get("resultCode");
+            if (!"00".equals(resultCode)) {
+                String resultMsg = (String) header.get("resultMsg");
+                throw new RuntimeException("KMA API error: " + resultMsg);
+            }
+        }
+
+        Map<String, Object> body = (Map<String, Object>) responseObj.get("body");
+        if (body == null) {
+            throw new RuntimeException("No body in KMA API response");
+        }
+
+        Map<String, Object> items = (Map<String, Object>) body.get("items");
+        if (items == null) {
+            throw new RuntimeException("No items in KMA API response");
+        }
+
+        List<Map<String, Object>> itemList = (List<Map<String, Object>>) items.get("item");
+        if (itemList == null || itemList.isEmpty()) {
+            throw new RuntimeException("No weather data items in KMA API response");
+        }
+
+        // Parse weather data from items
+        Double tempC = null;
+        Double windSpeedMs = null;
+        Integer humidity = null;
+        Double precipitationMm = null;
+
+        for (Map<String, Object> item : itemList) {
+            String category = (String) item.get("category");
+            String obsrValue = (String) item.get("obsrValue");
+
+            if (obsrValue == null || obsrValue.isEmpty()) continue;
+
+            switch (category) {
+                case "T1H": // 기온
+                    tempC = Double.parseDouble(obsrValue);
+                    break;
+                case "RN1": // 1시간 강수량
+                    precipitationMm = Double.parseDouble(obsrValue);
+                    break;
+                case "REH": // 습도
+                    humidity = (int) Double.parseDouble(obsrValue);
+                    break;
+                case "WSD": // 풍속
+                    windSpeedMs = Double.parseDouble(obsrValue);
+                    break;
+            }
+        }
+
+        if (tempC == null) {
+            throw new RuntimeException("Temperature data not found in KMA response");
+        }
+
+        double tempF = tempC * 9 / 5 + 32;
+        double windSpeedKmh = windSpeedMs != null ? windSpeedMs * 3.6 : 0.0;
+        int humidityValue = humidity != null ? humidity : 50;
+
+        // Determine weather condition
+        String conditionCode;
+        String conditionText;
+        if (precipitationMm != null && precipitationMm > 0) {
+            if (precipitationMm >= 10.0) {
+                conditionCode = "rain";
+                conditionText = "강한 비";
+            } else if (precipitationMm >= 3.0) {
+                conditionCode = "rain";
+                conditionText = "보통 비";
+            } else {
+                conditionCode = "drizzle";
+                conditionText = "약한 비";
+            }
+        } else if (tempC < 0) {
+            conditionCode = "cold";
+            conditionText = "맑고 추움";
+        } else if (tempC > 28) {
+            conditionCode = "clear";
+            conditionText = "맑고 더움";
+        } else {
+            conditionCode = "clear";
+            conditionText = "맑음";
+        }
+
+        String daypart = determineDaypart();
+
+        logger.info("Parsed KMA weather: {}°C, {}, wind: {}km/h, humidity: {}%",
+                   tempC, conditionText, windSpeedKmh, humidityValue);
+
+        return new WeatherData(tempC, tempF, conditionCode, conditionText,
+                              humidityValue, windSpeedKmh, daypart);
+    }
+
+    private String determineDaypart() {
+        int hour = LocalDateTime.now().getHour();
+        if (hour >= 6 && hour <= 11) return "morning";
+        if (hour >= 12 && hour <= 17) return "afternoon";
+        if (hour >= 18 && hour <= 21) return "evening";
+        return "night";
+    }
+}
+
+/**
  * Weather service orchestrator with pluggable providers
  */
 @Service
 public class WeatherService {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(WeatherService.class);
     private static final Duration CACHE_TIMEOUT = Duration.ofMinutes(10);
-    
+
     private final WeatherProvider weatherProvider;
-    
+    private final WeatherProvider fallbackProvider;
+
     // Simple in-memory cache for 10 minutes
     private final Map<String, CacheEntry> weatherCache = new ConcurrentHashMap<>();
-    
-    public WeatherService(OpenMeteoProvider openMeteoProvider) {
-        this.weatherProvider = openMeteoProvider;
+
+    public WeatherService(KMAWeatherProvider kmaWeatherProvider,
+                         OpenMeteoProvider openMeteoProvider,
+                         @Value("${api.kma.service-key:}") String kmaServiceKey) {
+        // Use KMA as primary provider if configured, otherwise use OpenMeteo
+        if (kmaServiceKey != null && !kmaServiceKey.isBlank()) {
+            this.weatherProvider = kmaWeatherProvider;
+            this.fallbackProvider = openMeteoProvider;
+            logger.info("Weather service initialized with KMA as primary provider");
+        } else {
+            this.weatherProvider = openMeteoProvider;
+            this.fallbackProvider = null;
+            logger.info("Weather service initialized with OpenMeteo provider (KMA not configured)");
+        }
     }
     
     public WeatherData getCurrentWeather(double lat, double lon) {
         String cacheKey = lat + "_" + lon;
         CacheEntry cached = weatherCache.get(cacheKey);
-        
+
         if (cached != null && Duration.between(cached.timestamp, LocalDateTime.now()).compareTo(CACHE_TIMEOUT) < 0) {
             logger.debug("Returning cached weather data for lat={}, lon={}", lat, lon);
             return cached.weatherData;
         }
-        
+
         logger.info("Fetching fresh weather data for lat={}, lon={}", lat, lon);
-        WeatherData weather = weatherProvider.getCurrentWeather(lat, lon);
+
+        WeatherData weather;
+        try {
+            weather = weatherProvider.getCurrentWeather(lat, lon);
+        } catch (Exception e) {
+            logger.warn("Primary weather provider failed, attempting fallback: {}", e.getMessage());
+            if (fallbackProvider != null) {
+                weather = fallbackProvider.getCurrentWeather(lat, lon);
+            } else {
+                throw e;
+            }
+        }
+
         weatherCache.put(cacheKey, new CacheEntry(weather, LocalDateTime.now()));
-        
+
         // Clean old cache entries
         cleanupCache();
-        
+
         return weather;
     }
     
@@ -305,7 +517,26 @@ public class WeatherService {
         WeatherData weather = getCurrentWeather(lat, lon);
         return WeatherContext.from(weather);
     }
-    
+
+    /**
+     * Get weather as WeatherResponse DTO for API consumption
+     */
+    public WeatherResponse getCurrentWeatherResponse(double lat, double lon, String provider) {
+        WeatherData weather = getCurrentWeather(lat, lon);
+        return new WeatherResponse(
+            weather.getTempC(),
+            weather.getTempF(),
+            weather.getConditionCode(),
+            weather.getConditionText(),
+            weather.getHumidity(),
+            weather.getWindSpeedKmh(),
+            weather.getDaypart(),
+            lat,
+            lon,
+            provider
+        );
+    }
+
     private void cleanupCache() {
         LocalDateTime now = LocalDateTime.now();
         List<String> expiredKeys = weatherCache.entrySet().stream()
