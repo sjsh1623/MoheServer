@@ -63,10 +63,13 @@
 
 ### External APIs
 - **Naver Local Search API**: 장소 데이터 수집
+- **Naver Reverse Geocoding API**: 좌표를 주소로 변환
+- **Korean Meteorological Administration API**: 날씨 정보 (단기예보)
 - **Google Places API**: 평점 및 상세 정보
 - **Korean Government API**: 행정구역 정보
 - **OpenAI API**: AI 기반 설명 생성
 - **Ollama**: 로컬 AI 벡터 생성
+- **OpenMeteo API**: 날씨 정보 (fallback)
 
 ## 📦 프로젝트 구조
 
@@ -105,6 +108,9 @@ DB_PASSWORD=your_password
 NAVER_CLIENT_ID=your_client_id
 NAVER_CLIENT_SECRET=your_client_secret
 
+# 기상청 단기예보 API (선택사항)
+KMA_SERVICE_KEY=your_kma_service_key
+
 # Google Places API (선택사항)
 GOOGLE_PLACES_API_KEY=your_api_key
 
@@ -114,22 +120,54 @@ JWT_SECRET=your_secret_key_minimum_64_characters
 
 ### Docker로 실행
 
+#### 🔥 개발 모드 (Hot Reload)
+
+코드 수정 시 자동으로 재컴파일 및 재시작됩니다. Spring Boot DevTools를 활용한 빠른 개발이 가능합니다.
+
 ```bash
-# PostgreSQL + Spring Boot 실행
-docker-compose up --build
+# 개발 모드로 실행 (Hot Reload 활성화)
+docker compose --profile dev up --build app-dev
 
 # 백그라운드 실행
-docker-compose up -d
+docker compose --profile dev up --build -d app-dev
+
+# 로그 확인
+docker compose logs -f app-dev
 
 # 종료
-docker-compose down
+docker compose --profile dev down
 ```
 
-### 로컬 개발 환경
+**개발 모드 특징:**
+- ✅ 소스 코드 변경 시 자동 재시작 (약 5-15초)
+- ✅ 컨테이너 재빌드 불필요 - `src/` 디렉토리가 volume으로 마운트됨
+- ✅ Gradle 캐시 보존으로 빠른 재시작
+- ✅ LiveReload 지원 (브라우저 자동 새로고침)
+
+**주의사항:**
+- `build.gradle` 또는 `settings.gradle` 수정 시 컨테이너 재시작 필요
+- 의존성 추가 시 `--build` 플래그로 재빌드 필요
+
+#### 🚀 프로덕션 모드
+
+최적화된 JAR 파일을 사용하는 프로덕션 배포용 모드입니다.
+
+```bash
+# 프로덕션 모드로 실행
+docker compose --profile production up --build app
+
+# 백그라운드 실행
+docker compose --profile production up -d app
+
+# 종료
+docker compose --profile production down
+```
+
+### 로컬 개발 환경 (Docker 없이)
 
 ```bash
 # PostgreSQL만 Docker로 실행
-docker-compose up postgres -d
+docker compose up postgres -d
 
 # Gradle로 애플리케이션 실행
 ./gradlew bootRun
@@ -143,6 +181,7 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 
 애플리케이션 실행 후:
 
+- 장소 추천 계열 API(`/api/places/recommendations`, `/api/places/new`, `/api/places/popular`, `/api/places/current-time`, `/api/recommendations/contextual`)는 위도/경도 파라미터가 필수이며, 좌표 기준 15km 이내 데이터 70% + 30km 이내 데이터 30%를 혼합 후 거리/평점/리뷰 가중치를 적용합니다.
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **OpenAPI Spec**: http://localhost:8080/v3/api-docs
 - **Health Check**: http://localhost:8080/health
@@ -157,6 +196,8 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 - **사용자 & 활동** *(Bearer)*: `GET /api/user/profile`, `GET /api/user/recent-places`, `POST /api/bookmarks/toggle`
 - **장소 탐색**: `GET /api/places`, `GET /api/places/search`, `GET /api/places/vector-search` *(Bearer)*
 - **추천 서비스**: `GET /api/recommendations/enhanced` *(Bearer)*, `GET /api/recommendations/contextual`, `GET /api/keyword-recommendations/by-keyword` *(Bearer)*
+- **날씨 정보**: `GET /api/weather/current?lat=37.5665&lon=126.9780` - 좌표 기반 현재 날씨 조회 (기상청 API)
+- **주소 정보**: `GET /api/address/reverse?lat=37.5665&lon=126.9780` - 좌표를 주소로 변환 (Naver API)
 - **관리자/데이터 관리** *(Bearer ADMIN)*: `POST /api/admin/place-management/check-availability`, `POST /api/place-enhancement/batch-enhance`, `POST /api/admin/similarity/calculate`
 - **배치/동기화**: `POST /api/batch/jobs/place-collection`, `POST /api/batch/jobs/update-crawled-data`
 
@@ -245,9 +286,17 @@ curl -X POST http://localhost:8080/api/batch/jobs/stop-all
 - `PlaceService.convertToSimplePlaceDto()` 메서드가 `mohe_description` 필드만 추출
 - 불필요한 description 필드 제거로 API 응답 크기 감소
 
-### 날씨 정보
-- WeatherController 제거 (날씨 정보는 프론트엔드에서 직접 처리)
-- 추천 API에서 날씨 기반 필터링은 프론트엔드에서 위치 기반으로 구현 가능
+### 날씨 정보 API
+- **WeatherController 추가**: 좌표 기반 실시간 날씨 조회 (`GET /api/weather/current`)
+- **기상청 단기예보 API 통합**: 한국 좌표에 대해 정확한 날씨 정보 제공
+- **위경도 → 격자 좌표 변환**: Lambert Conformal Conic 투영법 적용
+- **OpenMeteo Fallback**: KMA API 키 미설정 시 또는 오류 시 자동 전환
+- **10분 캐싱**: 성능 최적화 및 API 호출 제한 방지
+
+### 주소 변환 API
+- **Naver Reverse Geocoding 활성화**: 좌표를 정확한 도로명 주소로 변환
+- **AddressController**: `GET /api/address/reverse` 엔드포인트
+- **1시간 캐싱**: 빠른 응답 제공
 
 ## 👤 작성자
 

@@ -217,9 +217,9 @@ public class RecommendationController {
     @Operation(
         summary = "Get contextual recommendations (dual mode)",
         description = """
-        Get place recommendations based on weather, time, and location:
-        - For authenticated users: Uses MBTI + bookmarks + weather + time
-        - For guest users: Uses popular bookmarked places + weather + time
+        요청 좌표를 기준으로 15km 이내 70% + 30km 이내 30% 후보를 만든 뒤 날씨/시간/쿼리를 결합한 벡터 검색을 수행합니다.
+        - 인증 사용자: 개인 선호 벡터 + 컨텍스트 쿼리로 재정렬 (vector-location-hybrid)
+        - 게스트: 동일한 컨텍스트 쿼리로 공개 벡터 검색을 수행하고, 거리 가중 후보와 교집합을 반환합니다.
         """
     )
     @ApiResponses(

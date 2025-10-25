@@ -33,9 +33,9 @@ public class AddressService {
     
     public AddressService(
             WebClient webClient,
-            @Value("${naver.place.clientId:}") String naverClientId,
-            @Value("${naver.place.clientSecret:}") String naverClientSecret,
-            @Value("${google.places.apiKey:}") String googleApiKey
+            @Value("${api.naver.client-id:}") String naverClientId,
+            @Value("${api.naver.client-secret:}") String naverClientSecret,
+            @Value("${api.google.places-api-key:}") String googleApiKey
     ) {
         this.webClient = webClient;
         this.naverClientId = naverClientId;
@@ -57,14 +57,7 @@ public class AddressService {
         
         AddressInfo address;
         try {
-            // For now, use fallback address mapping to avoid API timeout issues
-            // This can be re-enabled once Naver API keys are properly configured
-            logger.info("Using geographic approximation for address lookup");
-            address = createFallbackAddress(latitude, longitude);
-            
-            // Commented out API call until keys are configured
-            /*
-            if (naverClientId != null && !naverClientId.isBlank() && 
+            if (naverClientId != null && !naverClientId.isBlank() &&
                 naverClientSecret != null && !naverClientSecret.isBlank()) {
                 logger.info("Attempting to get address from Naver API");
                 address = getAddressFromNaver(latitude, longitude);
@@ -72,9 +65,8 @@ public class AddressService {
                 logger.info("Naver API keys not configured, using fallback address");
                 address = createFallbackAddress(latitude, longitude);
             }
-            */
         } catch (Exception error) {
-            logger.warn("Failed to get address, using fallback", error);
+            logger.warn("Failed to get address from Naver API, using fallback", error);
             address = createFallbackAddress(latitude, longitude);
         }
         

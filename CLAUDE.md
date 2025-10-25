@@ -53,6 +53,15 @@ docker compose logs -f embedding
 - **OpenAPI Spec**: http://localhost:8080/v3/api-docs
 - **Embedding API**: http://localhost:8001 (when running via Docker)
 
+### Place Recommendation Logic
+- `/api/places/recommendations`, `/api/places/new`, `/api/places/popular`, `/api/places/current-time`, `/api/recommendations/contextual` now require `latitude`/`longitude` query params.
+- Each request pulls 70% of candidates from within 15km and 30% from within 30km of the provided coordinates (Haversine distance via native SQL) before final sorting.
+- Authenticated users get the same geo-weighted pool re-ranked with their vector preference scores for hybrid personalization; `/api/recommendations/contextual` also injects weather/time text into the vector query.
+- Guest contextual requests run the same contextual query through `VectorSearchService.vectorSearchPlaces` and intersect against the geo-mixed candidates.
+- Popular endpoints reorder the blended set by `review_count DESC, rating DESC`; current-time endpoints feed the geo-mixed pool into the LLM prompt.
+- Update or add tests by stubbing `PlaceService#getRecommendations(latitude, longitude)`/`getPopularPlaces(latitude, longitude, limit)` and passing the lat/lon params in MockMvc requests.
+- When touching `/api/recommendations/contextual`, expect the service to: (1) call `PlaceService#getLocationWeightedPlaces`, (2) fetch weather/time via `WeatherService`, (3) build a contextual query string `"<user-query> | weather:<text> | time:<slot>"`, and (4) feed it to `VectorSearchService` (authenticated uses `searchWithVectorSimilarity`, guest uses `vectorSearchPlaces`). Any change to the blend or query format should keep CLAUDE/README/API_GUIDE in sync.
+
 ## Architecture Overview
 
 ### Core Design Patterns

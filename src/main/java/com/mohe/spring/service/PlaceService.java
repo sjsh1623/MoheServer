@@ -11,7 +11,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,39 +36,48 @@ public class PlaceService {
         this.llmService = llmService;
     }
     
-    public PlaceRecommendationsResponse getRecommendations() {
+    public PlaceRecommendationsResponse getRecommendations(Double latitude, Double longitude) {
+        final int recommendationLimit = 20;
+
+        final boolean hasLocation = latitude != null && longitude != null;
+
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             boolean isAuthenticated = auth != null && auth.isAuthenticated() && !auth.getName().equals("anonymousUser");
-            
+
             List<Place> places;
             String recommendationType;
-            
-            if (isAuthenticated) {
-                // Use vector-based personalized recommendations for authenticated users
-                places = vectorSearchService.getPersonalizedRecommendations(auth.getName(), 20);
+
+            if (hasLocation) {
+                places = getLocationWeightedPlaces(latitude, longitude, recommendationLimit);
+                recommendationType = isAuthenticated ? "vector-location-hybrid" : "location-weighted";
+            } else if (isAuthenticated) {
+                places = vectorSearchService.getPersonalizedRecommendations(auth.getName(), recommendationLimit);
                 recommendationType = "vector-personalized";
             } else {
-                // Fall back to rating-based recommendations for unauthenticated users
-                PageRequest pageRequest = PageRequest.of(0, 20);
-                places = placeRepository.findRecommendablePlaces(pageRequest).getContent();
+                places = placeRepository.findRecommendablePlaces(PageRequest.of(0, recommendationLimit)).getContent();
                 recommendationType = "rating-based";
             }
-            
+
+            if (isAuthenticated && hasLocation) {
+                List<Place> personalized = vectorSearchService.getPersonalizedRecommendations(auth.getName(), recommendationLimit * 2);
+                Map<Long, Integer> preferenceScore = buildPreferenceScore(personalized);
+                places.sort(Comparator.comparingInt((Place place) -> preferenceScore.getOrDefault(place.getId(), 0)).reversed());
+            }
+
             List<SimplePlaceDto> placeDtos = places.stream()
-                .map(this::convertToSimplePlaceDto)
+                .map(place -> hasLocation ? convertToSimplePlaceDto(place, latitude, longitude) : convertToSimplePlaceDto(place))
                 .collect(Collectors.toList());
-            
+
             return new PlaceRecommendationsResponse(placeDtos, placeDtos.size(), recommendationType);
         } catch (Exception e) {
-            // Fallback to basic recommendations on error
-            PageRequest pageRequest = PageRequest.of(0, 20);
+            PageRequest pageRequest = PageRequest.of(0, recommendationLimit);
             List<Place> places = placeRepository.findRecommendablePlaces(pageRequest).getContent();
-            
+
             List<SimplePlaceDto> placeDtos = places.stream()
-                .map(this::convertToSimplePlaceDto)
+                .map(place -> hasLocation ? convertToSimplePlaceDto(place, latitude, longitude) : convertToSimplePlaceDto(place))
                 .collect(Collectors.toList());
-            
+
             return new PlaceRecommendationsResponse(placeDtos, placeDtos.size(), "rating-based-fallback");
         }
     }
@@ -221,34 +234,46 @@ public class PlaceService {
         }
     }
     
-    public PlaceListResponse getPopularPlaces(double latitude, double longitude) {
+    public PlaceListResponse getPopularPlaces(double latitude, double longitude, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 50));
+
         try {
-            // Find popular places within 20km radius
-            List<Place> popularPlaces = placeRepository.findPopularPlaces(latitude, longitude, 20.0);
-            
-            List<SimplePlaceDto> placeDtos = popularPlaces.stream()
-                .map(this::convertToSimplePlaceDto)
+            List<Place> weightedPlaces = getLocationWeightedPlaces(latitude, longitude, safeLimit);
+
+            List<Place> popularPlaces = weightedPlaces.stream()
+                .sorted((p1, p2) -> {
+                    int reviewCompare = Integer.compare(
+                        p2.getReviewCount() != null ? p2.getReviewCount() : 0,
+                        p1.getReviewCount() != null ? p1.getReviewCount() : 0
+                    );
+                    if (reviewCompare != 0) {
+                        return reviewCompare;
+                    }
+                    double rating1 = p1.getRating() != null ? p1.getRating().doubleValue() : 0.0;
+                    double rating2 = p2.getRating() != null ? p2.getRating().doubleValue() : 0.0;
+                    return Double.compare(rating2, rating1);
+                })
+                .limit(safeLimit)
                 .collect(Collectors.toList());
-            
-            return new PlaceListResponse(placeDtos, popularPlaces.size(), 1, 1, 20);
+
+            List<SimplePlaceDto> placeDtos = popularPlaces.stream()
+                .map(place -> convertToSimplePlaceDto(place, latitude, longitude))
+                .collect(Collectors.toList());
+
+            return new PlaceListResponse(placeDtos, placeDtos.size(), 1, 1, safeLimit);
         } catch (Exception e) {
-            // Return empty result if database error
-            return new PlaceListResponse(List.of(), 0, 0, 1, 20);
+            return new PlaceListResponse(List.of(), 0, 0, 1, safeLimit);
         }
     }
     
     public CurrentTimeRecommendationsResponse getCurrentTimePlaces(Double latitude, Double longitude, int limit) {
         try {
-            // Get 30 nearby places for LLM processing
             List<Place> candidatePlaces;
-            Double searchDistance = 20.0; // 20km default distance
 
             if (latitude != null && longitude != null) {
-                // Get nearby places ordered by distance
-                candidatePlaces = placeRepository.findNearbyPlacesForLLM(latitude, longitude, searchDistance, 30);
+                candidatePlaces = getLocationWeightedPlaces(latitude, longitude, Math.max(limit, 30));
             } else {
-                // Fallback to general high-rated places
-                PageRequest pageRequest = PageRequest.of(0, 30);
+                PageRequest pageRequest = PageRequest.of(0, Math.max(limit, 30));
                 candidatePlaces = placeRepository.findGeneralPlacesForLLM(pageRequest);
             }
 
@@ -256,7 +281,9 @@ public class PlaceService {
             List<Place> places = generateLLMRecommendations(candidatePlaces, latitude, longitude, limit);
             
             List<SimplePlaceDto> placeDtos = places.stream()
-                .map(this::convertToSimplePlaceDto)
+                .map(place -> latitude != null && longitude != null
+                    ? convertToSimplePlaceDto(place, latitude, longitude)
+                    : convertToSimplePlaceDto(place))
                 .collect(Collectors.toList());
             
             // Create time context with better logic
@@ -278,7 +305,9 @@ public class PlaceService {
             List<Place> places = placeRepository.findRecommendablePlaces(pageRequest).getContent();
             
             List<SimplePlaceDto> placeDtos = places.stream()
-                .map(this::convertToSimplePlaceDto)
+                .map(place -> latitude != null && longitude != null
+                    ? convertToSimplePlaceDto(place, latitude, longitude)
+                    : convertToSimplePlaceDto(place))
                 .collect(Collectors.toList());
             
             java.time.LocalTime now = java.time.LocalTime.now();
@@ -326,7 +355,7 @@ public class PlaceService {
         List<Place> places = placeRepository.findNearbyPlacesForLLM(latitude, longitude, radiusKilometers, safeLimit);
 
         List<SimplePlaceDto> placeDtos = places.stream()
-            .map(this::convertToSimplePlaceDto)
+            .map(place -> convertToSimplePlaceDto(place, latitude, longitude))
             .collect(Collectors.toList());
 
         return new PlaceListResponse(placeDtos, placeDtos.size(), 1, 0, placeDtos.size());
@@ -356,6 +385,151 @@ public class PlaceService {
             })
             .collect(Collectors.toList());
     }
+
+    private Map<Long, Integer> buildPreferenceScore(List<Place> personalized) {
+        Map<Long, Integer> scoreMap = new HashMap<>();
+        if (personalized == null || personalized.isEmpty()) {
+            return scoreMap;
+        }
+
+        int weight = personalized.size();
+        for (Place place : personalized) {
+            if (place != null && place.getId() != null) {
+                scoreMap.putIfAbsent(place.getId(), weight--);
+            }
+        }
+        return scoreMap;
+    }
+
+    /**
+     * Build a geo-weighted candidate list: 70% within 15km, 30% within 30km.
+     */
+    public List<Place> getLocationWeightedPlaces(Double latitude, Double longitude, int limit) {
+        if (latitude == null || longitude == null) {
+            return placeRepository.findRecommendablePlaces(PageRequest.of(0, limit)).getContent();
+        }
+
+        int safeLimit = Math.max(1, limit);
+        int innerTarget = (int) Math.ceil(safeLimit * 0.7);
+        int outerTarget = Math.max(safeLimit - innerTarget, 0);
+
+        LinkedHashMap<Long, Place> selected = new LinkedHashMap<>();
+
+        addPlacesWithinDistance(
+            placeRepository.findNearbyPlacesForLLM(latitude, longitude, 15.0, Math.max(innerTarget * 2, safeLimit)),
+            selected,
+            latitude,
+            longitude,
+            0.0,
+            15.0,
+            innerTarget
+        );
+
+        if (selected.size() < innerTarget) {
+            addPlacesWithinDistance(
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 20.0, Math.max(innerTarget * 3, safeLimit)),
+                selected,
+                latitude,
+                longitude,
+                0.0,
+                15.0,
+                innerTarget
+            );
+        }
+
+        if (outerTarget > 0) {
+            addPlacesWithinDistance(
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 30.0, Math.max(outerTarget * 3, safeLimit)),
+                selected,
+                latitude,
+                longitude,
+                15.0,
+                30.0,
+                innerTarget + outerTarget
+            );
+        }
+
+        if (selected.size() < safeLimit) {
+            addPlacesWithinDistance(
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 30.0, safeLimit * 4),
+                selected,
+                latitude,
+                longitude,
+                0.0,
+                30.0,
+                safeLimit
+            );
+        }
+
+        if (selected.size() < safeLimit) {
+            placeRepository.findRecommendablePlaces(PageRequest.of(0, safeLimit)).getContent()
+                .forEach(place -> selected.putIfAbsent(place.getId(), place));
+        }
+
+        return selected.values().stream()
+            .limit(safeLimit)
+            .collect(Collectors.toList());
+    }
+
+    private void addPlacesWithinDistance(
+        List<Place> candidates,
+        LinkedHashMap<Long, Place> selected,
+        Double latitude,
+        Double longitude,
+        double minDistanceKm,
+        double maxDistanceKm,
+        int targetSize
+    ) {
+        if (candidates == null) {
+            return;
+        }
+
+        for (Place place : candidates) {
+            if (place == null || place.getId() == null) {
+                continue;
+            }
+
+            double distance = calculateDistanceKm(latitude, longitude, place);
+            if (distance == Double.MAX_VALUE) {
+                continue;
+            }
+
+            if (distance > minDistanceKm && distance <= maxDistanceKm) {
+                selected.putIfAbsent(place.getId(), place);
+            }
+
+            if (selected.size() >= targetSize) {
+                break;
+            }
+        }
+    }
+
+    private double calculateDistanceKm(Double latitude, Double longitude, Place place) {
+        if (latitude == null || longitude == null) {
+            return Double.MAX_VALUE;
+        }
+
+        BigDecimal placeLat = place.getLatitude();
+        BigDecimal placeLon = place.getLongitude();
+
+        if (placeLat == null || placeLon == null) {
+            return Double.MAX_VALUE;
+        }
+
+        return haversine(latitude, longitude, placeLat.doubleValue(), placeLon.doubleValue());
+    }
+
+    private double haversine(double lat1, double lon1, double lat2, double lon2) {
+        final double earthRadius = 6371.0; // Kilometers
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+            * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return earthRadius * c;
+    }
     
     private SimplePlaceDto convertToSimplePlaceDto(Place place) {
         String imageUrl = getPlaceImageUrl(place);
@@ -384,6 +558,15 @@ public class PlaceService {
             .orElse(null);
         dto.setDescription(moheDescription);
 
+        return dto;
+    }
+
+    private SimplePlaceDto convertToSimplePlaceDto(Place place, Double latitude, Double longitude) {
+        SimplePlaceDto dto = convertToSimplePlaceDto(place);
+        double distance = calculateDistanceKm(latitude, longitude, place);
+        if (distance != Double.MAX_VALUE) {
+            dto.setDistance(Math.round(distance * 10.0) / 10.0);
+        }
         return dto;
     }
     

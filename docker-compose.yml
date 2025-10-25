@@ -37,6 +37,7 @@ services:
   #     retries: 3
   #     start_period: 180s
 
+  # Production app service
   app:
     build: .
     container_name: mohe-spring-app
@@ -60,6 +61,7 @@ services:
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       CRAWLER_SERVER_URL: http://host.docker.internal:4000
+      KMA_SERVICE_KEY: ${KMA_SERVICE_KEY}
     env_file:
       - .env
     networks:
@@ -67,10 +69,59 @@ services:
     restart: unless-stopped
     volumes:
       - /Users/andrewlim/Desktop/Developer/Mohe/images:/images
+    profiles:
+      - production
+
+  # Development app service with hot reload
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: mohe-spring-app-dev
+    ports:
+      - "8000:8080"
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   embedding:
+    #     condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      EMBEDDING_SERVICE_URL: http://host.docker.internal:8001
+      IMAGE_PROCESSOR_URL: ${IMAGE_PROCESSOR_URL:-http://100.99.236.50:5200}
+      JWT_SECRET: ${JWT_SECRET}
+      KAKAO_API_KEY: ${KAKAO_API_KEY}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CRAWLER_SERVER_URL: http://host.docker.internal:4000
+      KMA_SERVICE_KEY: ${KMA_SERVICE_KEY}
+    env_file:
+      - .env
+    networks:
+      - mohe-network
+    restart: unless-stopped
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src
+      - ./build.gradle:/app/build.gradle
+      - ./settings.gradle:/app/settings.gradle
+      # Mount build directory to preserve compiled classes
+      - gradle-cache:/root/.gradle
+      - build-cache:/app/build
+      # Mount images directory
+      - /Users/andrewlim/Desktop/Developer/Mohe/images:/images
+    profiles:
+      - dev
 
 volumes:
   postgres_data:
   embedding_cache:
+  gradle-cache:  # Cache for Gradle dependencies in dev mode
+  build-cache:   # Cache for compiled classes in dev mode
 
 networks:
   mohe-network:

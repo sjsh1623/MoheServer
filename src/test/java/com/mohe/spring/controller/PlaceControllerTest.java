@@ -47,10 +47,12 @@ class PlaceControllerTest {
     void testGetRecommendationsSuccess() throws Exception {
         // Given
         PlaceRecommendationsResponse response = createMockRecommendationsResponse();
-        when(placeService.getRecommendations()).thenReturn(response);
+        when(placeService.getRecommendations(anyDouble(), anyDouble())).thenReturn(response);
 
         // When & Then
-        mockMvc.perform(get("/api/places/recommendations"))
+        mockMvc.perform(get("/api/places/recommendations")
+                .param("latitude", "37.5665")
+                .param("longitude", "126.9780"))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -170,13 +172,14 @@ class PlaceControllerTest {
     void testGetPopularPlacesSuccess() throws Exception {
         // Given
         PlaceListResponse response = createMockPlaceListResponse();
-        when(placeService.getPopularPlaces(anyDouble(), anyDouble()))
+        when(placeService.getPopularPlaces(anyDouble(), anyDouble(), anyInt()))
             .thenReturn(response);
 
         // When & Then
         mockMvc.perform(get("/api/places/popular")
                 .param("latitude", "37.5665")
-                .param("longitude", "126.9780"))
+                .param("longitude", "126.9780")
+                .param("limit", "20"))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -256,10 +259,12 @@ class PlaceControllerTest {
     void testGetNewRecommendationsSuccess() throws Exception {
         // Given
         PlaceRecommendationsResponse response = createMockRecommendationsResponse();
-        when(placeService.getRecommendations()).thenReturn(response);
+        when(placeService.getRecommendations(anyDouble(), anyDouble())).thenReturn(response);
 
         // When & Then
-        mockMvc.perform(get("/api/places/new"))
+        mockMvc.perform(get("/api/places/new")
+                .param("latitude", "37.5665")
+                .param("longitude", "126.9780"))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
