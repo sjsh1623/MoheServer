@@ -2,6 +2,8 @@ package com.mohe.spring.service;
 
 import com.mohe.spring.dto.*;
 import com.mohe.spring.entity.Place;
+import com.mohe.spring.entity.PlaceImage;
+import com.mohe.spring.repository.PlaceImageRepository;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.repository.BookmarkRepository;
 import com.mohe.spring.service.LlmService;
@@ -28,12 +30,16 @@ public class PlaceService {
     private final VectorSearchService vectorSearchService;
     private final BookmarkRepository bookmarkRepository;
     private final LlmService llmService;
+    private final PlaceImageRepository placeImageRepository;
 
-    public PlaceService(PlaceRepository placeRepository, VectorSearchService vectorSearchService, BookmarkRepository bookmarkRepository, LlmService llmService) {
+    public PlaceService(PlaceRepository placeRepository, VectorSearchService vectorSearchService,
+                        BookmarkRepository bookmarkRepository, LlmService llmService,
+                        PlaceImageRepository placeImageRepository) {
         this.placeRepository = placeRepository;
         this.vectorSearchService = vectorSearchService;
         this.bookmarkRepository = bookmarkRepository;
         this.llmService = llmService;
+        this.placeImageRepository = placeImageRepository;
     }
     
     public PlaceRecommendationsResponse getRecommendations(Double latitude, Double longitude) {
@@ -371,14 +377,14 @@ public class PlaceService {
 
         return places.stream()
             .map(place -> {
-                // Get primary image
-                String imageUrl = getPlaceImageUrl(place);
+                List<String> imageUrls = resolvePlaceImages(place);
+                String imageUrl = imageUrls.isEmpty() ? null : imageUrls.get(0);
 
                 return new PlaceDto.PlaceResponse(
                     place.getId(),
                     place.getName(),
                     imageUrl,
-                    List.of(),
+                    imageUrls,
                     place.getRating() != null ? place.getRating().doubleValue() : 4.0,
                     place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "카테고리 없음"
                 );
@@ -532,7 +538,8 @@ public class PlaceService {
     }
     
     private SimplePlaceDto convertToSimplePlaceDto(Place place) {
-        String imageUrl = getPlaceImageUrl(place);
+        List<String> imageUrls = resolvePlaceImages(place);
+        String primaryImage = imageUrls.isEmpty() ? null : imageUrls.get(0);
 
         SimplePlaceDto dto = new SimplePlaceDto(
             place.getId().toString(),
@@ -540,7 +547,7 @@ public class PlaceService {
             place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "기타",
             place.getRating() != null ? place.getRating().doubleValue() : 4.0,
             place.getRoadAddress(),
-            imageUrl
+            primaryImage
         );
 
         // Set additional fields
@@ -549,6 +556,7 @@ public class PlaceService {
         dto.setDistance(0.0); // TODO: Calculate actual distance
         dto.setIsBookmarked(false); // TODO: Check if bookmarked by current user
         dto.setIsDemo(false);
+        dto.setImages(imageUrls);
 
         // Set mohe_description only
         String moheDescription = place.getDescriptions().stream()
@@ -569,10 +577,57 @@ public class PlaceService {
         }
         return dto;
     }
-    
+
+    private List<String> resolvePlaceImages(Place place) {
+        if (place == null) {
+            return List.of();
+        }
+
+        if (place.getImages() != null && !place.getImages().isEmpty()) {
+            List<String> urls = place.getImages().stream()
+                .sorted(Comparator.comparing(img -> img.getOrderIndex() != null ? img.getOrderIndex() : Integer.MAX_VALUE))
+                .map(PlaceImage::getUrl)
+                .filter(this::isValidImageUrl)
+                .distinct()
+                .collect(Collectors.toList());
+            if (!urls.isEmpty()) {
+                return urls;
+            }
+        }
+
+        return getImageUrls(place.getId());
+    }
+
+    public List<String> getImageUrls(Long placeId) {
+        if (placeId == null) {
+            return List.of();
+        }
+
+        return placeImageRepository.findByPlaceIdOrderByOrderIndexAsc(placeId).stream()
+            .map(PlaceImage::getUrl)
+            .filter(this::isValidImageUrl)
+            .distinct()
+            .collect(Collectors.toList());
+    }
+
+    public String getPrimaryImageUrl(Long placeId) {
+        if (placeId == null) {
+            return null;
+        }
+
+        return placeImageRepository.findFirstByPlaceIdOrderByOrderIndexAsc(placeId)
+            .map(PlaceImage::getUrl)
+            .filter(this::isValidImageUrl)
+            .orElse(null);
+    }
+
+    private boolean isValidImageUrl(String url) {
+        return url != null && !url.isBlank();
+    }
+
     private String getPlaceImageUrl(Place place) {
-        // Return null since gallery field is removed
-        return null;
+        List<String> urls = resolvePlaceImages(place);
+        return urls.isEmpty() ? null : urls.get(0);
     }
 
     /**
@@ -620,7 +675,7 @@ public class PlaceService {
                 .map(Place::getName)
                 .collect(Collectors.toList());
 
-            OllamaRecommendationResponse llmResponse = llmService.generatePlaceRecommendations(prompt, placeNames);
+            LlmRecommendationResponse llmResponse = llmService.generatePlaceRecommendations(prompt, placeNames);
 
             if (llmResponse != null && llmResponse.getRecommendedPlaces() != null && !llmResponse.getRecommendedPlaces().isEmpty()) {
                 // Map LLM recommendations back to Place objects

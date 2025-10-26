@@ -106,7 +106,7 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - **dto/**: Data transfer objects with validation annotations
 - **entity/**: JPA entities representing database tables
 - **repository/**: Spring Data JPA repositories (with custom queries for vector search)
-- **service/**: Business logic layer (including OllamaService for AI integration)
+- **service/**: Business logic layer (including OpenAI integration for AI features)
 - **security/**: JWT handling, user authentication, custom filters
 - **exception/**: Global exception handler for consistent error responses
 
