@@ -70,9 +70,10 @@ OPENAI_API_KEY: test-openai-api-key
 GEMINI_API_KEY: test-gemini-api-key
 
 llm:
-  ollama:
-    base-url: http://localhost:11434
-    model: test-model
+  openai:
+    api-key: test-openai-api-key
+    model: gpt-3.5-turbo
+    active: false
 
 app:
   gemini:

@@ -145,19 +145,10 @@ public class DescriptionTestController {
                     log.info("  📊 Cached tokens: {}", descriptionResult.cachedTokens());
                     log.info("  🔑 Keywords: {}", String.join(", ", descriptionResult.keywords()));
 
-                    // Step 4: Generate keywords with embedding service
-                    log.info("  🔑 Generating keywords...");
-                    String[] keywords = keywordEmbeddingService.generateKeywords(
-                        textForAI,
-                        categoryStr,
-                        place.getPetFriendly() != null ? place.getPetFriendly() : false
-                    );
-
                     // Populate result
                     placeResult.put("success", true);
                     placeResult.put("description", descriptionResult.description());
                     placeResult.put("openaiKeywords", descriptionResult.keywords());
-                    placeResult.put("generatedKeywords", List.of(keywords));
                     placeResult.put("cachedTokens", descriptionResult.cachedTokens());
                     placeResult.put("category", categoryStr);
                     placeResult.put("petFriendly", place.getPetFriendly());

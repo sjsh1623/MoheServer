@@ -2,74 +2,112 @@ package com.mohe.spring.service;
 
 import com.mohe.spring.dto.ContextualRecommendationResponse;
 import com.mohe.spring.dto.PlaceDto;
-import com.mohe.spring.dto.VectorSimilarityResponse;
 import com.mohe.spring.entity.Place;
+import com.mohe.spring.entity.PlaceKeywordEmbedding;
+import com.mohe.spring.repository.PlaceKeywordEmbeddingRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class ContextualRecommendationService {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(ContextualRecommendationService.class);
-    
+
     private final WeatherService weatherService;
     private final PlaceService placeService;
     private final VectorSearchService vectorSearchService;
-    
-    @Autowired
+    private final KeywordEmbeddingService keywordEmbeddingService;
+    private final PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository;
+
     public ContextualRecommendationService(
             WeatherService weatherService,
             PlaceService placeService,
-            VectorSearchService vectorSearchService) {
+            VectorSearchService vectorSearchService,
+            KeywordEmbeddingService keywordEmbeddingService,
+            PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository) {
         this.weatherService = weatherService;
         this.placeService = placeService;
         this.vectorSearchService = vectorSearchService;
+        this.keywordEmbeddingService = keywordEmbeddingService;
+        this.placeKeywordEmbeddingRepository = placeKeywordEmbeddingRepository;
     }
-    
-    /**
-     * Get contextual recommendations based on user authentication status
-     */
+
     public ContextualRecommendationResponse getContextualRecommendations(
             String query, Double lat, Double lon, int limit) {
-        
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean isAuthenticated = auth != null && auth.isAuthenticated() && !auth.getName().equals("anonymousUser");
 
         double safeLat = lat != null ? lat : 37.5665;
         double safeLon = lon != null ? lon : 126.9780;
         int safeLimit = Math.max(1, Math.min(limit, 20));
 
-        // Build geo-blended candidate pool once (15km 70% + 30km 30%)
-        List<Place> geoCandidates = placeService.getLocationWeightedPlaces(safeLat, safeLon, Math.max(safeLimit, 20));
+        var auth = org.springframework.security.core.context.SecurityContextHolder
+            .getContext()
+            .getAuthentication();
+        boolean isAuthenticated = auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName());
+        String userEmail = isAuthenticated ? auth.getName() : null;
+
+        List<Place> geoCandidates = placeService.getLocationWeightedPlaces(
+            safeLat,
+            safeLon,
+            Math.max(safeLimit, 40)
+        );
         LinkedHashMap<Long, Place> candidateMap = geoCandidates.stream()
-            .collect(Collectors.toMap(Place::getId, place -> place, (existing, replacement) -> existing, LinkedHashMap::new));
+            .collect(Collectors.toMap(
+                Place::getId,
+                place -> place,
+                (existing, replacement) -> existing,
+                LinkedHashMap::new
+            ));
 
         WeatherData weatherData = fetchWeatherData(safeLat, safeLon);
         String weatherCondition = weatherData != null ? weatherData.getConditionText() : "날씨 정보를 가져올 수 없음";
         String timeOfDay = weatherData != null ? weatherData.getDaypart() : getCurrentTimeOfDay();
-        String contextualQuery = buildContextualQuery(query, weatherCondition, timeOfDay);
+
+        List<String> contextKeywords = buildContextKeywords(query, weatherCondition, timeOfDay);
+        List<Long> contextMatchedIds = findContextualPlaceIds(contextKeywords, candidateMap.keySet(), Math.max(safeLimit * 4, 60));
+        List<Place> contextRankedPlaces = contextMatchedIds.stream()
+            .map(candidateMap::get)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+        if (contextRankedPlaces.isEmpty()) {
+            contextRankedPlaces = new ArrayList<>(candidateMap.values());
+        }
 
         List<Place> prioritized;
         String algorithmSource;
 
         if (isAuthenticated) {
-            prioritized = getPersonalizedVectorBlend(contextualQuery, auth.getName(), candidateMap, safeLimit);
-            algorithmSource = "vector-location-hybrid";
+            List<Long> reRankedIds = vectorSearchService.rankCandidatePlaces(
+                userEmail,
+                contextRankedPlaces.stream().map(Place::getId).collect(Collectors.toList()),
+                0.25,
+                Math.max(safeLimit * 2, 40)
+            );
+            prioritized = reRankedIds.stream()
+                .map(candidateMap::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+            if (prioritized.isEmpty()) {
+                prioritized = contextRankedPlaces;
+                algorithmSource = "context-embedding-fallback";
+            } else {
+                algorithmSource = "context-embedding+user-vector";
+            }
         } else {
-            prioritized = getGuestVectorBlend(contextualQuery, candidateMap, safeLimit);
-            algorithmSource = "vector-location-public";
+            prioritized = contextRankedPlaces;
+            algorithmSource = "context-embedding-public";
         }
 
         List<Place> finalPlaces = mergeWithFallback(prioritized, candidateMap.values(), safeLimit);
@@ -77,14 +115,16 @@ public class ContextualRecommendationService {
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("weather", weatherCondition);
         context.put("timeOfDay", timeOfDay);
-        context.put("query", contextualQuery);
+        context.put("query", query != null ? query : "");
+        context.put("keywords", contextKeywords);
         context.put("blendStrategy", "15km:70% + 30km:30%");
         context.put("algorithm", algorithmSource);
         context.put("location", Map.of("latitude", safeLat, "longitude", safeLon));
         context.put("limit", safeLimit);
+        context.put("contextMatches", contextMatchedIds.size());
 
         String contextMessage = String.format(
-            "%s · %s 조건을 반영해 가까운 후보를 만들고 벡터 유사도로 추린 결과입니다.",
+            "%s · %s 조건을 반영해 가까운 후보를 벡터로 거른 결과입니다.",
             weatherCondition,
             mapTimeContext(timeOfDay)
         );
@@ -102,72 +142,89 @@ public class ContextualRecommendationService {
         );
     }
 
-    private List<Place> getPersonalizedVectorBlend(String contextualQuery, String username,
-                                                   Map<Long, Place> candidateMap, int limit) {
-        List<Place> prioritized = new ArrayList<>();
-        LinkedHashSet<Long> seen = new LinkedHashSet<>();
-
-        try {
-            VectorSimilarityResponse response = vectorSearchService.searchWithVectorSimilarity(
-                contextualQuery,
-                username,
-                0.25,
-                Math.max(limit * 3, 30)
-            );
-
-            if (response != null && response.getSimilarPlaces() != null) {
-                response.getSimilarPlaces().forEach(similarPlace -> {
-                    Long placeId = similarPlace.getPlace().getId();
-                    if (candidateMap.containsKey(placeId) && seen.add(placeId)) {
-                        prioritized.add(candidateMap.get(placeId));
-                    }
-                });
-            }
-        } catch (Exception e) {
-            logger.warn("Vector similarity search failed for user {}: {}", username, e.getMessage());
+    private List<Long> findContextualPlaceIds(List<String> keywords, Collection<Long> allowedPlaceIds, int limit) {
+        if (keywords.isEmpty() || allowedPlaceIds.isEmpty()) {
+            return List.of();
         }
 
-        return prioritized;
-    }
-
-    private List<Place> getGuestVectorBlend(String contextualQuery,
-                                            Map<Long, Place> candidateMap,
-                                            int limit) {
-        List<Place> prioritized = new ArrayList<>();
-        LinkedHashSet<Long> seen = new LinkedHashSet<>();
-
-        try {
-            List<Place> vectorResults = vectorSearchService.vectorSearchPlaces(
-                contextualQuery,
-                Math.max(limit * 3, 30)
-            );
-
-            for (Place place : vectorResults) {
-                if (place == null || place.getId() == null) {
-                    continue;
-                }
-                if (candidateMap.containsKey(place.getId()) && seen.add(place.getId())) {
-                    prioritized.add(candidateMap.get(place.getId()));
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Guest vector search failed: {}", e.getMessage());
+        float[] embedding = keywordEmbeddingService.vectorizeKeywords(keywords.toArray(String[]::new));
+        if (isZeroVector(embedding)) {
+            return List.of();
         }
 
-        return prioritized;
+        String pgVectorLiteral = toPgVectorLiteral(embedding);
+        List<PlaceKeywordEmbedding> similarEmbeddings;
+        try {
+            similarEmbeddings = placeKeywordEmbeddingRepository.findSimilarByEmbedding(pgVectorLiteral, Math.max(limit * 2, 80));
+        } catch (Exception e) {
+            logger.warn("Failed to run contextual embedding search: {}", e.getMessage());
+            return List.of();
+        }
+
+        Set<Long> allowed = allowedPlaceIds instanceof Set
+            ? (Set<Long>) allowedPlaceIds
+            : new java.util.HashSet<>(allowedPlaceIds);
+
+        LinkedHashSet<Long> ordered = new LinkedHashSet<>();
+        for (PlaceKeywordEmbedding embeddingRow : similarEmbeddings) {
+            Long placeId = embeddingRow.getPlaceId();
+            if (allowed.contains(placeId)) {
+                ordered.add(placeId);
+                if (ordered.size() >= limit) {
+                    break;
+                }
+            }
+        }
+        return new ArrayList<>(ordered);
     }
 
-    private List<Place> mergeWithFallback(List<Place> prioritized, Iterable<Place> fallbackPool, int limit) {
+    private List<String> buildContextKeywords(String query, String weatherCondition, String timeOfDay) {
+        List<String> tokens = new ArrayList<>();
+        if (query != null && !query.isBlank()) {
+            tokens.addAll(Arrays.stream(query.split("\\s+"))
+                .filter(token -> token != null && !token.isBlank())
+                .map(String::trim)
+                .limit(5)
+                .collect(Collectors.toList()));
+        }
+
+        String mappedTime = mapTimeContext(timeOfDay);
+        tokens.add(mappedTime);
+
+        if (weatherCondition != null && !weatherCondition.isBlank()) {
+            tokens.add(weatherCondition);
+            String normalizedWeather = weatherCondition.toLowerCase(Locale.KOREAN);
+            if (normalizedWeather.contains("비")) {
+                tokens.addAll(List.of("실내", "우중", "rainy", "카페"));
+            } else if (normalizedWeather.contains("더움") || normalizedWeather.contains("hot")) {
+                tokens.addAll(List.of("시원한", "에어컨", "실내"));
+            } else if (normalizedWeather.contains("추움") || normalizedWeather.contains("cold")) {
+                tokens.addAll(List.of("따뜻한", "실내", "tea"));
+            } else if (normalizedWeather.contains("맑")) {
+                tokens.addAll(List.of("야외", "산책", "공원"));
+            }
+        }
+
+        if (mappedTime.equals("야간") || mappedTime.equals("밤")) {
+            tokens.addAll(List.of("야경", "라운지"));
+        } else if (mappedTime.equals("아침")) {
+            tokens.add("브런치");
+        }
+
+        return tokens.stream()
+            .filter(token -> token != null && !token.isBlank())
+            .collect(Collectors.toList());
+    }
+
+    private List<Place> mergeWithFallback(List<Place> prioritized, Collection<Place> fallbackPool, int limit) {
         LinkedHashMap<Long, Place> ordered = new LinkedHashMap<>();
         prioritized.forEach(place -> ordered.putIfAbsent(place.getId(), place));
-
         for (Place place : fallbackPool) {
             if (ordered.size() >= limit) {
                 break;
             }
             ordered.putIfAbsent(place.getId(), place);
         }
-
         List<Place> merged = new ArrayList<>(ordered.values());
         if (merged.size() > limit) {
             return merged.subList(0, limit);
@@ -184,16 +241,63 @@ public class ContextualRecommendationService {
         }
     }
 
-    private String buildContextualQuery(String query, String weatherCondition, String timeOfDay) {
-        String base = (query != null && !query.isBlank()) ? query.trim() : "지금 가기 좋은 장소";
-        return String.format("%s | weather:%s | time:%s", base, weatherCondition, mapTimeContext(timeOfDay));
+    private String toPgVectorLiteral(float[] embedding) {
+        StringBuilder builder = new StringBuilder("[");
+        for (int i = 0; i < embedding.length; i++) {
+            if (i > 0) {
+                builder.append(',');
+            }
+            builder.append(String.format(Locale.US, "%.6f", embedding[i]));
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private boolean isZeroVector(float[] embedding) {
+        if (embedding == null || embedding.length == 0) {
+            return true;
+        }
+        double sum = 0;
+        for (float v : embedding) {
+            sum += Math.abs(v);
+        }
+        return sum < 1e-3;
+    }
+
+    private PlaceDto.PlaceResponse convertToPlaceResponse(Place place) {
+        String category = (place.getCategory() != null && !place.getCategory().isEmpty())
+            ? place.getCategory().get(0)
+            : "기타";
+        double rating = place.getRating() != null ? place.getRating().doubleValue() : 4.0;
+        List<String> imageUrls = placeService.getImageUrls(place.getId());
+        String imageUrl = imageUrls.isEmpty() ? null : imageUrls.get(0);
+        PlaceDto.PlaceResponse response = new PlaceDto.PlaceResponse(
+            place.getId(),
+            place.getName(),
+            imageUrl,
+            imageUrls,
+            rating,
+            category
+        );
+        if (place.getLatitude() != null && place.getLongitude() != null) {
+            response.setDistance(0.0);
+        }
+        return response;
+    }
+
+    private String getCurrentTimeOfDay() {
+        java.time.LocalTime now = java.time.LocalTime.now();
+        int hour = now.getHour();
+        if (hour >= 6 && hour < 12) return "아침";
+        if (hour >= 12 && hour < 18) return "오후";
+        if (hour >= 18 && hour < 22) return "저녁";
+        return "밤";
     }
 
     private String mapTimeContext(String raw) {
         if (raw == null || raw.isBlank()) {
             return getCurrentTimeOfDay();
         }
-
         return switch (raw.toLowerCase()) {
             case "morning", "아침" -> "아침";
             case "afternoon", "오후" -> "오후";
@@ -203,35 +307,6 @@ public class ContextualRecommendationService {
         };
     }
 
-    private PlaceDto.PlaceResponse convertToPlaceResponse(Place place) {
-        String category = (place.getCategory() != null && !place.getCategory().isEmpty())
-            ? place.getCategory().get(0)
-            : "기타";
-
-        double rating = place.getRating() != null ? place.getRating().doubleValue() : 4.0;
-
-        return new PlaceDto.PlaceResponse(
-            place.getId(),
-            place.getName(),
-            null,
-            List.of(),
-            rating,
-            category
-        );
-    }
-    
-    private String getCurrentTimeOfDay() {
-        LocalTime now = LocalTime.now();
-        int hour = now.getHour();
-        if (hour >= 6 && hour < 12) return "아침";
-        if (hour >= 12 && hour < 18) return "오후";
-        if (hour >= 18 && hour < 22) return "저녁";
-        return "밤";
-    }
-    
-    /**
-     * Get weather-based recommendations
-     */
     public ContextualRecommendationResponse getWeatherBasedRecommendations(double latitude, double longitude) {
         return getContextualRecommendations(null, latitude, longitude, 20);
     }

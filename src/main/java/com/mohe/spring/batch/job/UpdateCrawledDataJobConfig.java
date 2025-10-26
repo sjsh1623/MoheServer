@@ -132,24 +132,24 @@ public class UpdateCrawledDataJobConfig {
             }
 
             // Fallback logic: AI summary -> original description -> reviews
-            String textForOllama;
+            String textForKeywords;
             if (aiSummaryText != null && !aiSummaryText.trim().isEmpty()) {
-                textForOllama = aiSummaryText;
+                textForKeywords = aiSummaryText;
                 System.out.println("✅ Using AI summary for '" + place.getName() + "'");
             } else if (crawledData.getOriginalDescription() != null && !crawledData.getOriginalDescription().trim().isEmpty()) {
-                textForOllama = crawledData.getOriginalDescription();
+                textForKeywords = crawledData.getOriginalDescription();
                 System.out.println("⚠️ No AI summary for '" + place.getName() + "', using original description instead");
             } else if (crawledData.getReviews() != null && !crawledData.getReviews().isEmpty()) {
                 // Use first 3 reviews as description source
                 int reviewCount = Math.min(crawledData.getReviews().size(), 3);
-                textForOllama = String.join("\n", crawledData.getReviews().subList(0, reviewCount));
+                textForKeywords = String.join("\n", crawledData.getReviews().subList(0, reviewCount));
                 System.out.println("⚠️ No AI summary or original description for '" + place.getName() + "', using reviews instead");
             } else {
-                textForOllama = null;
+                textForKeywords = null;
             }
 
             // Validate that we have some text to work with
-            if (textForOllama == null || textForOllama.trim().isEmpty()) {
+            if (textForKeywords == null || textForKeywords.trim().isEmpty()) {
                 System.err.println("⚠️ Lack of information for '" + place.getName() + "' - no description text available (AI summary, original description, and reviews are all empty)");
                 // Crawling succeeded but lack of information -> crawler_found = true, ready = false
                 place.setCrawlerFound(true);
@@ -184,13 +184,13 @@ public class UpdateCrawledDataJobConfig {
             System.out.println("✅ OpenAI description generated for '" + place.getName() + "': " + moheDescription);
             System.out.println("✅ OpenAI keywords extracted for '" + place.getName() + "': " + String.join(", ", keywords));
 
-            // CRITICAL: ollama_description must NEVER be empty
-            // If Ollama generation failed, use the original text as fallback
+            // CRITICAL: mohe_description must NEVER be empty
+            // If OpenAI generation failed, use the original text as fallback
             if (moheDescription == null || moheDescription.trim().isEmpty() || moheDescription.equals("AI 설명을 생성할 수 없습니다.")) {
                 System.err.println("⚠️ OpenAI description generation failed for '" + place.getName() + "', using fallback description");
 
                 // Use original description as fallback, truncate to reasonable length if needed
-                String fallbackDescription = textForOllama;
+                String fallbackDescription = textForKeywords;
                 if (fallbackDescription.length() > 150) {
                     // Try to find a good sentence boundary
                     int lastPeriod = Math.max(fallbackDescription.substring(0, 150).lastIndexOf('.'),
@@ -223,20 +223,23 @@ public class UpdateCrawledDataJobConfig {
             // Validate keywords from OpenAI response - check if empty or invalid
             if (keywords.isEmpty() || keywords.size() != 9) {
                 System.err.println("⚠️ AI issue for '" + place.getName() + "' - Keyword extraction failed (expected 9, got " + keywords.size() + ")");
-                // Fallback: generate keywords using embedding service
-                System.out.println("🔑 Falling back to keyword embedding service for '" + place.getName() + "'...");
-                String[] fallbackKeywords = keywordEmbeddingService.generateKeywords(
-                    textForOllama,
-                    categoryStr,
-                    place.getPetFriendly() != null ? place.getPetFriendly() : false
-                );
-                keywords = Arrays.asList(fallbackKeywords);
+                // Fallback: use basic keywords from category and place name
+                System.out.println("🔑 Using fallback keywords for '" + place.getName() + "'...");
+                List<String> fallbackKeywords = new ArrayList<>();
+                if (place.getCategory() != null && !place.getCategory().isEmpty()) {
+                    fallbackKeywords.addAll(place.getCategory());
+                }
+                // Pad with generic keywords if needed
+                while (fallbackKeywords.size() < 9) {
+                    fallbackKeywords.add("장소");
+                }
+                keywords = fallbackKeywords.subList(0, 9);
                 System.out.println("✅ Fallback keywords generated for '" + place.getName() + "': " + String.join(", ", keywords));
 
                 // Validate fallback keywords - check if all are default placeholders
                 boolean allKeywordsAreDefault = true;
-                for (int i = 0; i < fallbackKeywords.length; i++) {
-                    if (!fallbackKeywords[i].equals("키워드" + (i + 1))) {
+                for (int i = 0; i < keywords.size(); i++) {
+                    if (!keywords.get(i).equals("장소")) {
                         allKeywordsAreDefault = false;
                         break;
                     }

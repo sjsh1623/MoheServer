@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -127,7 +128,7 @@ public class ImageUploadController {
             String imageUrl = request.getImageUrls().get(i);
             String fileName = generateFileName(request.getPlaceId(), request.getPlaceName(), i + 1);
 
-            try (InputStream in = new URL(imageUrl).openStream()) {
+            try (InputStream in = URI.create(imageUrl).toURL().openStream()) {
                 Path targetPath = imageStorageLocation.resolve(fileName);
                 Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
                 String savedPath = "/images/" + fileName;

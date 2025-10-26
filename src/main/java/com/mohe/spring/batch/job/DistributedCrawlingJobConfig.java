@@ -28,6 +28,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -164,26 +165,26 @@ public class DistributedCrawlingJobConfig {
                 description.setPlace(place);
                 description.setOriginalDescription(crawledData.getOriginalDescription());
 
-                // Determine text for Ollama
+                // Determine text for keywords
                 String aiSummaryText = "";
                 if (crawledData.getAiSummary() != null && !crawledData.getAiSummary().isEmpty()) {
                     aiSummaryText = String.join("\n", crawledData.getAiSummary());
                 }
 
-                String textForOllama;
+                String textForKeywords;
                 if (aiSummaryText != null && !aiSummaryText.trim().isEmpty()) {
-                    textForOllama = aiSummaryText;
+                    textForKeywords = aiSummaryText;
                 } else if (crawledData.getOriginalDescription() != null &&
                            !crawledData.getOriginalDescription().trim().isEmpty()) {
-                    textForOllama = crawledData.getOriginalDescription();
+                    textForKeywords = crawledData.getOriginalDescription();
                 } else if (crawledData.getReviews() != null && !crawledData.getReviews().isEmpty()) {
                     int reviewCount = Math.min(crawledData.getReviews().size(), 3);
-                    textForOllama = String.join("\n", crawledData.getReviews().subList(0, reviewCount));
+                    textForKeywords = String.join("\n", crawledData.getReviews().subList(0, reviewCount));
                 } else {
-                    textForOllama = null;
+                    textForKeywords = null;
                 }
 
-                if (textForOllama == null || textForOllama.trim().isEmpty()) {
+                if (textForKeywords == null || textForKeywords.trim().isEmpty()) {
                     System.err.println("⚠️ No description available for " + place.getName());
                     place.setCrawlerFound(true);
                 place.setReady(false);
@@ -216,7 +217,7 @@ public class DistributedCrawlingJobConfig {
                 // Fallback if generation failed
                 if (moheDescription == null || moheDescription.trim().isEmpty() ||
                     moheDescription.equals("AI 설명을 생성할 수 없습니다.")) {
-                    String fallback = textForOllama;
+                    String fallback = textForKeywords;
                     if (fallback.length() > 150) {
                         fallback = fallback.substring(0, 147).trim() + "...";
                     }
@@ -234,18 +235,21 @@ public class DistributedCrawlingJobConfig {
                 if (keywords.isEmpty() || keywords.size() != 9) {
                     System.err.println("⚠️ AI issue for '" + place.getName() +
                         "' - Keyword extraction failed (expected 9, got " + keywords.size() + ")");
-                    // Fallback: generate keywords using embedding service
-                    String[] fallbackKeywords = keywordEmbeddingService.generateKeywords(
-                        textForOllama,
-                        categoryStr,
-                        place.getPetFriendly() != null ? place.getPetFriendly() : false
-                    );
-                    keywords = Arrays.asList(fallbackKeywords);
+                    // Fallback: use basic keywords from category
+                    List<String> fallbackKeywords = new ArrayList<>();
+                    if (place.getCategory() != null && !place.getCategory().isEmpty()) {
+                        fallbackKeywords.addAll(place.getCategory());
+                    }
+                    // Pad with generic keywords if needed
+                    while (fallbackKeywords.size() < 9) {
+                        fallbackKeywords.add("장소");
+                    }
+                    keywords = fallbackKeywords.subList(0, 9);
 
                     // Validate fallback keywords - check if all are default placeholders
                     boolean allKeywordsAreDefault = true;
-                    for (int i = 0; i < fallbackKeywords.length; i++) {
-                        if (!fallbackKeywords[i].equals("키워드" + (i + 1))) {
+                    for (String keyword : keywords) {
+                        if (!keyword.equals("장소")) {
                             allKeywordsAreDefault = false;
                             break;
                         }
