@@ -221,6 +221,18 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     Page<Long> findPlaceIdsForBatchProcessing(Pageable pageable);
 
     /**
+     * Find place IDs where crawlerFound = true (for image update)
+     * Returns only IDs to avoid pagination issues with collection fetching
+     * Step 1: Get IDs with pagination (efficient)
+     */
+    @Query("""
+        SELECT p.id FROM Place p
+        WHERE p.crawlerFound = true
+        ORDER BY p.id ASC
+    """)
+    Page<Long> findPlaceIdsForImageUpdate(Pageable pageable);
+
+    /**
      * Find a single Place by ID with all collections eagerly loaded
      * Step 2: Load full entity with collections (no pagination issue)
      * Note: Split into multiple queries to avoid MultipleBagFetchException

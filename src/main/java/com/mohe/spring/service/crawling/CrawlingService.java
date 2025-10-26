@@ -8,6 +8,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -16,6 +17,7 @@ import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -68,5 +70,50 @@ public class CrawlingService {
                     errorResponse.setData(null);
                     return Mono.just(errorResponse);
                 });
+    }
+
+    /**
+     * 장소 이미지만 크롤링
+     *
+     * @param placeName 장소명
+     * @param location 주소
+     * @return 이미지 URL 리스트를 포함한 Map
+     */
+    public Map<String, Object> fetchPlaceImages(String placeName, String location) {
+        try {
+            Map<String, String> requestBody = new HashMap<>();
+            requestBody.put("searchQuery", String.format("%s %s", location != null ? location : "", placeName).trim());
+            requestBody.put("placeName", placeName);
+
+            Map<String, Object> response = webClient.post()
+                    .uri("/api/v1/place/images")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block(); // Synchronous call for batch processing
+
+            if (response == null || !Boolean.TRUE.equals(response.get("success"))) {
+                return null;
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) response.get("data");
+            if (data == null) {
+                return null;
+            }
+
+            @SuppressWarnings("unchecked")
+            var imageUrls = (List<String>) data.getOrDefault("image_urls", data.get("images"));
+
+            if (imageUrls == null || imageUrls.isEmpty()) {
+                return null;
+            }
+
+            // Normalize key so downstream processors can always find "images"
+            data.put("images", imageUrls);
+            return data;
+        } catch (Exception e) {
+            return null; // Skip this place on error
+        }
     }
 }

@@ -39,7 +39,7 @@ public class AddressController {
         description = """
             위도/경도 좌표를 한국 주소로 변환합니다.
 
-            - ENV Mock 위치가 설정되어 있으면 해당 좌표 사용 (파라미터 무시)
+            - 요청에 좌표가 없고 ENV Mock 위치가 설정되어 있으면 해당 기본 좌표 사용
             - Naver Reverse Geocoding API 우선 사용
             - API 실패 시 좌표 형식으로 fallback
             - 1시간 캐싱으로 성능 최적화
@@ -84,36 +84,24 @@ public class AddressController {
         }
     )
     public ResponseEntity<ApiResponse<AddressInfo>> reverseGeocode(
-            @Parameter(description = "위도 (optional when MOCK_LATITUDE is set)", required = false, example = "37.5665")
+            @Parameter(description = "위도 (미지정 시 ENV 기본값 사용)", required = false, example = "37.5665")
             @RequestParam(required = false) Double lat,
-            @Parameter(description = "경도 (optional when MOCK_LONGITUDE is set)", required = false, example = "126.9780")
+            @Parameter(description = "경도 (미지정 시 ENV 기본값 사용)", required = false, example = "126.9780")
             @RequestParam(required = false) Double lon,
             HttpServletRequest httpRequest) {
         try {
-            // ENV에 위치가 설정되어 있으면 강제로 사용 (파라미터 무시)
-            double latitude;
-            double longitude;
-
-            if (locationProperties.getDefaultLatitude() != null && locationProperties.getDefaultLongitude() != null) {
-                // ENV에 설정된 값 강제 사용 (개발 환경 테스트용)
-                latitude = locationProperties.getDefaultLatitude();
-                longitude = locationProperties.getDefaultLongitude();
-                logger.info("Using configured mock location from ENV: lat={}, lon={}", latitude, longitude);
-            } else {
-                // ENV에 없으면 파라미터 사용 (기존 로직)
-                if (lat == null || lon == null) {
-                    return ResponseEntity.badRequest().body(
-                        ApiResponse.error(
-                            "MISSING_PARAMETERS",
-                            "위도/경도 파라미터가 필요합니다",
-                            httpRequest.getRequestURI()
-                        )
-                    );
-                }
-                latitude = lat;
-                longitude = lon;
-                logger.info("Using user-provided location: lat={}, lon={}", latitude, longitude);
+            if (lat == null || lon == null) {
+                return ResponseEntity.badRequest().body(
+                    ApiResponse.error(
+                        "MISSING_PARAMETERS",
+                        "위도/경도 파라미터가 필요합니다",
+                        httpRequest.getRequestURI()
+                    )
+                );
             }
+
+            double latitude = lat;
+            double longitude = lon;
 
             logger.info("Received reverse geocoding request: lat={}, lon={}", latitude, longitude);
 

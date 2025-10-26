@@ -206,65 +206,34 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 - **관리자/데이터 관리** *(Bearer ADMIN)*: `POST /api/admin/place-management/check-availability`, `POST /api/place-enhancement/batch-enhance`, `POST /api/admin/similarity/calculate`
 - **배치/동기화**: `POST /api/batch/jobs/place-collection`, `POST /api/batch/jobs/update-crawled-data`
 
-## 📍 Mock 위치 설정 (Mock Location)
+## 📍 Mock 위치 설정 (선택 사항)
 
-개발/테스트 환경에서 특정 위치로 테스트를 고정할 때 사용합니다.
-
-### ⚠️ 중요: ENV 강제 모드
-- **ENV에 위치가 설정되어 있으면**: API 파라미터를 **무시하고** ENV 값 강제 사용
-- **ENV에 위치가 없으면**: API 파라미터 사용 (기존 로직)
+개발/테스트 중 좌표 파라미터를 매번 넘기기 번거롭다면 환경 변수로 기본 좌표를 지정할 수 있습니다.
 
 ### 동작 방식
+1. **API 요청에 lat/lon이 포함되어 있으면** → 항상 요청 값을 사용합니다.
+2. **파라미터가 비어 있고 ENV 기본값이 설정되어 있으면** → ENV 값을 기본값으로 사용합니다.
+3. **둘 다 없으면** → API가 좌표 파라미터를 요구합니다.
 
-#### 시나리오 1: ENV에 위치 설정됨 (개발/테스트 모드)
-```bash
-# .env 파일
-MOCK_LATITUDE=37.5636   # 서울 중구
-MOCK_LONGITUDE=126.9976
-```
-
-**결과**: 모든 API 요청이 서울 중구 기준으로 동작 (파라미터 무시)
-```bash
-# 이 호출들은 모두 서울 중구 기준으로 동작
-curl "http://localhost:8080/api/recommendations/contextual?limit=10"
-curl "http://localhost:8080/api/recommendations/contextual?lat=37.4979&lon=127.0276"  # 파라미터 무시됨!
-```
-
-#### 시나리오 2: ENV에 위치 없음 (프로덕션 모드)
-```bash
-# .env 파일에서 주석 처리 또는 삭제
-# MOCK_LATITUDE=37.5636
-# MOCK_LONGITUDE=126.9976
-```
-
-**결과**: API 파라미터가 필수
-```bash
-# 에러: 위도/경도 파라미터가 필요합니다
-curl "http://localhost:8080/api/recommendations/contextual?limit=10"
-
-# 성공: 강남역 기준
-curl "http://localhost:8080/api/recommendations/contextual?lat=37.4979&lon=127.0276&limit=10"
-```
-
-### 위치 설정 방법
+### 설정 방법
 
 #### 방법 1: .env 파일 수정 (권장)
 ```bash
-# 개발 중 특정 위치로 고정
+# 기본 좌표 지정 (요청에 좌표가 없을 때만 사용)
 MOCK_LATITUDE=37.4979   # 강남역
 MOCK_LONGITUDE=127.0276
 
-# 프로덕션: 주석 처리하여 API 파라미터 사용
-# MOCK_LATITUDE=37.4979
-# MOCK_LONGITUDE=127.0276
+# 기본 좌표 사용해제 (프로덕션 권장)
+# MOCK_LATITUDE=
+# MOCK_LONGITUDE=
 ```
 
 #### 방법 2: application-docker.yml 수정
 ```yaml
 mohe:
   location:
-    default-latitude: 37.5563  # 홍대입구
-    default-longitude: 126.9227
+    default-latitude: ${MOCK_LATITUDE:#{null}}
+    default-longitude: ${MOCK_LONGITUDE:#{null}}
 ```
 
 ### 주요 위치 좌표 참고

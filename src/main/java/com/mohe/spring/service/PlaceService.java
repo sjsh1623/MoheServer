@@ -59,9 +59,10 @@ public class PlaceService {
                 recommendationType = isAuthenticated ? "vector-location-hybrid" : "location-weighted";
             } else if (isAuthenticated) {
                 places = vectorSearchService.getPersonalizedRecommendations(auth.getName(), recommendationLimit);
+                places = filterReady(places);
                 recommendationType = "vector-personalized";
             } else {
-                places = placeRepository.findRecommendablePlaces(PageRequest.of(0, recommendationLimit)).getContent();
+                places = filterReady(placeRepository.findRecommendablePlaces(PageRequest.of(0, recommendationLimit)).getContent());
                 recommendationType = "rating-based";
             }
 
@@ -78,7 +79,7 @@ public class PlaceService {
             return new PlaceRecommendationsResponse(placeDtos, placeDtos.size(), recommendationType);
         } catch (Exception e) {
             PageRequest pageRequest = PageRequest.of(0, recommendationLimit);
-            List<Place> places = placeRepository.findRecommendablePlaces(pageRequest).getContent();
+            List<Place> places = filterReady(placeRepository.findRecommendablePlaces(pageRequest).getContent());
 
             List<SimplePlaceDto> placeDtos = places.stream()
                 .map(place -> hasLocation ? convertToSimplePlaceDto(place, latitude, longitude) : convertToSimplePlaceDto(place))
@@ -93,13 +94,14 @@ public class PlaceService {
         
         Page<Place> placePage;
         if (category != null && !category.trim().isEmpty()) {
-            placePage = placeRepository.findByCategory(category, pageRequest);
+            placePage = placeRepository.findByCategoryAndReadyTrue(category, pageRequest);
         } else {
             // Default to recommendable places sorted by rating
             placePage = placeRepository.findRecommendablePlaces(pageRequest);
         }
         
         List<SimplePlaceDto> placeDtos = placePage.getContent().stream()
+            .filter(this::isReady)
             .map(this::convertToSimplePlaceDto)
             .collect(Collectors.toList());
         
@@ -114,6 +116,9 @@ public class PlaceService {
         }
         
         Place place = placeOpt.get();
+        if (!Boolean.TRUE.equals(place.getReady())) {
+            throw new RuntimeException("준비되지 않은 장소입니다: " + id);
+        }
         SimplePlaceDto placeDto = convertToSimplePlaceDto(place);
 
         // Get similar places (simple implementation - same category)
@@ -358,7 +363,10 @@ public class PlaceService {
         double radiusKilometers = safeRadiusMeters / 1000.0;
         int safeLimit = Math.max(1, Math.min(limit, 50));
 
-        List<Place> places = placeRepository.findNearbyPlacesForLLM(latitude, longitude, radiusKilometers, safeLimit);
+        List<Place> places = placeRepository.findNearbyPlacesForLLM(latitude, longitude, radiusKilometers, safeLimit)
+            .stream()
+            .filter(this::isReady)
+            .collect(Collectors.toList());
 
         List<SimplePlaceDto> placeDtos = places.stream()
             .map(place -> convertToSimplePlaceDto(place, latitude, longitude))
@@ -469,6 +477,8 @@ public class PlaceService {
 
         if (selected.size() < safeLimit) {
             placeRepository.findRecommendablePlaces(PageRequest.of(0, safeLimit)).getContent()
+                .stream()
+                .filter(this::isReady)
                 .forEach(place -> selected.putIfAbsent(place.getId(), place));
         }
 
@@ -491,7 +501,7 @@ public class PlaceService {
         }
 
         for (Place place : candidates) {
-            if (place == null || place.getId() == null) {
+            if (place == null || place.getId() == null || !isReady(place)) {
                 continue;
             }
 
@@ -508,6 +518,19 @@ public class PlaceService {
                 break;
             }
         }
+    }
+
+    private boolean isReady(Place place) {
+        return place != null && Boolean.TRUE.equals(place.getReady());
+    }
+
+    private List<Place> filterReady(List<Place> places) {
+        if (places == null || places.isEmpty()) {
+            return List.of();
+        }
+        return places.stream()
+            .filter(this::isReady)
+            .collect(Collectors.toList());
     }
 
     private double calculateDistanceKm(Double latitude, Double longitude, Place place) {
