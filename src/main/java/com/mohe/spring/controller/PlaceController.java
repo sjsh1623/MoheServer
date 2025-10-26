@@ -25,21 +25,56 @@ import java.util.Map;
 @RequestMapping("/api/places")
 @Tag(name = "장소 관리", description = "장소 추천, 검색, 상세 정보 API")
 public class PlaceController {
-    
+
     private final PlaceService placeService;
     private final VectorSearchService vectorSearchService;
-    
-    public PlaceController(PlaceService placeService, VectorSearchService vectorSearchService) {
+    private final com.mohe.spring.config.LocationProperties locationProperties;
+
+    public PlaceController(PlaceService placeService, VectorSearchService vectorSearchService, com.mohe.spring.config.LocationProperties locationProperties) {
         this.placeService = placeService;
         this.vectorSearchService = vectorSearchService;
+        this.locationProperties = locationProperties;
     }
     
+    /**
+     * 장소 추천 API (게스트/회원 공통)
+     *
+     * <p>위치 기반 장소 추천을 제공합니다. 인증 사용자는 개인 선호도를 반영한 추천을 받습니다.
+     *
+     * <h3>위치 파라미터</h3>
+     * <ul>
+     *   <li>파라미터가 없을 경우: 기본 위치 사용 (서울 중구: 37.5636, 126.9976)</li>
+     *   <li>파라미터 지정: 해당 위치 기준으로 추천</li>
+     * </ul>
+     *
+     * <h3>거리 기반 혼합 전략</h3>
+     * <ul>
+     *   <li>15km 이내 데이터: 70%</li>
+     *   <li>30km 이내 데이터: 30%</li>
+     *   <li>인증 사용자: 벡터 기반 선호도로 재정렬</li>
+     * </ul>
+     *
+     * <h3>예시</h3>
+     * <pre>
+     * // 기본 위치 사용 (서울 중구)
+     * GET /api/places/recommendations
+     *
+     * // 강남역 기준
+     * GET /api/places/recommendations?latitude=37.4979&longitude=127.0276
+     * </pre>
+     *
+     * @param latitude 위도 (optional, 기본값: 37.5636 서울 중구)
+     * @param longitude 경도 (optional, 기본값: 126.9976 서울 중구)
+     * @param httpRequest HTTP 요청 정보
+     * @return 추천 장소 목록
+     */
     @GetMapping("/recommendations")
     @Operation(
         summary = "장소 추천 (게스트/회원 공통)",
         description = """
         요청 좌표를 기준으로 15km 이내 데이터 70%, 30km 이내 데이터 30%를 혼합해 기본 후보군을 만들고,
-        인증 사용자는 벡터 기반 선호도를 반영해 같은 후보군을 재정렬합니다. 좌표가 없으면 기존 평점/리뷰 기반 상위 장소를 제공합니다.
+        인증 사용자는 벡터 기반 선호도를 반영해 같은 후보군을 재정렬합니다.
+        위치 파라미터 없이 호출 시 기본 위치(서울 중구: 37.5636, 126.9976) 사용
         """
     )
     @ApiResponses(
@@ -55,13 +90,31 @@ public class PlaceController {
         }
     )
     public ResponseEntity<ApiResponse<PlaceRecommendationsResponse>> getRecommendations(
-            @Parameter(description = "사용자 위도", required = true, example = "37.5665")
-            @RequestParam double latitude,
-            @Parameter(description = "사용자 경도", required = true, example = "126.9780")
-            @RequestParam double longitude,
+            @Parameter(description = "위도 (optional, 기본값: 37.5636 서울 중구)", required = false, example = "37.5636")
+            @RequestParam(required = false) Double latitude,
+            @Parameter(description = "경도 (optional, 기본값: 126.9976 서울 중구)", required = false, example = "126.9976")
+            @RequestParam(required = false) Double longitude,
             HttpServletRequest httpRequest) {
         try {
-            PlaceRecommendationsResponse response = placeService.getRecommendations(latitude, longitude);
+            // ENV에 위치가 설정되어 있으면 강제로 사용 (파라미터 무시)
+            // ENV에 없으면 파라미터 사용
+            double lat;
+            double lon;
+
+            if (locationProperties.getDefaultLatitude() != null && locationProperties.getDefaultLongitude() != null) {
+                // ENV에 설정된 값 강제 사용 (개발 환경 테스트용)
+                lat = locationProperties.getDefaultLatitude();
+                lon = locationProperties.getDefaultLongitude();
+            } else {
+                // ENV에 없으면 파라미터 사용 (기존 로직)
+                if (latitude == null || longitude == null) {
+                    throw new IllegalArgumentException("위도/경도 파라미터가 필요합니다");
+                }
+                lat = latitude;
+                lon = longitude;
+            }
+
+            PlaceRecommendationsResponse response = placeService.getRecommendations(lat, lon);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(

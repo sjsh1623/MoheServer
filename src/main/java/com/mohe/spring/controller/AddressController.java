@@ -23,12 +23,14 @@ import org.springframework.web.bind.annotation.*;
 @SecurityRequirements
 @Tag(name = "주소 정보", description = "좌표를 주소로 변환하는 API")
 public class AddressController {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(AddressController.class);
     private final AddressService addressService;
-    
-    public AddressController(AddressService addressService) {
+    private final com.mohe.spring.config.LocationProperties locationProperties;
+
+    public AddressController(AddressService addressService, com.mohe.spring.config.LocationProperties locationProperties) {
         this.addressService = addressService;
+        this.locationProperties = locationProperties;
     }
 
     @GetMapping("/reverse")
@@ -36,7 +38,8 @@ public class AddressController {
         summary = "좌표를 주소로 변환",
         description = """
             위도/경도 좌표를 한국 주소로 변환합니다.
-            
+
+            - ENV Mock 위치가 설정되어 있으면 해당 좌표 사용 (파라미터 무시)
             - Naver Reverse Geocoding API 우선 사용
             - API 실패 시 좌표 형식으로 fallback
             - 1시간 캐싱으로 성능 최적화
@@ -81,17 +84,42 @@ public class AddressController {
         }
     )
     public ResponseEntity<ApiResponse<AddressInfo>> reverseGeocode(
-            @Parameter(description = "위도", required = true, example = "37.5665")
-            @RequestParam double lat,
-            @Parameter(description = "경도", required = true, example = "126.9780")  
-            @RequestParam double lon,
+            @Parameter(description = "위도 (optional when MOCK_LATITUDE is set)", required = false, example = "37.5665")
+            @RequestParam(required = false) Double lat,
+            @Parameter(description = "경도 (optional when MOCK_LONGITUDE is set)", required = false, example = "126.9780")
+            @RequestParam(required = false) Double lon,
             HttpServletRequest httpRequest) {
         try {
-            logger.info("Received reverse geocoding request: lat={}, lon={}", lat, lon);
-            
+            // ENV에 위치가 설정되어 있으면 강제로 사용 (파라미터 무시)
+            double latitude;
+            double longitude;
+
+            if (locationProperties.getDefaultLatitude() != null && locationProperties.getDefaultLongitude() != null) {
+                // ENV에 설정된 값 강제 사용 (개발 환경 테스트용)
+                latitude = locationProperties.getDefaultLatitude();
+                longitude = locationProperties.getDefaultLongitude();
+                logger.info("Using configured mock location from ENV: lat={}, lon={}", latitude, longitude);
+            } else {
+                // ENV에 없으면 파라미터 사용 (기존 로직)
+                if (lat == null || lon == null) {
+                    return ResponseEntity.badRequest().body(
+                        ApiResponse.error(
+                            "MISSING_PARAMETERS",
+                            "위도/경도 파라미터가 필요합니다",
+                            httpRequest.getRequestURI()
+                        )
+                    );
+                }
+                latitude = lat;
+                longitude = lon;
+                logger.info("Using user-provided location: lat={}, lon={}", latitude, longitude);
+            }
+
+            logger.info("Received reverse geocoding request: lat={}, lon={}", latitude, longitude);
+
             // Validate coordinates
-            if (lat < -90 || lat > 90) {
-                logger.warn("Invalid latitude: {}", lat);
+            if (latitude < -90 || latitude > 90) {
+                logger.warn("Invalid latitude: {}", latitude);
                 return ResponseEntity.badRequest().body(
                     ApiResponse.error(
                         "INVALID_COORDINATES",
@@ -100,9 +128,9 @@ public class AddressController {
                     )
                 );
             }
-            
-            if (lon < -180 || lon > 180) {
-                logger.warn("Invalid longitude: {}", lon);
+
+            if (longitude < -180 || longitude > 180) {
+                logger.warn("Invalid longitude: {}", longitude);
                 return ResponseEntity.badRequest().body(
                     ApiResponse.error(
                         "INVALID_COORDINATES",
@@ -112,8 +140,8 @@ public class AddressController {
                 );
             }
 
-            logger.info("Converting coordinates to address: lat={}, lon={}", lat, lon);
-            AddressInfo addressInfo = addressService.getAddressFromCoordinates(lat, lon);
+            logger.info("Converting coordinates to address: lat={}, lon={}", latitude, longitude);
+            AddressInfo addressInfo = addressService.getAddressFromCoordinates(latitude, longitude);
             
             logger.info("Address conversion completed: {}", addressInfo.getShortAddress());
             return ResponseEntity.ok(ApiResponse.success(addressInfo));
