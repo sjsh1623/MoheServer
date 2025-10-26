@@ -46,6 +46,7 @@ public class RecommendationController {
     private final UserRepository userRepository;
     private final PlaceRepository placeRepository;
     private final BookmarkRepository bookmarkRepository;
+    private final com.mohe.spring.config.LocationProperties locationProperties;
 
     public RecommendationController(
             EnhancedRecommendationService enhancedRecommendationService,
@@ -54,7 +55,8 @@ public class RecommendationController {
             PlaceService placeService,
             UserRepository userRepository,
             PlaceRepository placeRepository,
-            BookmarkRepository bookmarkRepository) {
+            BookmarkRepository bookmarkRepository,
+            com.mohe.spring.config.LocationProperties locationProperties) {
         this.enhancedRecommendationService = enhancedRecommendationService;
         this.contextualRecommendationService = contextualRecommendationService;
         this.weatherService = weatherService;
@@ -62,6 +64,7 @@ public class RecommendationController {
         this.userRepository = userRepository;
         this.placeRepository = placeRepository;
         this.bookmarkRepository = bookmarkRepository;
+        this.locationProperties = locationProperties;
     }
 
     @Operation(
@@ -214,12 +217,47 @@ public class RecommendationController {
         }
     }
 
+    /**
+     * 컨텍스트 기반 장소 추천 API
+     *
+     * <p>날씨, 시간, 위치를 고려한 컨텍스트 기반 추천을 제공합니다.
+     *
+     * <h3>위치 파라미터</h3>
+     * <ul>
+     *   <li>파라미터가 없을 경우: 기본 위치 사용 (서울 중구: 37.5636, 126.9976)</li>
+     *   <li>파라미터 지정: 해당 위치 기준으로 추천</li>
+     * </ul>
+     *
+     * <h3>거리 기반 혼합 전략</h3>
+     * <ul>
+     *   <li>15km 이내 데이터: 70%</li>
+     *   <li>30km 이내 데이터: 30%</li>
+     *   <li>벡터 검색 결과와 교집합하여 최종 추천</li>
+     * </ul>
+     *
+     * <h3>예시</h3>
+     * <pre>
+     * // 기본 위치 사용 (서울 중구)
+     * GET /api/recommendations/contextual?limit=10
+     *
+     * // 강남역 기준
+     * GET /api/recommendations/contextual?lat=37.4979&lon=127.0276&limit=10
+     * </pre>
+     *
+     * @param lat 위도 (optional, 기본값: 37.5636 서울 중구)
+     * @param lon 경도 (optional, 기본값: 126.9976 서울 중구)
+     * @param query 검색 키워드 (optional)
+     * @param limit 추천 개수 (기본: 10, 최대: 20)
+     * @param userPrincipal 인증 사용자 정보 (optional)
+     * @return 컨텍스트 기반 추천 결과
+     */
     @Operation(
         summary = "Get contextual recommendations (dual mode)",
         description = """
         요청 좌표를 기준으로 15km 이내 70% + 30km 이내 30% 후보를 만든 뒤 날씨/시간/쿼리를 결합한 벡터 검색을 수행합니다.
         - 인증 사용자: 개인 선호 벡터 + 컨텍스트 쿼리로 재정렬 (vector-location-hybrid)
         - 게스트: 동일한 컨텍스트 쿼리로 공개 벡터 검색을 수행하고, 거리 가중 후보와 교집합을 반환합니다.
+        - 위치 파라미터 없이 호출 시 기본 위치(서울 중구: 37.5636, 126.9976) 사용
         """
     )
     @ApiResponses(
@@ -231,16 +269,36 @@ public class RecommendationController {
     )
     @GetMapping("/contextual")
     public ResponseEntity<ApiResponse<ContextualRecommendationResponse>> getContextualRecommendations(
-            @Parameter(description = "User latitude", required = true)
-            @RequestParam double lat,
-            @Parameter(description = "User longitude", required = true)
-            @RequestParam double lon,
+            @Parameter(description = "위도 (optional, 기본값: 37.5636 서울 중구)", required = false, example = "37.5636")
+            @RequestParam(required = false) Double lat,
+            @Parameter(description = "경도 (optional, 기본값: 126.9976 서울 중구)", required = false, example = "126.9976")
+            @RequestParam(required = false) Double lon,
             @Parameter(description = "Search query or keywords", required = false)
             @RequestParam(required = false) String query,
             @Parameter(description = "Maximum number of recommendations (default: 10, max: 20)")
             @RequestParam(defaultValue = "10") int limit,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
         try {
+            // ENV에 위치가 설정되어 있으면 강제로 사용 (파라미터 무시)
+            // ENV에 없으면 파라미터 사용
+            double latitude;
+            double longitude;
+
+            if (locationProperties.getDefaultLatitude() != null && locationProperties.getDefaultLongitude() != null) {
+                // ENV에 설정된 값 강제 사용 (개발 환경 테스트용)
+                latitude = locationProperties.getDefaultLatitude();
+                longitude = locationProperties.getDefaultLongitude();
+                logger.info("Using configured mock location from ENV: lat={}, lon={}", latitude, longitude);
+            } else {
+                // ENV에 없으면 파라미터 사용 (기존 로직)
+                if (lat == null || lon == null) {
+                    throw new IllegalArgumentException("위도/경도 파라미터가 필요합니다");
+                }
+                latitude = lat;
+                longitude = lon;
+                logger.info("Using user-provided location: lat={}, lon={}", latitude, longitude);
+            }
+
             // Validate inputs
             if (limit > 20) {
                 ApiResponse<ContextualRecommendationResponse> errorResponse = ApiResponse.error("INVALID_LIMIT", "Limit cannot exceed 20");
@@ -248,15 +306,15 @@ public class RecommendationController {
             }
 
             String timeContext = getCurrentTimeContext();
-            logger.info("Processing contextual recommendations for authenticated={}, lat={}, lon={}", userPrincipal != null, lat, lon);
+            logger.info("Processing contextual recommendations for authenticated={}, lat={}, lon={}", userPrincipal != null, latitude, longitude);
 
             ContextualRecommendationResponse response;
             if (userPrincipal != null) {
                 // Authenticated user: Use MBTI + bookmarks + weather + time
-                response = getPersonalizedContextualRecommendations(userPrincipal, lat, lon, query, timeContext, limit);
+                response = getPersonalizedContextualRecommendations(userPrincipal, latitude, longitude, query, timeContext, limit);
             } else {
                 // Guest user: Use popular places + weather + time
-                response = getGuestContextualRecommendations(lat, lon, query, timeContext, limit);
+                response = getGuestContextualRecommendations(latitude, longitude, query, timeContext, limit);
             }
 
             return ResponseEntity.ok(ApiResponse.success(response));

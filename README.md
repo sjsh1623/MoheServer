@@ -68,8 +68,8 @@
 - **Google Places API**: 평점 및 상세 정보
 - **Korean Government API**: 행정구역 정보
 - **OpenAI API**: AI 기반 설명 생성
-- **Ollama**: 로컬 AI 벡터 생성
 - **OpenMeteo API**: 날씨 정보 (fallback)
+- **Embedding Service**: 한국어 벡터 임베딩 (kanana-nano-2.1b-embedding)
 
 ## 📦 프로젝트 구조
 
@@ -116,6 +116,11 @@ GOOGLE_PLACES_API_KEY=your_api_key
 
 # JWT Secret
 JWT_SECRET=your_secret_key_minimum_64_characters
+
+# Mock 위치 설정 (개발/테스트 환경 전용)
+# 설정되어 있으면 API 파라미터를 무시하고 이 값을 강제로 사용
+MOCK_LATITUDE=37.5636   # 서울 중구 (기본값)
+MOCK_LONGITUDE=126.9976
 ```
 
 ### Docker로 실행
@@ -200,6 +205,96 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 - **주소 정보**: `GET /api/address/reverse?lat=37.5665&lon=126.9780` - 좌표를 주소로 변환 (Naver API)
 - **관리자/데이터 관리** *(Bearer ADMIN)*: `POST /api/admin/place-management/check-availability`, `POST /api/place-enhancement/batch-enhance`, `POST /api/admin/similarity/calculate`
 - **배치/동기화**: `POST /api/batch/jobs/place-collection`, `POST /api/batch/jobs/update-crawled-data`
+
+## 📍 Mock 위치 설정 (Mock Location)
+
+개발/테스트 환경에서 특정 위치로 테스트를 고정할 때 사용합니다.
+
+### ⚠️ 중요: ENV 강제 모드
+- **ENV에 위치가 설정되어 있으면**: API 파라미터를 **무시하고** ENV 값 강제 사용
+- **ENV에 위치가 없으면**: API 파라미터 사용 (기존 로직)
+
+### 동작 방식
+
+#### 시나리오 1: ENV에 위치 설정됨 (개발/테스트 모드)
+```bash
+# .env 파일
+MOCK_LATITUDE=37.5636   # 서울 중구
+MOCK_LONGITUDE=126.9976
+```
+
+**결과**: 모든 API 요청이 서울 중구 기준으로 동작 (파라미터 무시)
+```bash
+# 이 호출들은 모두 서울 중구 기준으로 동작
+curl "http://localhost:8080/api/recommendations/contextual?limit=10"
+curl "http://localhost:8080/api/recommendations/contextual?lat=37.4979&lon=127.0276"  # 파라미터 무시됨!
+```
+
+#### 시나리오 2: ENV에 위치 없음 (프로덕션 모드)
+```bash
+# .env 파일에서 주석 처리 또는 삭제
+# MOCK_LATITUDE=37.5636
+# MOCK_LONGITUDE=126.9976
+```
+
+**결과**: API 파라미터가 필수
+```bash
+# 에러: 위도/경도 파라미터가 필요합니다
+curl "http://localhost:8080/api/recommendations/contextual?limit=10"
+
+# 성공: 강남역 기준
+curl "http://localhost:8080/api/recommendations/contextual?lat=37.4979&lon=127.0276&limit=10"
+```
+
+### 위치 설정 방법
+
+#### 방법 1: .env 파일 수정 (권장)
+```bash
+# 개발 중 특정 위치로 고정
+MOCK_LATITUDE=37.4979   # 강남역
+MOCK_LONGITUDE=127.0276
+
+# 프로덕션: 주석 처리하여 API 파라미터 사용
+# MOCK_LATITUDE=37.4979
+# MOCK_LONGITUDE=127.0276
+```
+
+#### 방법 2: application-docker.yml 수정
+```yaml
+mohe:
+  location:
+    default-latitude: 37.5563  # 홍대입구
+    default-longitude: 126.9227
+```
+
+### 주요 위치 좌표 참고
+
+| 위치 | 위도 (latitude) | 경도 (longitude) | 설명 |
+|------|----------------|-----------------|------|
+| **서울 중구** | `37.5636` | `126.9976` | 명동, 시청 일대 |
+| 강남역 | `37.4979` | `127.0276` | 강남 상권 중심지 |
+| 홍대입구역 | `37.5563` | `126.9227` | 홍대 상권 중심지 |
+| 서울역 | `37.5547` | `126.9707` | 서울역 일대 |
+| 광화문 | `37.5760` | `126.9769` | 광화문, 종로 일대 |
+| 여의도 | `37.5219` | `126.9245` | 여의도 금융가 |
+| 잠실역 | `37.5133` | `127.1000` | 잠실 롯데월드 일대 |
+| 신촌역 | `37.5559` | `126.9366` | 신촌 상권 중심지 |
+| 이태원역 | `37.5344` | `126.9944` | 이태원 상권 중심지 |
+| 건대입구역 | `37.5403` | `127.0695` | 건대 상권 중심지 |
+
+### 위치 기반 API 동작 방식
+
+위치 파라미터를 지원하는 API:
+- `/api/recommendations/contextual` - 컨텍스트 기반 추천 (날씨, 시간, 위치)
+- `/api/places/recommendations` - 일반 장소 추천
+- `/api/places/popular` - 인기 장소
+- `/api/places/new` - 신규 장소
+- `/api/recommendations/current-time` - 현재 시간 기반 추천
+
+**거리 기반 혼합 전략:**
+- 15km 이내 데이터: 70%
+- 30km 이내 데이터: 30%
+- 벡터 검색 결과와 교집합하여 최종 추천
 
 ## 🔄 배치 작업
 
