@@ -20,15 +20,17 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
 
     Page<Place> findByCategory(String category, Pageable pageable);
 
-    @Query("SELECT p FROM Place p WHERE p.rating >= :minRating ORDER BY p.rating DESC, p.reviewCount DESC")
+    Page<Place> findByCategoryAndReadyTrue(String category, Pageable pageable);
+
+    @Query("SELECT p FROM Place p WHERE p.ready = true AND (p.rating >= :minRating OR p.rating IS NULL) ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findTopRatedPlaces(@Param("minRating") Double minRating, Pageable pageable);
 
-    @Query("SELECT p FROM Place p ORDER BY p.rating DESC, p.reviewCount DESC")
+    @Query("SELECT p FROM Place p WHERE p.ready = true ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findPopularPlaces(Pageable pageable);
 
-    @Query("SELECT p FROM Place p WHERE " +
+    @Query("SELECT p FROM Place p WHERE p.ready = true AND (" +
            "LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(p.roadAddress) LIKE LOWER(CONCAT('%', :query, '%'))")
+           "LOWER(p.roadAddress) LIKE LOWER(CONCAT('%', :query, '%')))")
     Page<Place> searchPlaces(@Param("query") String query, Pageable pageable);
 
     @Query("SELECT p FROM Place p WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL")
@@ -62,12 +64,14 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query("""
         SELECT COUNT(*) FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
+        AND p.ready = true
     """)
     long countRecommendablePlaces();
 
     @Query("""
         SELECT COUNT(*) FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
+        AND p.ready = true
         AND (:category IS NULL OR p.category = :category)
     """)
     long countRecommendablePlacesByCategory(@Param("category") String category);
@@ -75,6 +79,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query("""
         SELECT p FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
+        AND p.ready = true
         ORDER BY p.rating DESC, p.name ASC
     """)
     Page<Place> findRecommendablePlaces(Pageable pageable);
@@ -98,6 +103,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query(value = """
         SELECT p.* FROM places p
         WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+        AND COALESCE(p.ready, false) = true
         AND (
             6371 * acos(
                 cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
@@ -121,6 +127,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         SELECT p.* FROM places p
         WHERE p.latitude IS NOT NULL
         AND p.longitude IS NOT NULL
+        AND COALESCE(p.ready, false) = true
         AND (
             ABS(CAST(p.latitude AS DOUBLE PRECISION) - :latitude) * 111000 +
             ABS(CAST(p.longitude AS DOUBLE PRECISION) - :longitude) * 111000 * COS(RADIANS(:latitude))
@@ -150,6 +157,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query(value = """
         SELECT p.* FROM places p
         WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+        AND COALESCE(p.ready, false) = true
         AND (p.rating >= 3.0 OR p.rating IS NULL)
         AND (
             6371 * acos(
@@ -180,6 +188,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query("""
         SELECT p FROM Place p
         WHERE (p.rating >= 3.0 OR p.rating IS NULL)
+        AND p.ready = true
         ORDER BY p.rating DESC, p.reviewCount DESC
     """)
     List<Place> findGeneralPlacesForLLM(Pageable pageable);
