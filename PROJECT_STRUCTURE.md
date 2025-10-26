@@ -71,7 +71,7 @@ src/main/java/com/mohe/spring/
 │   ├── RecommendationService.java         # 추천 알고리즘
 │   ├── VectorSearchService.java           # 벡터 검색
 │   ├── OpenAiService.java                 # OpenAI API 통합
-│   ├── OllamaService.java                 # Ollama AI 통합
+│   ├── KeywordEmbeddingService.java       # 키워드 벡터 임베딩
 │   ├── ImageGenerationService.java        # 이미지 생성
 │   ├── KoreanGovernmentApiService.java    # 정부 API 통합
 │   └── EmailService.java                  # 이메일 전송

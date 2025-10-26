@@ -13,8 +13,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -249,6 +253,53 @@ public class VectorSearchService {
         SimilarityScore(Place place, double similarity) {
             this.place = place;
             this.similarity = similarity;
+        }
+    }
+
+    /**
+     * Rank a predefined candidate set using the authenticated user's preference vector.
+     */
+    public List<Long> rankCandidatePlaces(String userEmail, List<Long> candidateIds, double similarityThreshold, int limit) {
+        if (candidateIds == null || candidateIds.isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            Optional<User> userOpt = userRepository.findByEmail(userEmail);
+            if (userOpt.isEmpty()) {
+                return List.of();
+            }
+
+            Optional<UserPreferenceVector> userVectorOpt = userPreferenceVectorRepository.findByUserId(userOpt.get().getId());
+            if (userVectorOpt.isEmpty()) {
+                return List.of();
+            }
+
+            UserPreferenceVector userVector = userVectorOpt.get();
+            List<PlaceDescriptionVector> placeVectors = placeDescriptionVectorRepository.findByPlaceIdIn(candidateIds);
+            Map<Long, Double> similarityScores = new HashMap<>();
+
+            for (PlaceDescriptionVector placeVector : placeVectors) {
+                try {
+                    var result = placeVector.calculateSimilarityWithUser(userVector);
+                    if (result.getWeightedSimilarity() >= similarityThreshold) {
+                        similarityScores.put(placeVector.getPlace().getId(), result.getWeightedSimilarity());
+                    }
+                } catch (Exception e) {
+                    // ignore individual failures
+                }
+            }
+
+            Set<Long> candidateSet = new HashSet<>(candidateIds);
+            return similarityScores.entrySet().stream()
+                .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+                .map(Map.Entry::getKey)
+                .filter(candidateSet::contains)
+                .limit(Math.max(1, limit))
+                .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            return List.of();
         }
     }
 }
