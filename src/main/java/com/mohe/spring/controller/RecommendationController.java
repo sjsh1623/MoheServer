@@ -224,7 +224,7 @@ public class RecommendationController {
      *
      * <h3>위치 파라미터</h3>
      * <ul>
-     *   <li>파라미터가 없을 경우: 기본 위치 사용 (서울 중구: 37.5636, 126.9976)</li>
+     *   <li>파라미터가 없고 ENV 기본값이 설정된 경우: 해당 기본 위치 사용</li>
      *   <li>파라미터 지정: 해당 위치 기준으로 추천</li>
      * </ul>
      *
@@ -237,7 +237,7 @@ public class RecommendationController {
      *
      * <h3>예시</h3>
      * <pre>
-     * // 기본 위치 사용 (서울 중구)
+     * // ENV 기본 좌표만 설정되어 있고, 파라미터는 비워둔 경우
      * GET /api/recommendations/contextual?limit=10
      *
      * // 강남역 기준
@@ -257,7 +257,7 @@ public class RecommendationController {
         요청 좌표를 기준으로 15km 이내 70% + 30km 이내 30% 후보를 만든 뒤 날씨/시간/쿼리를 결합한 벡터 검색을 수행합니다.
         - 인증 사용자: 개인 선호 벡터 + 컨텍스트 쿼리로 재정렬 (vector-location-hybrid)
         - 게스트: 동일한 컨텍스트 쿼리로 공개 벡터 검색을 수행하고, 거리 가중 후보와 교집합을 반환합니다.
-        - 위치 파라미터 없이 호출 시 기본 위치(서울 중구: 37.5636, 126.9976) 사용
+        - 위치 파라미터가 없으면 ENV 기본 좌표(있는 경우)를 사용
         """
     )
     @ApiResponses(
@@ -269,9 +269,9 @@ public class RecommendationController {
     )
     @GetMapping("/contextual")
     public ResponseEntity<ApiResponse<ContextualRecommendationResponse>> getContextualRecommendations(
-            @Parameter(description = "위도 (optional, 기본값: 37.5636 서울 중구)", required = false, example = "37.5636")
+            @Parameter(description = "위도 (미지정 시 ENV 기본값 사용)", required = false, example = "37.5636")
             @RequestParam(required = false) Double lat,
-            @Parameter(description = "경도 (optional, 기본값: 126.9976 서울 중구)", required = false, example = "126.9976")
+            @Parameter(description = "경도 (미지정 시 ENV 기본값 사용)", required = false, example = "126.9976")
             @RequestParam(required = false) Double lon,
             @Parameter(description = "Search query or keywords", required = false)
             @RequestParam(required = false) String query,
@@ -279,25 +279,12 @@ public class RecommendationController {
             @RequestParam(defaultValue = "10") int limit,
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
         try {
-            // ENV에 위치가 설정되어 있으면 강제로 사용 (파라미터 무시)
-            // ENV에 없으면 파라미터 사용
-            double latitude;
-            double longitude;
-
-            if (locationProperties.getDefaultLatitude() != null && locationProperties.getDefaultLongitude() != null) {
-                // ENV에 설정된 값 강제 사용 (개발 환경 테스트용)
-                latitude = locationProperties.getDefaultLatitude();
-                longitude = locationProperties.getDefaultLongitude();
-                logger.info("Using configured mock location from ENV: lat={}, lon={}", latitude, longitude);
-            } else {
-                // ENV에 없으면 파라미터 사용 (기존 로직)
-                if (lat == null || lon == null) {
-                    throw new IllegalArgumentException("위도/경도 파라미터가 필요합니다");
-                }
-                latitude = lat;
-                longitude = lon;
-                logger.info("Using user-provided location: lat={}, lon={}", latitude, longitude);
+            if (lat == null || lon == null) {
+                throw new IllegalArgumentException("위도/경도 파라미터가 필요합니다");
             }
+
+            double latitude = lat;
+            double longitude = lon;
 
             // Validate inputs
             if (limit > 20) {
@@ -487,7 +474,9 @@ public class RecommendationController {
             }
 
             List<SimplePlaceDto> placeDtos = places.stream()
+                .filter(place -> Boolean.TRUE.equals(place.getReady()))
                 .map(this::convertToSimplePlaceDto)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
             return ResponseEntity.ok(ApiResponse.success(placeDtos));
@@ -504,17 +493,29 @@ public class RecommendationController {
     }
 
     private SimplePlaceDto convertToSimplePlaceDto(Place place) {
+        if (place == null || place.getId() == null || !Boolean.TRUE.equals(place.getReady())) {
+            return null;
+        }
+
         SimplePlaceDto dto = new SimplePlaceDto();
         dto.setId(place.getId().toString());
         dto.setName(place.getName());
-        dto.setCategory(place.getCategory().get(0));
+        dto.setCategory(place.getCategory() != null && !place.getCategory().isEmpty()
+            ? place.getCategory().get(0)
+            : "기타");
         dto.setRating(place.getRating() != null ? place.getRating().doubleValue() : null);
         dto.setReviewCount(place.getReviewCount());
         dto.setAddress(place.getRoadAddress());
         dto.setLocation(place.getRoadAddress()); // For backward compatibility
-        dto.setImageUrl(null); // Gallery field removed
-        dto.setDistance(0.0); // Will be calculated if needed
-        dto.setIsBookmarked(false); // Will be set based on user authentication
+        dto.setDistance(0.0);
+        dto.setIsBookmarked(false);
+
+        List<String> imageUrls = placeService.getImageUrls(place.getId());
+        if (!imageUrls.isEmpty()) {
+            dto.setImageUrl(imageUrls.get(0));
+            dto.setImages(imageUrls);
+        }
+
         return dto;
     }
 }

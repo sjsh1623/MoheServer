@@ -43,7 +43,7 @@ public class PlaceController {
      *
      * <h3>위치 파라미터</h3>
      * <ul>
-     *   <li>파라미터가 없을 경우: 기본 위치 사용 (서울 중구: 37.5636, 126.9976)</li>
+     *   <li>파라미터가 없고 ENV 기본값이 설정된 경우: 해당 기본 위치 사용</li>
      *   <li>파라미터 지정: 해당 위치 기준으로 추천</li>
      * </ul>
      *
@@ -56,7 +56,7 @@ public class PlaceController {
      *
      * <h3>예시</h3>
      * <pre>
-     * // 기본 위치 사용 (서울 중구)
+     * // ENV에 기본 좌표가 설정되어 있고 파라미터가 없을 때
      * GET /api/places/recommendations
      *
      * // 강남역 기준
@@ -74,7 +74,7 @@ public class PlaceController {
         description = """
         요청 좌표를 기준으로 15km 이내 데이터 70%, 30km 이내 데이터 30%를 혼합해 기본 후보군을 만들고,
         인증 사용자는 벡터 기반 선호도를 반영해 같은 후보군을 재정렬합니다.
-        위치 파라미터 없이 호출 시 기본 위치(서울 중구: 37.5636, 126.9976) 사용
+        위치 파라미터가 없으면 ENV에 설정된 기본 좌표(있는 경우)에 한해 사용합니다.
         """
     )
     @ApiResponses(
@@ -90,28 +90,17 @@ public class PlaceController {
         }
     )
     public ResponseEntity<ApiResponse<PlaceRecommendationsResponse>> getRecommendations(
-            @Parameter(description = "위도 (optional, 기본값: 37.5636 서울 중구)", required = false, example = "37.5636")
+            @Parameter(description = "위도 (미지정 시 ENV 기본값 사용)", required = false, example = "37.5665")
             @RequestParam(required = false) Double latitude,
-            @Parameter(description = "경도 (optional, 기본값: 126.9976 서울 중구)", required = false, example = "126.9976")
+            @Parameter(description = "경도 (미지정 시 ENV 기본값 사용)", required = false, example = "126.9780")
             @RequestParam(required = false) Double longitude,
             HttpServletRequest httpRequest) {
         try {
-            // ENV에 위치가 설정되어 있으면 강제로 사용 (파라미터 무시)
-            // ENV에 없으면 파라미터 사용
-            double lat;
-            double lon;
+            Double lat = latitude != null ? latitude : locationProperties.getDefaultLatitude();
+            Double lon = longitude != null ? longitude : locationProperties.getDefaultLongitude();
 
-            if (locationProperties.getDefaultLatitude() != null && locationProperties.getDefaultLongitude() != null) {
-                // ENV에 설정된 값 강제 사용 (개발 환경 테스트용)
-                lat = locationProperties.getDefaultLatitude();
-                lon = locationProperties.getDefaultLongitude();
-            } else {
-                // ENV에 없으면 파라미터 사용 (기존 로직)
-                if (latitude == null || longitude == null) {
-                    throw new IllegalArgumentException("위도/경도 파라미터가 필요합니다");
-                }
-                lat = latitude;
-                lon = longitude;
+            if (lat == null || lon == null) {
+                throw new IllegalArgumentException("위도/경도 파라미터가 필요합니다");
             }
 
             PlaceRecommendationsResponse response = placeService.getRecommendations(lat, lon);

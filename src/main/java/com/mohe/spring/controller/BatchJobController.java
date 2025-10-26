@@ -29,6 +29,7 @@ public class BatchJobController {
     private final Job placeCollectionJob;
     private final Job updateCrawledDataJob;
     private final Job vectorEmbeddingJob;
+    private final Job imageUpdateJob;
 
     public BatchJobController(
             JobLauncher asyncJobLauncher,
@@ -36,13 +37,15 @@ public class BatchJobController {
             JobExplorer jobExplorer,
             Job placeCollectionJob,
             Job updateCrawledDataJob,
-            Job vectorEmbeddingJob) {
+            Job vectorEmbeddingJob,
+            Job imageUpdateJob) {
         this.asyncJobLauncher = asyncJobLauncher;
         this.jobOperator = jobOperator;
         this.jobExplorer = jobExplorer;
         this.placeCollectionJob = placeCollectionJob;
         this.updateCrawledDataJob = updateCrawledDataJob;
         this.vectorEmbeddingJob = vectorEmbeddingJob;
+        this.imageUpdateJob = imageUpdateJob;
     }
 
     @PostMapping("/place-collection")
@@ -320,6 +323,46 @@ public class BatchJobController {
             logger.error("❌ Failed to stop all batch jobs", e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("BATCH_JOB_ERROR", "Failed to stop all batch jobs: " + e.getMessage(), "/api/batch/jobs/stop-all"));
+        }
+    }
+
+    @PostMapping("/image-update")
+    @Operation(
+        summary = "이미지 업데이트 배치 실행",
+        description = "isCrawled=true인 장소들의 이미지만 다시 크롤링하여 업데이트합니다. " +
+                      "배치 작업은 백그라운드에서 비동기로 실행됩니다. " +
+                      "기존 이미지는 삭제되고 새로운 이미지로 대체됩니다."
+    )
+    public ResponseEntity<ApiResponse<Map<String, Object>>> runImageUpdateJob() {
+        try {
+            long startTime = System.currentTimeMillis();
+
+            logger.info("🖼️ Triggering Image Update Batch Job");
+
+            JobParameters jobParameters = new JobParametersBuilder()
+                    .addLong("startTime", startTime)
+                    .toJobParameters();
+
+            // 비동기 실행 - 즉시 반환
+            asyncJobLauncher.run(imageUpdateJob, jobParameters);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("status", "STARTED");
+            result.put("message", "Image Update Batch Job has been triggered and is running in the background");
+            result.put("startTime", startTime);
+
+            logger.info("✅ Image Update Batch Job triggered successfully");
+            return ResponseEntity.ok(ApiResponse.success(result));
+
+        } catch (Exception e) {
+            logger.error("❌ Failed to trigger Image Update Batch Job", e);
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "FAILED");
+            error.put("message", "Failed to trigger batch job: " + e.getMessage());
+
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("BATCH_JOB_ERROR", error.get("message").toString(), "/api/batch/jobs/image-update"));
         }
     }
 }
