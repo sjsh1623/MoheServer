@@ -3,7 +3,7 @@ package com.mohe.spring.service;
 
 import java.util.List;
 
-public class OllamaRecommendationResponse {
+public class LlmRecommendationResponse {
     private boolean success;
     private List<String> recommendedPlaces = new java.util.ArrayList<>();
     private String reasoning;

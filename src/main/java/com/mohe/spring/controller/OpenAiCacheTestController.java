@@ -193,18 +193,12 @@ public class OpenAiCacheTestController {
             }
             log.info("=" .repeat(80));
 
-            // Step 3: Generate keywords
-            log.info("🔑 Generating keywords for '{}'", place.getName());
-            String[] keywords = keywordEmbeddingService.generateKeywords(
-                textForProcessing,
-                categoryStr,
-                crawledData.isPetFriendly()
-            );
-            result.ollamaKeywords = Arrays.asList(keywords);
+            // Use keywords from OpenAI result
+            result.openaiKeywords = descriptionResult.keywords();
 
             log.info("=" .repeat(80));
-            log.info("GENERATED KEYWORDS for '{}':", place.getName());
-            log.info("  Keywords: {}", String.join(", ", keywords));
+            log.info("EXTRACTED KEYWORDS for '{}':", place.getName());
+            log.info("  Keywords: {}", String.join(", ", descriptionResult.keywords()));
             log.info("=" .repeat(80));
 
             log.info("✅ Successfully processed '{}' - ALL STEPS COMPLETED", place.getName());
@@ -249,7 +243,7 @@ public class OpenAiCacheTestController {
         public String message;
         public CrawledDataSummary crawledData;
         public OpenAiResultSummary openAiResult;
-        public List<String> ollamaKeywords;
+        public List<String> openaiKeywords;
     }
 
     public static class CrawledDataSummary {

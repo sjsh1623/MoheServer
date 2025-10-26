@@ -427,7 +427,7 @@ public class ImageGenerationService {
         logger.info("🌐 Using HttpURLConnection for SAS URL download");
 
         // 웹 검색 결과: SAS URL을 직접 사용하여 서명 보호
-        java.net.URL url = new java.net.URL(imageUrl);
+        java.net.URL url = java.net.URI.create(imageUrl).toURL();
         java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
 
         try {

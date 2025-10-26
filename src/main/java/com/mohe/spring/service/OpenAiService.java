@@ -30,7 +30,7 @@ public class OpenAiService implements LlmService {
     }
 
     @Override
-    public OllamaRecommendationResponse generatePlaceRecommendations(String prompt, List<String> availablePlaces) {
+    public LlmRecommendationResponse generatePlaceRecommendations(String prompt, List<String> availablePlaces) {
         try {
             logger.info("Sending recommendation request to OpenAI with prompt length: {}", prompt.length());
 
@@ -48,7 +48,7 @@ public class OpenAiService implements LlmService {
     /**
      * Generate place recommendations with contextual information
      */
-    public OllamaRecommendationResponse generatePlaceRecommendations(
+    public LlmRecommendationResponse generatePlaceRecommendations(
             String userLocation, String weatherCondition, String timeOfDay,
             String userMbti, List<String> availablePlaces) {
 
@@ -204,12 +204,12 @@ public class OpenAiService implements LlmService {
         }
     }
 
-    private OllamaRecommendationResponse parseRecommendationResponse(String response, List<String> availablePlaces) {
+    private LlmRecommendationResponse parseRecommendationResponse(String response, List<String> availablePlaces) {
         try {
             Pattern pattern = Pattern.compile("추천장소:([^이유]*)", Pattern.CASE_INSENSITIVE);
             Matcher matcher = pattern.matcher(response);
 
-            OllamaRecommendationResponse result = new OllamaRecommendationResponse();
+            LlmRecommendationResponse result = new LlmRecommendationResponse();
             result.setRawResponse(response);
 
             if (matcher.find()) {
@@ -252,8 +252,8 @@ public class OpenAiService implements LlmService {
         }
     }
 
-    private OllamaRecommendationResponse createFallbackResponse(List<String> availablePlaces) {
-        OllamaRecommendationResponse response = new OllamaRecommendationResponse();
+    private LlmRecommendationResponse createFallbackResponse(List<String> availablePlaces) {
+        LlmRecommendationResponse response = new LlmRecommendationResponse();
         response.setSuccess(false);
         response.setRawResponse("OpenAI LLM을 사용할 수 없어 기본 추천을 제공합니다.");
         response.setReasoning("현재 시간과 위치를 고려한 기본 추천입니다.");

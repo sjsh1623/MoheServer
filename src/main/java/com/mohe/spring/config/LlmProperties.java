@@ -9,14 +9,9 @@ import org.springframework.context.annotation.Configuration;
 public class LlmProperties {
 
     private final OpenAiProperties openai = new OpenAiProperties();
-    private final OllamaProperties ollama = new OllamaProperties();
 
     public OpenAiProperties getOpenai() {
         return openai;
-    }
-
-    public OllamaProperties getOllama() {
-        return ollama;
     }
 
     public static class OpenAiProperties {
@@ -46,36 +41,6 @@ public class LlmProperties {
 
         public void setActive(boolean active) {
             this.active = active;
-        }
-    }
-
-    public static class OllamaProperties {
-        private String baseUrl = "http://localhost:11434";
-        private String model = "kanana-instruct";
-        private int timeout = 120;
-
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public void setBaseUrl(String baseUrl) {
-            this.baseUrl = baseUrl;
-        }
-
-        public String getModel() {
-            return model;
-        }
-
-        public void setModel(String model) {
-            this.model = model;
-        }
-
-        public int getTimeout() {
-            return timeout;
-        }
-
-        public void setTimeout(int timeout) {
-            this.timeout = timeout;
         }
     }
 }
