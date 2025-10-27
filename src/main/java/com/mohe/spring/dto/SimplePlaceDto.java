@@ -13,6 +13,8 @@ public class SimplePlaceDto {
     private Integer reviewCount;
     private String location;
     private String address;
+    private String shortAddress; // 구 + 동 (e.g., "강남구 역삼동")
+    private String fullAddress;  // 전체 도로명 주소
     private String imageUrl;
     private List<String> images;
     private Double distance;
@@ -50,10 +52,10 @@ public class SimplePlaceDto {
 
     // Full constructor
     public SimplePlaceDto(String id, String name, String category, Double rating,
-                          Integer reviewCount, String location, String address, String imageUrl,
-                          List<String> images, Double distance, Boolean isBookmarked, String description,
-                          String phone, String websiteUrl, String operatingHours,
-                          String carTime, String busTime, Double similarityScore,
+                          Integer reviewCount, String location, String address, String shortAddress,
+                          String fullAddress, String imageUrl, List<String> images, Double distance,
+                          Boolean isBookmarked, String description, String phone, String websiteUrl,
+                          String operatingHours, String carTime, String busTime, Double similarityScore,
                           String explanation, String recommendationReason, Boolean isDemo) {
         this.id = id;
         this.name = name;
@@ -62,6 +64,8 @@ public class SimplePlaceDto {
         this.reviewCount = reviewCount;
         this.location = location;
         this.address = address;
+        this.shortAddress = shortAddress;
+        this.fullAddress = fullAddress;
         this.imageUrl = imageUrl;
         this.images = images;
         this.distance = distance;
@@ -99,6 +103,12 @@ public class SimplePlaceDto {
 
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
+
+    public String getShortAddress() { return shortAddress; }
+    public void setShortAddress(String shortAddress) { this.shortAddress = shortAddress; }
+
+    public String getFullAddress() { return fullAddress; }
+    public void setFullAddress(String fullAddress) { this.fullAddress = fullAddress; }
 
     public String getImageUrl() { return imageUrl; }
     public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
