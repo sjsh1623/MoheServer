@@ -24,9 +24,6 @@ mohe:
     use-remote: ${MOHE_IMAGE_USE_REMOTE:true}
   image-processor:
     url: ${IMAGE_PROCESSOR_URL:http://100.99.236.50:5200}
-  location:
-    default-latitude: ${MOCK_LATITUDE:#{null}}
-    default-longitude: ${MOCK_LONGITUDE:#{null}}
 
 crawler:
   base-url: ${CRAWLER_SERVER_URL:http://localhost:4000}

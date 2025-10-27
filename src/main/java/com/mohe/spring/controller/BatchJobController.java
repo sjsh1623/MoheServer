@@ -35,10 +35,10 @@ public class BatchJobController {
             JobLauncher asyncJobLauncher,
             JobOperator jobOperator,
             JobExplorer jobExplorer,
-            Job placeCollectionJob,
-            Job updateCrawledDataJob,
-            Job vectorEmbeddingJob,
-            Job imageUpdateJob) {
+            @org.springframework.beans.factory.annotation.Qualifier("placeCollectionJob") Job placeCollectionJob,
+            @org.springframework.beans.factory.annotation.Qualifier("updateCrawledDataJob") Job updateCrawledDataJob,
+            @org.springframework.beans.factory.annotation.Qualifier("vectorEmbeddingJob") Job vectorEmbeddingJob,
+            @org.springframework.beans.factory.annotation.Qualifier("imageUpdateJob") Job imageUpdateJob) {
         this.asyncJobLauncher = asyncJobLauncher;
         this.jobOperator = jobOperator;
         this.jobExplorer = jobExplorer;
@@ -329,9 +329,10 @@ public class BatchJobController {
     @PostMapping("/image-update")
     @Operation(
         summary = "이미지 업데이트 배치 실행",
-        description = "isCrawled=true인 장소들의 이미지만 다시 크롤링하여 업데이트합니다. " +
+        description = "crawlerFound=true이고 ready=false인 장소들의 이미지만 다시 크롤링하여 업데이트합니다. " +
                       "배치 작업은 백그라운드에서 비동기로 실행됩니다. " +
-                      "기존 이미지는 삭제되고 새로운 이미지로 대체됩니다."
+                      "기존 이미지는 삭제되고 새로운 이미지로 대체됩니다. " +
+                      "완료 후 ready=true로 업데이트됩니다."
     )
     public ResponseEntity<ApiResponse<Map<String, Object>>> runImageUpdateJob() {
         try {

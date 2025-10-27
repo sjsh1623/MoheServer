@@ -16,7 +16,7 @@ import java.util.List;
 /**
  * 이미지 업데이트용 Place Reader
  *
- * <p>isCrawled=true인 장소들만 읽어옵니다.
+ * <p>crawlerFound=true이고 ready=false인 장소들만 읽어옵니다.
  *
  * <h3>처리 방식</h3>
  * <ul>
@@ -27,7 +27,8 @@ import java.util.List;
  *
  * <h3>조회 조건</h3>
  * <ul>
- *   <li>isCrawled = true</li>
+ *   <li>crawlerFound = true</li>
+ *   <li>ready = false OR ready IS NULL</li>
  *   <li>정렬: ID ASC</li>
  * </ul>
  */
@@ -91,7 +92,7 @@ public class ImageUpdateReader implements ItemReader<Place> {
     private void loadNextPageIds() {
         Pageable pageable = PageRequest.of(currentPage, pageSize, Sort.by("id").ascending());
 
-        // Query: isCrawled = true
+        // Query: crawlerFound = true AND (ready = false OR ready IS NULL)
         Page<Long> idsPage = placeRepository.findPlaceIdsForImageUpdate(pageable);
 
         currentPageIds = new ArrayList<>(idsPage.getContent());
