@@ -228,6 +228,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query("""
         SELECT p.id FROM Place p
         WHERE p.crawlerFound = true
+        AND (p.ready IS NULL OR p.ready = false)
         ORDER BY p.id ASC
     """)
     Page<Long> findPlaceIdsForImageUpdate(Pageable pageable);

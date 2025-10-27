@@ -28,19 +28,19 @@ import java.util.Map;
 /**
  * 이미지 업데이트 전용 배치 Job
  *
- * <p>isCrawled=true인 장소들의 이미지만 다시 크롤링하여 업데이트합니다.
+ * <p>crawlerFound=true이고 ready=false인 장소들의 이미지만 다시 크롤링하여 업데이트합니다.
  *
  * <h3>처리 흐름</h3>
  * <ol>
- *   <li>Reader: isCrawled=true인 Place 조회</li>
+ *   <li>Reader: crawlerFound=true AND (ready=false OR ready IS NULL)인 Place 조회 (ID 순서)</li>
  *   <li>Processor: 새로운 이미지 API 호출하여 이미지 가져오기</li>
- *   <li>Writer: 기존 이미지 삭제 후 새 이미지 저장</li>
+ *   <li>Writer: 기존 이미지 삭제 후 새 이미지 저장, ready=true로 업데이트</li>
  * </ol>
  *
  * <h3>API 엔드포인트</h3>
  * <ul>
- *   <li>POST /api/v1/place/image - 이미지만 크롤링</li>
- *   <li>Input: {"place_name": "...", "location": "..."}</li>
+ *   <li>POST /api/v1/place/images - 이미지만 크롤링</li>
+ *   <li>Input: {"searchQuery": "...", "placeName": "..."}</li>
  *   <li>Output: {"images": [...]} (최대 5개)</li>
  * </ul>
  */
@@ -184,6 +184,11 @@ public class ImageUpdateJobConfig {
                     if (!newImages.isEmpty()) {
                         placeImageRepository.saveAll(newImages);
                         logger.info("✅ Saved {} new images for place: {}", newImages.size(), place.getName());
+
+                        // 3. Mark place as ready=true after successful image update
+                        place.setReady(true);
+                        placeRepository.save(place);
+                        logger.info("✅ Marked place as ready=true: {} (ID: {})", place.getName(), place.getId());
                     } else {
                         logger.warn("⚠️ No images saved for place: {}", place.getName());
                     }
