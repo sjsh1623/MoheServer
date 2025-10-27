@@ -72,6 +72,9 @@ public class PlaceService {
                 places.sort(Comparator.comparingInt((Place place) -> preferenceScore.getOrDefault(place.getId(), 0)).reversed());
             }
 
+            // Filter by business hours - only show currently open places
+            places = filterOpenPlaces(places);
+
             List<SimplePlaceDto> placeDtos = places.stream()
                 .map(place -> hasLocation ? convertToSimplePlaceDto(place, latitude, longitude) : convertToSimplePlaceDto(place))
                 .collect(Collectors.toList());
@@ -80,6 +83,9 @@ public class PlaceService {
         } catch (Exception e) {
             PageRequest pageRequest = PageRequest.of(0, recommendationLimit);
             List<Place> places = filterReady(placeRepository.findRecommendablePlaces(pageRequest).getContent());
+
+            // Filter by business hours - only show currently open places
+            places = filterOpenPlaces(places);
 
             List<SimplePlaceDto> placeDtos = places.stream()
                 .map(place -> hasLocation ? convertToSimplePlaceDto(place, latitude, longitude) : convertToSimplePlaceDto(place))
@@ -251,6 +257,9 @@ public class PlaceService {
         try {
             List<Place> weightedPlaces = getLocationWeightedPlaces(latitude, longitude, safeLimit);
 
+            // Filter by business hours - only show currently open places
+            weightedPlaces = filterOpenPlaces(weightedPlaces);
+
             List<Place> popularPlaces = weightedPlaces.stream()
                 .sorted((p1, p2) -> {
                     int reviewCompare = Integer.compare(
@@ -288,39 +297,45 @@ public class PlaceService {
                 candidatePlaces = placeRepository.findGeneralPlacesForLLM(pageRequest);
             }
 
+            // Filter by business hours - only show currently open places
+            candidatePlaces = filterOpenPlaces(candidatePlaces);
+
             // Generate LLM-based recommendations
             List<Place> places = generateLLMRecommendations(candidatePlaces, latitude, longitude, limit);
-            
+
             List<SimplePlaceDto> placeDtos = places.stream()
                 .map(place -> latitude != null && longitude != null
                     ? convertToSimplePlaceDto(place, latitude, longitude)
                     : convertToSimplePlaceDto(place))
                 .collect(Collectors.toList());
-            
+
             // Create time context with better logic
             java.time.LocalTime now = java.time.LocalTime.now();
             String timeOfDay = getTimeOfDay(now);
             String weatherCondition = "맑음"; // TODO: integrate actual weather API
             String locationText = (latitude != null && longitude != null) ? "주변 " : "";
-            
+
             Map<String, Object> timeContext = Map.of(
                 "timeOfDay", timeOfDay,
                 "weatherCondition", weatherCondition,
                 "recommendationMessage", timeOfDay + "에 " + locationText + "좋은 장소들을 추천드립니다."
             );
-            
+
             return new CurrentTimeRecommendationsResponse(placeDtos, timeContext, weatherCondition, timeOfDay);
         } catch (Exception e) {
             // Fallback to basic recommendations on error
             PageRequest pageRequest = PageRequest.of(0, Math.min(limit, 10));
             List<Place> places = placeRepository.findRecommendablePlaces(pageRequest).getContent();
-            
+
+            // Filter by business hours - only show currently open places
+            places = filterOpenPlaces(places);
+
             List<SimplePlaceDto> placeDtos = places.stream()
                 .map(place -> latitude != null && longitude != null
                     ? convertToSimplePlaceDto(place, latitude, longitude)
                     : convertToSimplePlaceDto(place))
                 .collect(Collectors.toList());
-            
+
             java.time.LocalTime now = java.time.LocalTime.now();
             String timeOfDay = getTimeOfDay(now);
             Map<String, Object> timeContext = Map.of(
@@ -328,7 +343,7 @@ public class PlaceService {
                 "weatherCondition", "맑음",
                 "recommendationMessage", "추천 장소를 불러왔습니다."
             );
-            
+
             return new CurrentTimeRecommendationsResponse(placeDtos, timeContext, "맑음", timeOfDay);
         }
     }
@@ -564,18 +579,23 @@ public class PlaceService {
         List<String> imageUrls = resolvePlaceImages(place);
         String primaryImage = imageUrls.isEmpty() ? null : imageUrls.get(0);
 
+        String fullAddress = place.getRoadAddress();
+        String shortAddress = extractShortAddress(fullAddress);
+
         SimplePlaceDto dto = new SimplePlaceDto(
             place.getId().toString(),
             place.getName(),
             place.getCategory() != null && !place.getCategory().isEmpty() ? place.getCategory().get(0) : "기타",
             place.getRating() != null ? place.getRating().doubleValue() : 4.0,
-            place.getRoadAddress(),
+            shortAddress, // location = shortAddress (구+동)
             primaryImage
         );
 
         // Set additional fields
         dto.setReviewCount(place.getReviewCount() != null ? place.getReviewCount() : 0);
-        dto.setAddress(place.getRoadAddress());
+        dto.setAddress(fullAddress); // Keep for backward compatibility
+        dto.setShortAddress(shortAddress); // 구 + 동
+        dto.setFullAddress(fullAddress); // 전체 주소
         dto.setDistance(0.0); // TODO: Calculate actual distance
         dto.setIsBookmarked(false); // TODO: Check if bookmarked by current user
         dto.setIsDemo(false);
@@ -740,5 +760,114 @@ public class PlaceService {
         if (hour >= 12 && hour < 18) return "오후";
         if (hour >= 18 && hour < 22) return "저녁";
         return "밤";
+    }
+
+    /**
+     * Extract short address (구+동) from full road address
+     * Examples:
+     * - "서울특별시 강남구 역삼동 123-45" → "강남구 역삼동"
+     * - "경기도 성남시 분당구 정자동 123" → "분당구 정자동"
+     * - "제주특별자치도 제주시 애월읍 123" → "제주시 애월읍"
+     */
+    private String extractShortAddress(String fullAddress) {
+        if (fullAddress == null || fullAddress.isBlank()) {
+            return "";
+        }
+
+        try {
+            // Remove province/city prefix (서울특별시, 경기도, etc.)
+            String address = fullAddress.replaceFirst("^(서울특별시|부산광역시|대구광역시|인천광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|경기도|강원도|충청북도|충청남도|전라북도|전라남도|경상북도|경상남도|제주특별자치도)\\s*", "");
+
+            // Split by spaces
+            String[] parts = address.split("\\s+");
+
+            if (parts.length >= 2) {
+                // Extract district (구/군/시) and neighborhood (동/읍/면/리)
+                String district = parts[0]; // 시/구/군
+                String neighborhood = parts[1]; // 동/읍/면/리
+
+                // Handle city names that include "시" (e.g., "성남시" should become "성남시 분당구")
+                if (parts.length >= 3 && district.endsWith("시") && (parts[1].endsWith("구") || parts[1].endsWith("군"))) {
+                    return parts[1] + " " + parts[2];
+                }
+
+                return district + " " + neighborhood;
+            }
+
+            // If we can't parse, return first part or empty
+            return parts.length > 0 ? parts[0] : "";
+
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * Check if a place is currently open based on business hours
+     * @param place The place to check
+     * @return true if the place is currently open, false otherwise
+     */
+    private boolean isCurrentlyOpen(Place place) {
+        if (place == null || place.getBusinessHours() == null || place.getBusinessHours().isEmpty()) {
+            // If no business hours info, assume it's open (don't filter out)
+            return true;
+        }
+
+        try {
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            java.time.DayOfWeek currentDay = now.getDayOfWeek();
+            java.time.LocalTime currentTime = now.toLocalTime();
+
+            // Map DayOfWeek to Korean day string
+            String dayOfWeek = switch (currentDay) {
+                case MONDAY -> "월";
+                case TUESDAY -> "화";
+                case WEDNESDAY -> "수";
+                case THURSDAY -> "목";
+                case FRIDAY -> "금";
+                case SATURDAY -> "토";
+                case SUNDAY -> "일";
+            };
+
+            // Find business hours for current day
+            return place.getBusinessHours().stream()
+                .filter(bh -> dayOfWeek.equals(bh.getDayOfWeek()))
+                .filter(bh -> Boolean.TRUE.equals(bh.getIsOperating()))
+                .anyMatch(bh -> {
+                    if (bh.getOpen() == null || bh.getClose() == null) {
+                        return true; // If times not set, assume open
+                    }
+
+                    // Check if current time is within business hours
+                    java.time.LocalTime openTime = bh.getOpen();
+                    java.time.LocalTime closeTime = bh.getClose();
+
+                    // Handle overnight hours (e.g., 22:00 - 02:00)
+                    if (closeTime.isBefore(openTime)) {
+                        return currentTime.isAfter(openTime) || currentTime.isBefore(closeTime);
+                    } else {
+                        return !currentTime.isBefore(openTime) && !currentTime.isAfter(closeTime);
+                    }
+                });
+
+        } catch (Exception e) {
+            // On error, assume it's open (don't filter out)
+            return true;
+        }
+    }
+
+    /**
+     * Filter list of places to only include currently open places
+     * @param places List of places to filter
+     * @return Filtered list containing only open places
+     */
+    public List<Place> filterOpenPlaces(List<Place> places) {
+        if (places == null || places.isEmpty()) {
+            return places;
+        }
+
+        return places.stream()
+            .filter(this::isCurrentlyOpen)
+            .collect(Collectors.toList());
     }
 }

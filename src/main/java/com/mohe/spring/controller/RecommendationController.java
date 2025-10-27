@@ -252,6 +252,61 @@ public class RecommendationController {
      * @return 컨텍스트 기반 추천 결과
      */
     @Operation(
+        summary = "지금 가기 좋은 장소 추천 (게스트/회원 공통)",
+        description = """
+        현재 위치, 날씨, 시간대를 종합해 지금 가기 좋은 장소를 추천합니다.
+        요청 좌표를 기준으로 15km 이내 70% + 30km 이내 30% 후보를 만든 뒤 날씨/시간을 결합한 벡터 검색을 수행합니다.
+        - 인증 사용자: 개인 선호 벡터 + 컨텍스트로 재정렬하여 개인화된 추천을 제공합니다.
+        - 게스트: 컨텍스트 임베딩 기반으로 후보를 정렬합니다.
+        - 모든 추천은 현재 영업 중인 장소만 포함합니다.
+        """
+    )
+    @ApiResponses(
+        value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Recommendations retrieved successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid parameters"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "Failed to generate recommendations")
+        }
+    )
+    @GetMapping("/good-to-visit")
+    public ResponseEntity<ApiResponse<ContextualRecommendationResponse>> getGoodToVisitRecommendations(
+            @Parameter(description = "위도 (필수)", required = true, example = "37.5636")
+            @RequestParam Double lat,
+            @Parameter(description = "경도 (필수)", required = true, example = "126.9976")
+            @RequestParam Double lon,
+            @Parameter(description = "추천 장소 개수 (기본값: 10, 최대: 20)")
+            @RequestParam(defaultValue = "10") int limit) {
+        try {
+            if (lat == null || lon == null) {
+                throw new IllegalArgumentException("위도/경도 파라미터가 필요합니다");
+            }
+
+            // Validate inputs
+            if (limit > 20) {
+                ApiResponse<ContextualRecommendationResponse> errorResponse = ApiResponse.error("INVALID_LIMIT", "Limit cannot exceed 20");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            logger.info("Processing good-to-visit recommendations for lat={}, lon={}", lat, lon);
+
+            // Call contextual recommendation service (no query parameter)
+            ContextualRecommendationResponse response = contextualRecommendationService.getContextualRecommendations(
+                null,  // No query parameter for "지금 가기 좋은" recommendation
+                lat,
+                lon,
+                limit
+            );
+
+            return ResponseEntity.ok(ApiResponse.success(response));
+
+        } catch (Exception e) {
+            logger.error("Failed to generate good-to-visit recommendations", e);
+            ApiResponse<ContextualRecommendationResponse> errorResponse = ApiResponse.error("RECOMMENDATION_ERROR", "Failed to generate recommendations: " + e.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
+    @Operation(
         summary = "Get contextual recommendations (dual mode)",
         description = """
         요청 좌표를 기준으로 15km 이내 70% + 30km 이내 30% 후보를 만든 뒤 날씨/시간/쿼리를 결합한 벡터 검색을 수행합니다.

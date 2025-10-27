@@ -286,6 +286,9 @@ public class PlaceDto {
         private final Double rating;
         private final String category;
         private Double distance = 0.0; // Default to 0 as per requirements
+        private String shortAddress; // 구 + 동
+        private String fullAddress; // 전체 주소
+        private String location; // shortAddress alias for backward compatibility
 
         public PlaceResponse(Long id, String name, String imageUrl, List<String> images, Double rating, String category) {
             this.id = id;
@@ -295,7 +298,7 @@ public class PlaceDto {
             this.rating = rating;
             this.category = category;
         }
-        
+
         // Backward compatibility constructor
         public PlaceResponse(Long id, String name, String imageUrl, Double rating, String category) {
             this(id, name, imageUrl, List.of(), rating, category);
@@ -310,5 +313,17 @@ public class PlaceDto {
         public String getCategory() { return category; }
         public Double getDistance() { return distance; }
         public void setDistance(Double distance) { this.distance = distance; }
+
+        public String getShortAddress() { return shortAddress; }
+        public void setShortAddress(String shortAddress) {
+            this.shortAddress = shortAddress;
+            this.location = shortAddress; // Keep location in sync
+        }
+
+        public String getFullAddress() { return fullAddress; }
+        public void setFullAddress(String fullAddress) { this.fullAddress = fullAddress; }
+
+        public String getLocation() { return location != null ? location : shortAddress; }
+        public void setLocation(String location) { this.location = location; }
     }
 }

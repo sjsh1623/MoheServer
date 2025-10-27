@@ -112,6 +112,9 @@ public class ContextualRecommendationService {
 
         List<Place> finalPlaces = mergeWithFallback(prioritized, candidateMap.values(), safeLimit);
 
+        // Filter by business hours - only show currently open places
+        finalPlaces = placeService.filterOpenPlaces(finalPlaces);
+
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("weather", weatherCondition);
         context.put("timeOfDay", timeOfDay);
@@ -271,6 +274,10 @@ public class ContextualRecommendationService {
         double rating = place.getRating() != null ? place.getRating().doubleValue() : 4.0;
         List<String> imageUrls = placeService.getImageUrls(place.getId());
         String imageUrl = imageUrls.isEmpty() ? null : imageUrls.get(0);
+
+        String fullAddress = place.getRoadAddress();
+        String shortAddress = extractShortAddress(fullAddress);
+
         PlaceDto.PlaceResponse response = new PlaceDto.PlaceResponse(
             place.getId(),
             place.getName(),
@@ -282,7 +289,49 @@ public class ContextualRecommendationService {
         if (place.getLatitude() != null && place.getLongitude() != null) {
             response.setDistance(0.0);
         }
+
+        // Set address information
+        response.setShortAddress(shortAddress);
+        response.setFullAddress(fullAddress);
+        response.setLocation(shortAddress);
+
         return response;
+    }
+
+    /**
+     * Extract short address (구+동) from full road address
+     */
+    private String extractShortAddress(String fullAddress) {
+        if (fullAddress == null || fullAddress.isBlank()) {
+            return "";
+        }
+
+        try {
+            // Remove province/city prefix (서울특별시, 경기도, etc.)
+            String address = fullAddress.replaceFirst("^(서울특별시|부산광역시|대구광역시|인천광역시|광주광역시|대전광역시|울산광역시|세종특별자치시|경기도|강원도|충청북도|충청남도|전라북도|전라남도|경상북도|경상남도|제주특별자치도)\\s*", "");
+
+            // Split by spaces
+            String[] parts = address.split("\\s+");
+
+            if (parts.length >= 2) {
+                // Extract district (구/군/시) and neighborhood (동/읍/면/리)
+                String district = parts[0]; // 시/구/군
+                String neighborhood = parts[1]; // 동/읍/면/리
+
+                // Handle city names that include "시" (e.g., "성남시" should become "성남시 분당구")
+                if (parts.length >= 3 && district.endsWith("시") && (parts[1].endsWith("구") || parts[1].endsWith("군"))) {
+                    return parts[1] + " " + parts[2];
+                }
+
+                return district + " " + neighborhood;
+            }
+
+            // If we can't parse, return first part or empty
+            return parts.length > 0 ? parts[0] : "";
+
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private String getCurrentTimeOfDay() {
