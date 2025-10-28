@@ -269,7 +269,7 @@ public class RecommendationController {
         }
     )
     @GetMapping("/good-to-visit")
-    public ResponseEntity<ApiResponse<ContextualRecommendationResponse>> getGoodToVisitRecommendations(
+    public ResponseEntity<ApiResponse<List<PlaceDto.PlaceResponse>>> getGoodToVisitRecommendations(
             @Parameter(description = "위도 (필수)", required = true, example = "37.5636")
             @RequestParam Double lat,
             @Parameter(description = "경도 (필수)", required = true, example = "126.9976")
@@ -283,7 +283,7 @@ public class RecommendationController {
 
             // Validate inputs
             if (limit > 20) {
-                ApiResponse<ContextualRecommendationResponse> errorResponse = ApiResponse.error("INVALID_LIMIT", "Limit cannot exceed 20");
+                ApiResponse<List<PlaceDto.PlaceResponse>> errorResponse = ApiResponse.error("INVALID_LIMIT", "Limit cannot exceed 20");
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
@@ -297,11 +297,12 @@ public class RecommendationController {
                 limit
             );
 
-            return ResponseEntity.ok(ApiResponse.success(response));
+            // Return only the places list without context/recommendation metadata
+            return ResponseEntity.ok(ApiResponse.success(response.getPlaces()));
 
         } catch (Exception e) {
             logger.error("Failed to generate good-to-visit recommendations", e);
-            ApiResponse<ContextualRecommendationResponse> errorResponse = ApiResponse.error("RECOMMENDATION_ERROR", "Failed to generate recommendations: " + e.getMessage());
+            ApiResponse<List<PlaceDto.PlaceResponse>> errorResponse = ApiResponse.error("RECOMMENDATION_ERROR", "Failed to generate recommendations: " + e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
         }
     }

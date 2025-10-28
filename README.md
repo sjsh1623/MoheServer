@@ -114,6 +114,9 @@ KMA_SERVICE_KEY=your_kma_service_key
 # Google Places API (선택사항)
 GOOGLE_PLACES_API_KEY=your_api_key
 
+# Embedding Service (필수 - 벡터 검색용)
+EMBEDDING_SERVICE_URL=http://localhost:6000
+
 # JWT Secret
 JWT_SECRET=your_secret_key_minimum_64_characters
 
@@ -200,7 +203,11 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 - **인증/온보딩**: `POST /api/auth/login`, `POST /api/auth/signup`, `POST /api/auth/verify-email`
 - **사용자 & 활동** *(Bearer)*: `GET /api/user/profile`, `GET /api/user/recent-places`, `POST /api/bookmarks/toggle`
 - **장소 탐색**: `GET /api/places`, `GET /api/places/search`, `GET /api/places/vector-search` *(Bearer)*
-- **추천 서비스**: `GET /api/recommendations/enhanced` *(Bearer)*, `GET /api/recommendations/contextual`, `GET /api/keyword-recommendations/by-keyword` *(Bearer)*
+- **추천 서비스**:
+  - `GET /api/recommendations/good-to-visit?lat={lat}&lon={lon}&limit={limit}` - 지금 가기 좋은 장소 (게스트 가능)
+  - `GET /api/recommendations/enhanced` *(Bearer)* - MBTI 기반 개인화 추천
+  - `GET /api/recommendations/contextual?lat={lat}&lon={lon}` - 컨텍스트 기반 추천
+  - `GET /api/keyword-recommendations/by-keyword` *(Bearer)* - 키워드 기반 추천
 - **날씨 정보**: `GET /api/weather/current?lat=37.5665&lon=126.9780` - 좌표 기반 현재 날씨 조회 (기상청 API)
 - **주소 정보**: `GET /api/address/reverse?lat=37.5665&lon=126.9780` - 좌표를 주소로 변환 (Naver API)
 - **관리자/데이터 관리** *(Bearer ADMIN)*: `POST /api/admin/place-management/check-availability`, `POST /api/place-enhancement/batch-enhance`, `POST /api/admin/similarity/calculate`
@@ -344,6 +351,47 @@ curl -X POST http://localhost:8080/api/batch/jobs/stop-all
 - [CLAUDE.md](CLAUDE.md) - Claude Code 사용 가이드 및 troubleshooting
 
 ## 📝 주요 변경사항
+
+### 지금 가기 좋은 장소 추천 API (Good-to-Visit)
+- **엔드포인트**: `GET /api/recommendations/good-to-visit`
+- **필수 파라미터**: `lat` (위도), `lon` (경도), `limit` (기본값: 10, 최대: 20)
+- **응답 구조 간소화**: 불필요한 `context`, `weatherCondition`, `timeContext`, `recommendation` 필드 제거
+- **주소 필드 필수화**: 주소가 없는 장소는 자동으로 필터링
+  - `shortAddress`: 구 + 동 (예: "강남구 역삼동")
+  - `fullAddress`: 전체 도로명 주소
+  - `location`: shortAddress와 동일 (하위 호환성)
+- **거리 기반 혼합 전략**: 15km 이내 70% + 30km 이내 30%
+- **Fallback 로직**:
+  - 벡터 서버 다운 시 geo-weighted 후보를 그대로 사용
+  - 지역 데이터 부족 시 전국 추천 장소 반환
+- **영업시간 필터 제거**: 영업시간 정보가 없는 장소도 포함하여 더 많은 추천 제공
+
+**응답 예시:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 123,
+      "name": "카페 이름",
+      "imageUrl": "/images/...",
+      "images": ["..."],
+      "rating": 4.5,
+      "category": "카페",
+      "distance": 1.2,
+      "shortAddress": "강남구 역삼동",
+      "fullAddress": "서울특별시 강남구 역삼동 123-45",
+      "location": "강남구 역삼동"
+    }
+  ]
+}
+```
+
+### Embedding 서비스 설정
+- **포트 변경**: 기본 포트 8001 → 6000으로 변경
+- **환경 변수**: `EMBEDDING_SERVICE_URL=http://localhost:6000`
+- **모델**: kanana-nano-2.1b-embedding (1792 차원)
+- **Fallback**: 서비스 다운 시 zero vector 반환하여 geo-weighted 추천 제공
 
 ### Place Description API
 - 장소 상세 정보 API에서 **mohe_description만 반환**하도록 최적화
