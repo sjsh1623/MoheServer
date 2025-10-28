@@ -120,16 +120,19 @@ public class ImageUpdateJobConfig {
                         place.setImageUrls(imageUrls);
                         return place;
                     } else {
-                        logger.warn("⚠️ No images found for place: {}", place.getName());
+                        logger.warn("⚠️ No images found for place: {} (ID: {}). Place will remain ready=false",
+                            place.getName(), place.getId());
                     }
                 } else {
-                    logger.warn("⚠️ Invalid image data response for place: {}", place.getName());
+                    logger.warn("⚠️ Invalid image data response for place: {} (ID: {}). Place will remain ready=false",
+                        place.getName(), place.getId());
                 }
 
-                return null; // Skip this place
+                return null; // Skip this place - ready will remain false
             } catch (Exception e) {
-                logger.error("❌ Error fetching images for place: {} - {}", place.getName(), e.getMessage());
-                return null; // Skip this place
+                logger.error("❌ Error fetching images for place: {} (ID: {}) - {}. Place will remain ready=false",
+                    place.getName(), place.getId(), e.getMessage());
+                return null; // Skip this place - ready will remain false
             }
         };
     }
@@ -177,24 +180,26 @@ public class ImageUpdateJobConfig {
                             }
                         }
                     } catch (Exception e) {
-                        logger.error("❌ Failed to save images for place: {} - {}",
-                            place.getName(), e.getMessage());
+                        logger.error("❌ Failed to save images for place: {} (ID: {}) - {}. ready will remain false",
+                            place.getName(), place.getId(), e.getMessage());
                     }
 
                     if (!newImages.isEmpty()) {
                         placeImageRepository.saveAll(newImages);
                         logger.info("✅ Saved {} new images for place: {}", newImages.size(), place.getName());
 
-                        // 3. Mark place as ready=true after successful image update
+                        // 3. Mark place as ready=true ONLY after successful image update
                         place.setReady(true);
                         placeRepository.save(place);
                         logger.info("✅ Marked place as ready=true: {} (ID: {})", place.getName(), place.getId());
                     } else {
-                        logger.warn("⚠️ No images saved for place: {}", place.getName());
+                        logger.warn("⚠️ No images saved for place: {} (ID: {}). ready remains false",
+                            place.getName(), place.getId());
                     }
 
                 } catch (Exception e) {
-                    logger.error("❌ Error updating images for place: {} - {}", place.getName(), e.getMessage(), e);
+                    logger.error("❌ Error updating images for place: {} (ID: {}) - {}. ready remains false",
+                        place.getName(), place.getId(), e.getMessage(), e);
                 }
             }
         };

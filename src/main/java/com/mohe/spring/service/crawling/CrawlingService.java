@@ -31,11 +31,12 @@ public class CrawlingService {
         // HttpClient 설정: 타임아웃 증가 및 연결 풀 설정
         // 크롤러는 Selenium으로 실제 브라우저를 구동하므로 매우 긴 타임아웃 필요
         HttpClient httpClient = HttpClient.create()
-                .responseTimeout(Duration.ofMinutes(10))  // 응답 타임아웃 10분
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 60000)  // 연결 타임아웃 60초
+                .responseTimeout(Duration.ofMinutes(15))  // 응답 타임아웃 15분으로 증가
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 120000)  // 연결 타임아웃 2분으로 증가
+                .option(ChannelOption.SO_KEEPALIVE, true)  // Keep-Alive 활성화
                 .doOnConnected(conn -> conn
-                        .addHandlerLast(new ReadTimeoutHandler(600, TimeUnit.SECONDS))  // 읽기 타임아웃 10분
-                        .addHandlerLast(new WriteTimeoutHandler(120, TimeUnit.SECONDS)));  // 쓰기 타임아웃 2분
+                        .addHandlerLast(new ReadTimeoutHandler(900, TimeUnit.SECONDS))  // 읽기 타임아웃 15분으로 증가
+                        .addHandlerLast(new WriteTimeoutHandler(180, TimeUnit.SECONDS)));  // 쓰기 타임아웃 3분으로 증가
 
         this.webClient = webClientBuilder
                 .baseUrl(baseUrl)
@@ -85,12 +86,14 @@ public class CrawlingService {
             requestBody.put("searchQuery", String.format("%s %s", location != null ? location : "", placeName).trim());
             requestBody.put("placeName", placeName);
 
+            // 재시도 로직 추가: 최대 3번 시도
             Map<String, Object> response = webClient.post()
                     .uri("/api/v1/place/images")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                    .block(); // Synchronous call for batch processing
+                    .retry(2)  // 실패 시 2번 더 재시도 (총 3번 시도)
+                    .block(Duration.ofMinutes(15)); // 최대 15분 대기
 
             if (response == null || !Boolean.TRUE.equals(response.get("success"))) {
                 return null;
