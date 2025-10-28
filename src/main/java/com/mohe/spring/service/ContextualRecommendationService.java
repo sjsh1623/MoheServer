@@ -112,8 +112,10 @@ public class ContextualRecommendationService {
 
         List<Place> finalPlaces = mergeWithFallback(prioritized, candidateMap.values(), safeLimit);
 
-        // Filter by business hours - only show currently open places
-        finalPlaces = placeService.filterOpenPlaces(finalPlaces);
+        // Filter places without address - address is mandatory
+        finalPlaces = finalPlaces.stream()
+            .filter(place -> place.getRoadAddress() != null && !place.getRoadAddress().isBlank())
+            .collect(Collectors.toList());
 
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("weather", weatherCondition);
@@ -147,18 +149,23 @@ public class ContextualRecommendationService {
 
     private List<Long> findContextualPlaceIds(List<String> keywords, Collection<Long> allowedPlaceIds, int limit) {
         if (keywords.isEmpty() || allowedPlaceIds.isEmpty()) {
+            logger.info("Vector search skipped: keywords={}, allowedPlaceIds={}", keywords.size(), allowedPlaceIds.size());
             return List.of();
         }
 
+        logger.info("Starting vector search with keywords: {}", keywords);
         float[] embedding = keywordEmbeddingService.vectorizeKeywords(keywords.toArray(String[]::new));
         if (isZeroVector(embedding)) {
+            logger.warn("Vector search failed: zero vector returned (embedding service may be down)");
             return List.of();
         }
 
+        logger.info("Generated embedding vector of size {}, performing pgvector similarity search", embedding.length);
         String pgVectorLiteral = toPgVectorLiteral(embedding);
         List<PlaceKeywordEmbedding> similarEmbeddings;
         try {
             similarEmbeddings = placeKeywordEmbeddingRepository.findSimilarByEmbedding(pgVectorLiteral, Math.max(limit * 2, 80));
+            logger.info("Vector search found {} similar embeddings from database", similarEmbeddings.size());
         } catch (Exception e) {
             logger.warn("Failed to run contextual embedding search: {}", e.getMessage());
             return List.of();
@@ -178,6 +185,7 @@ public class ContextualRecommendationService {
                 }
             }
         }
+        logger.info("Vector search filtered to {} places within geo candidates", ordered.size());
         return new ArrayList<>(ordered);
     }
 
