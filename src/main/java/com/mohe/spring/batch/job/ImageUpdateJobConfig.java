@@ -82,7 +82,7 @@ public class ImageUpdateJobConfig {
         ItemWriter<Place> imageUpdateWriter
     ) {
         return new StepBuilder("imageUpdateStep", jobRepository)
-                .<Place, Place>chunk(10, transactionManager)
+                .<Place, Place>chunk(5, transactionManager)
                 .reader(imageUpdateReader)
                 .processor(imageUpdateProcessor)
                 .writer(imageUpdateWriter)
@@ -94,7 +94,7 @@ public class ImageUpdateJobConfig {
 
     @Bean
     public ItemReader<Place> imageUpdateReader() {
-        return new ImageUpdateReader(placeRepository, 10);
+        return new ImageUpdateReader(placeRepository, 5);
     }
 
     @Bean
