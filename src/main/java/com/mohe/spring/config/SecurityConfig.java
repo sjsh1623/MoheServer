@@ -89,6 +89,7 @@ public class SecurityConfig {
                     "/api/home/**",
                     "/api/mock/**",
                     "/api/images/**",
+                    "/api/categories/**",
                     "/image/**",
                     "/images/**",
                     "/health",

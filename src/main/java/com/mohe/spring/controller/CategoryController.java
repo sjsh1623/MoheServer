@@ -63,14 +63,14 @@ public class CategoryController {
     @GetMapping("/suggested")
     public ResponseEntity<ApiResponse<SuggestedCategoriesResponse>> getSuggestedCategories(
             @Parameter(description = "위도", required = true, example = "37.5665")
-            @RequestParam Double latitude,
+            @RequestParam("lat") Double lat,
             @Parameter(description = "경도", required = true, example = "126.9780")
-            @RequestParam Double longitude) {
+            @RequestParam("lon") Double lon) {
         try {
-            logger.info("Fetching suggested categories for lat={}, lon={}", latitude, longitude);
+            logger.info("Fetching suggested categories for lat={}, lon={}", lat, lon);
 
             SuggestedCategoriesResponse response = categoryRecommendationService
-                    .getSuggestedCategories(latitude, longitude);
+                    .getSuggestedCategories(lat, lon);
 
             return ResponseEntity.ok(ApiResponse.success(response));
 
@@ -113,9 +113,9 @@ public class CategoryController {
             @Parameter(description = "카테고리 키 (예: cafe, restaurant, bar)", required = true)
             @PathVariable String category,
             @Parameter(description = "위도", required = true, example = "37.5665")
-            @RequestParam Double latitude,
+            @RequestParam("lat") Double lat,
             @Parameter(description = "경도", required = true, example = "126.9780")
-            @RequestParam Double longitude,
+            @RequestParam("lon") Double lon,
             @Parameter(description = "조회 개수", example = "20")
             @RequestParam(defaultValue = "20") int limit) {
         try {
@@ -130,12 +130,12 @@ public class CategoryController {
             }
 
             logger.info("Fetching places for category={}, lat={}, lon={}, limit={}",
-                    category, latitude, longitude, limit);
+                    category, lat, lon, limit);
 
             // 2. 거리 가중 장소 목록 가져오기
             int fetchLimit = Math.max(limit * 3, 60); // 필터링 여유분 확보
             List<Place> locationWeightedPlaces = placeService.getLocationWeightedPlaces(
-                    latitude, longitude, fetchLimit
+                    lat, lon, fetchLimit
             );
 
             // 3. 카테고리로 필터링
@@ -148,7 +148,7 @@ public class CategoryController {
 
             // 5. DTO 변환
             List<PlaceDto.PlaceResponse> placeResponses = limitedPlaces.stream()
-                    .map(place -> convertToPlaceResponse(place, latitude, longitude))
+                    .map(place -> convertToPlaceResponse(place, lat, lon))
                     .collect(Collectors.toList());
 
             logger.info("Found {} places for category {}", placeResponses.size(), category);
@@ -208,21 +208,26 @@ public class CategoryController {
      * @return PlaceResponse DTO
      */
     private PlaceDto.PlaceResponse convertToPlaceResponse(Place place, Double userLat, Double userLon) {
-        PlaceDto.PlaceResponse response = new PlaceDto.PlaceResponse();
-        response.setId(place.getId());
-        response.setName(place.getName());
-        response.setAddress(place.getRoadAddress());
-        response.setLatitude(place.getLatitude() != null ? place.getLatitude().doubleValue() : null);
-        response.setLongitude(place.getLongitude() != null ? place.getLongitude().doubleValue() : null);
-        response.setRating(place.getRating() != null ? place.getRating().doubleValue() : null);
-        response.setReviewCount(place.getReviewCount());
-        response.setCategory(place.getCategory());
-        response.setKeyword(place.getKeyword());
-        response.setParkingAvailable(place.getParkingAvailable());
-        response.setPetFriendly(place.getPetFriendly());
-        response.setWebsiteUrl(place.getWebsiteUrl());
+        // 이미지 URL 목록 가져오기
+        List<String> imageUrls = placeService.getImageUrls(place.getId());
+        String primaryImageUrl = imageUrls.isEmpty() ? null : imageUrls.get(0);
 
-        // 거리 계산
+        // 카테고리 문자열 생성
+        String categoryString = place.getCategory() != null && !place.getCategory().isEmpty()
+            ? place.getCategory().get(0)
+            : null;
+
+        // PlaceResponse 생성자로 객체 생성
+        PlaceDto.PlaceResponse response = new PlaceDto.PlaceResponse(
+            place.getId(),
+            place.getName(),
+            primaryImageUrl,
+            imageUrls,
+            place.getRating() != null ? place.getRating().doubleValue() : null,
+            categoryString
+        );
+
+        // 거리 계산 및 설정
         if (place.getLatitude() != null && place.getLongitude() != null && userLat != null && userLon != null) {
             double distance = calculateDistance(
                     userLat, userLon,
@@ -232,11 +237,31 @@ public class CategoryController {
             response.setDistance(distance);
         }
 
-        // 이미지 URL
-        List<String> imageUrls = placeService.getImageUrls(place.getId());
-        response.setImages(imageUrls);
+        // 주소 설정
+        if (place.getRoadAddress() != null) {
+            response.setFullAddress(place.getRoadAddress());
+            // 구 + 동 추출하여 shortAddress로 설정
+            String shortAddr = extractShortAddress(place.getRoadAddress());
+            response.setShortAddress(shortAddr);
+        }
 
         return response;
+    }
+
+    /**
+     * 전체 주소에서 구 + 동 추출
+     * @param fullAddress 전체 주소
+     * @return 구 + 동
+     */
+    private String extractShortAddress(String fullAddress) {
+        if (fullAddress == null) return null;
+
+        // "서울특별시 용산구 한남동 ..." -> "용산구 한남동"
+        String[] parts = fullAddress.split(" ");
+        if (parts.length >= 3) {
+            return parts[1] + " " + parts[2];
+        }
+        return fullAddress;
     }
 
     /**

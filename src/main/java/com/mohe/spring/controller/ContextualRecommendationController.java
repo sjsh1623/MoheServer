@@ -27,12 +27,12 @@ public class ContextualRecommendationController {
     )
     public ResponseEntity<ApiResponse<Object>> getWeatherBasedRecommendations(
             @Parameter(description = "위도", required = true)
-            @RequestParam double latitude,
+            @RequestParam("lat") double lat,
             @Parameter(description = "경도", required = true)
-            @RequestParam double longitude,
+            @RequestParam("lon") double lon,
             HttpServletRequest httpRequest) {
         try {
-            Object recommendations = contextualRecommendationService.getWeatherBasedRecommendations(latitude, longitude);
+            Object recommendations = contextualRecommendationService.getWeatherBasedRecommendations(lat, lon);
             return ResponseEntity.ok(ApiResponse.success(recommendations));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
