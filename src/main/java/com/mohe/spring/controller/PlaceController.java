@@ -91,19 +91,19 @@ public class PlaceController {
     )
     public ResponseEntity<ApiResponse<PlaceRecommendationsResponse>> getRecommendations(
             @Parameter(description = "위도 (미지정 시 ENV 기본값 사용)", required = false, example = "37.5665")
-            @RequestParam(required = false) Double latitude,
+            @RequestParam(value = "lat", required = false) Double lat,
             @Parameter(description = "경도 (미지정 시 ENV 기본값 사용)", required = false, example = "126.9780")
-            @RequestParam(required = false) Double longitude,
+            @RequestParam(value = "lon", required = false) Double lon,
             HttpServletRequest httpRequest) {
         try {
-            Double lat = latitude != null ? latitude : locationProperties.getDefaultLatitude();
-            Double lon = longitude != null ? longitude : locationProperties.getDefaultLongitude();
+            Double finalLat = lat != null ? lat : locationProperties.getDefaultLatitude();
+            Double finalLon = lon != null ? lon : locationProperties.getDefaultLongitude();
 
-            if (lat == null || lon == null) {
+            if (finalLat == null || finalLon == null) {
                 throw new IllegalArgumentException("위도/경도 파라미터가 필요합니다");
             }
 
-            PlaceRecommendationsResponse response = placeService.getRecommendations(lat, lon);
+            PlaceRecommendationsResponse response = placeService.getRecommendations(finalLat, finalLon);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
@@ -295,16 +295,16 @@ public class PlaceController {
     )
     public ResponseEntity<ApiResponse<PlaceListResponse>> getNearbyPlaces(
             @Parameter(description = "사용자 위도", required = true, example = "37.5665")
-            @RequestParam double latitude,
+            @RequestParam("lat") double lat,
             @Parameter(description = "사용자 경도", required = true, example = "126.9780")
-            @RequestParam double longitude,
+            @RequestParam("lon") double lon,
             @Parameter(description = "검색 반경 (미터)", example = "3000")
             @RequestParam(defaultValue = "3000") double radius,
             @Parameter(description = "결과 개수", example = "20")
             @RequestParam(defaultValue = "20") int limit,
             HttpServletRequest httpRequest) {
         try {
-            PlaceListResponse response = placeService.getNearbyPlaces(latitude, longitude, radius, limit);
+            PlaceListResponse response = placeService.getNearbyPlaces(lat, lon, radius, limit);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
@@ -370,15 +370,15 @@ public class PlaceController {
     )
     public ResponseEntity<ApiResponse<PlaceListResponse>> getPopularPlaces(
             @Parameter(description = "사용자 위도", required = true, example = "37.5665")
-            @RequestParam double latitude,
+            @RequestParam("lat") double lat,
             @Parameter(description = "사용자 경도", required = true, example = "126.9780")
-            @RequestParam double longitude,
+            @RequestParam("lon") double lon,
             @Parameter(description = "반환할 최대 개수", example = "20")
             @RequestParam(defaultValue = "20") int limit,
             HttpServletRequest httpRequest) {
         try {
             int safeLimit = limit < 1 ? 10 : Math.min(limit, 50);
-            PlaceListResponse response = placeService.getPopularPlaces(latitude, longitude, safeLimit);
+            PlaceListResponse response = placeService.getPopularPlaces(lat, lon, safeLimit);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
@@ -413,15 +413,15 @@ public class PlaceController {
     )
     public ResponseEntity<ApiResponse<CurrentTimeRecommendationsResponse>> getCurrentTimePlaces(
             @Parameter(description = "사용자 위도", required = true, example = "37.5665")
-            @RequestParam double latitude,
+            @RequestParam("lat") double lat,
             @Parameter(description = "사용자 경도", required = true, example = "126.9780")
-            @RequestParam double longitude,
+            @RequestParam("lon") double lon,
             @Parameter(description = "페이지 크기", example = "10")
             @RequestParam(defaultValue = "10") int limit,
             HttpServletRequest httpRequest) {
         try {
             int safeLimit = limit < 1 ? 10 : Math.min(limit, 50);
-            CurrentTimeRecommendationsResponse response = placeService.getCurrentTimePlaces(latitude, longitude, safeLimit);
+            CurrentTimeRecommendationsResponse response = placeService.getCurrentTimePlaces(lat, lon, safeLimit);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
@@ -553,12 +553,12 @@ public class PlaceController {
     )
     public ResponseEntity<ApiResponse<PlaceRecommendationsResponse>> getNewRecommendations(
             @Parameter(description = "사용자 위도", required = true, example = "37.5665")
-            @RequestParam double latitude,
+            @RequestParam("lat") double lat,
             @Parameter(description = "사용자 경도", required = true, example = "126.9780")
-            @RequestParam double longitude,
+            @RequestParam("lon") double lon,
             HttpServletRequest httpRequest) {
         try {
-            PlaceRecommendationsResponse response = placeService.getRecommendations(latitude, longitude);
+            PlaceRecommendationsResponse response = placeService.getRecommendations(lat, lon);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(

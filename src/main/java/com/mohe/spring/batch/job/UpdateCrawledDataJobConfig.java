@@ -123,7 +123,7 @@ public class UpdateCrawledDataJobConfig {
             place.getDescriptions().clear();
             PlaceDescription description = new PlaceDescription();
             description.setPlace(place);
-            description.setOriginalDescription(crawledData.getOriginalDescription());
+            description.setOriginalDescription(sanitizeText(crawledData.getOriginalDescription()));
 
             // Check if AI summary is available, otherwise use original description, then reviews
             String aiSummaryText = "";
@@ -158,8 +158,8 @@ public class UpdateCrawledDataJobConfig {
                 return null;
             }
 
-            description.setAiSummary(aiSummaryText);
-            description.setSearchQuery(searchQuery);
+            description.setAiSummary(sanitizeText(aiSummaryText));
+            description.setSearchQuery(sanitizeText(searchQuery));
 
             // Generate Mohe description using OpenAI (pass reviews for context)
             String categoryStr = place.getCategory() != null ? String.join(",", place.getCategory()) : "";
@@ -213,7 +213,7 @@ public class UpdateCrawledDataJobConfig {
                 System.err.println("🚨 CRITICAL: Using minimal fallback for '" + place.getName() + "'");
             }
 
-            description.setMoheDescription(moheDescription);
+            description.setMoheDescription(sanitizeText(moheDescription));
             place.getDescriptions().add(description);
 
             // 📝 Log Mohe AI description before saving to database
@@ -298,7 +298,7 @@ public class UpdateCrawledDataJobConfig {
                         System.err.println("Failed to parse business hours for " + place.getName() + ": " + e.getMessage());
                     }
 
-                    businessHour.setDescription(entry.getValue().getDescription());
+                    businessHour.setDescription(sanitizeText(entry.getValue().getDescription()));
                     businessHour.setIsOperating(entry.getValue().isOperating());
 
                     // Set last order minutes from the parent business_hours object
@@ -334,11 +334,15 @@ public class UpdateCrawledDataJobConfig {
                 for (int i = 0; i < reviewCount; i++) {
                     String reviewText = crawledData.getReviews().get(i);
                     if (reviewText != null && !reviewText.trim().isEmpty()) {
-                        PlaceReview review = new PlaceReview();
-                        review.setPlace(place);
-                        review.setReviewText(reviewText);
-                        review.setOrderIndex(i + 1);
-                        place.getReviews().add(review);
+                        // Sanitize review text to remove NULL bytes and other invalid characters
+                        String sanitizedReviewText = sanitizeText(reviewText);
+                        if (sanitizedReviewText != null && !sanitizedReviewText.trim().isEmpty()) {
+                            PlaceReview review = new PlaceReview();
+                            review.setPlace(place);
+                            review.setReviewText(sanitizedReviewText);
+                            review.setOrderIndex(i + 1);
+                            place.getReviews().add(review);
+                        }
                     }
                 }
                 System.out.println("✅ Saved " + place.getReviews().size() + " reviews for '" + place.getName() + "'");
@@ -410,5 +414,52 @@ public class UpdateCrawledDataJobConfig {
         }
         int limit = Math.min(reviews.size(), 10);
         return String.join("\n", reviews.subList(0, limit));
+    }
+
+    /**
+     * Sanitize text to remove NULL bytes and other invalid characters for PostgreSQL
+     * PostgreSQL does not allow NULL bytes (0x00) in UTF-8 strings
+     *
+     * @param text Input text that may contain invalid characters
+     * @return Sanitized text safe for PostgreSQL storage
+     */
+    private String sanitizeText(String text) {
+        if (text == null) {
+            return null;
+        }
+
+        // Remove NULL bytes (0x00) which PostgreSQL rejects
+        // Also remove other control characters that might cause issues
+        String sanitized = text.replace("\u0000", "")  // NULL byte
+                              .replace("\u0001", "")  // Start of heading
+                              .replace("\u0002", "")  // Start of text
+                              .replace("\u0003", "")  // End of text
+                              .replace("\u0004", "")  // End of transmission
+                              .replace("\u0005", "")  // Enquiry
+                              .replace("\u0006", "")  // Acknowledge
+                              .replace("\u0007", "")  // Bell
+                              .replace("\u0008", "")  // Backspace
+                              .replace("\u000B", "")  // Vertical tab
+                              .replace("\u000C", "")  // Form feed
+                              .replace("\u000E", "")  // Shift out
+                              .replace("\u000F", "")  // Shift in
+                              .replace("\u0010", "")  // Data link escape
+                              .replace("\u0011", "")  // Device control 1
+                              .replace("\u0012", "")  // Device control 2
+                              .replace("\u0013", "")  // Device control 3
+                              .replace("\u0014", "")  // Device control 4
+                              .replace("\u0015", "")  // Negative acknowledge
+                              .replace("\u0016", "")  // Synchronous idle
+                              .replace("\u0017", "")  // End of transmission block
+                              .replace("\u0018", "")  // Cancel
+                              .replace("\u0019", "")  // End of medium
+                              .replace("\u001A", "")  // Substitute
+                              .replace("\u001B", "")  // Escape
+                              .replace("\u001C", "")  // File separator
+                              .replace("\u001D", "")  // Group separator
+                              .replace("\u001E", "")  // Record separator
+                              .replace("\u001F", ""); // Unit separator
+
+        return sanitized;
     }
 }

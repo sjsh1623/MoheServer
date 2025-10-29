@@ -467,15 +467,15 @@ public class RecommendationController {
     )
     public ResponseEntity<ApiResponse<CurrentTimeRecommendationsResponse>> getCurrentTimeRecommendations(
             @Parameter(description = "사용자 위도", example = "37.5665")
-            @RequestParam(required = false) Double latitude,
+            @RequestParam(value = "lat", required = false) Double lat,
             @Parameter(description = "사용자 경도", example = "126.9780")
-            @RequestParam(required = false) Double longitude,
+            @RequestParam(value = "lon", required = false) Double lon,
             @Parameter(description = "추천 개수", example = "10")
             @RequestParam(defaultValue = "10") int limit,
             jakarta.servlet.http.HttpServletRequest httpRequest) {
         try {
             int safeLimit = limit < 1 ? 10 : Math.min(limit, 50);
-            CurrentTimeRecommendationsResponse response = placeService.getCurrentTimePlaces(latitude, longitude, safeLimit);
+            CurrentTimeRecommendationsResponse response = placeService.getCurrentTimePlaces(lat, lon, safeLimit);
             return ResponseEntity.ok(ApiResponse.success(response));
         } catch (Exception e) {
             logger.error("Failed to get current time recommendations", e);
@@ -507,9 +507,9 @@ public class RecommendationController {
     )
     public ResponseEntity<ApiResponse<List<SimplePlaceDto>>> getBookmarkBasedRecommendations(
             @Parameter(description = "사용자 위도", example = "37.5665")
-            @RequestParam(required = false) Double latitude,
+            @RequestParam(value = "lat", required = false) Double lat,
             @Parameter(description = "사용자 경도", example = "126.9780")
-            @RequestParam(required = false) Double longitude,
+            @RequestParam(value = "lon", required = false) Double lon,
             @Parameter(description = "거리 (km)", example = "20")
             @RequestParam(defaultValue = "20.0") Double distance,
             @Parameter(description = "추천 개수", example = "15")
@@ -519,10 +519,10 @@ public class RecommendationController {
             int safeLimit = Math.max(1, Math.min(limit, 50));
             List<Place> places;
 
-            if (latitude != null && longitude != null) {
+            if (lat != null && lon != null) {
                 // Get bookmark-based recommendations within distance
                 PageRequest pageRequest = PageRequest.of(0, safeLimit);
-                places = bookmarkRepository.findMostBookmarkedPlacesWithinDistance(latitude, longitude, distance, pageRequest);
+                places = bookmarkRepository.findMostBookmarkedPlacesWithinDistance(lat, lon, distance, pageRequest);
             } else {
                 // Fallback to global bookmark-based recommendations
                 PageRequest pageRequest = PageRequest.of(0, safeLimit);
