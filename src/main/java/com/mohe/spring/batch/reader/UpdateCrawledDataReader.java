@@ -42,6 +42,7 @@ public class UpdateCrawledDataReader implements ItemReader<Place> {
     /**
      * Load next page of Place IDs
      * Only loads one page at a time to avoid memory issues
+     * Filters out places with review count < 5 and categories containing '헤어', '미용실', '마트'
      */
     private void loadNextPageIds() {
         if (!hasMorePages) {
@@ -49,7 +50,7 @@ public class UpdateCrawledDataReader implements ItemReader<Place> {
         }
 
         Pageable pageable = PageRequest.of(currentPage, pageSize, Sort.by("id").ascending());
-        Page<Long> idsPage = placeRepository.findPlaceIdsForBatchProcessing(pageable);
+        Page<Long> idsPage = placeRepository.findPlaceIdsForBatchProcessingWithFilters(pageable);
 
         currentPageIds = new ArrayList<>(idsPage.getContent());
         currentIdIndex = 0;
