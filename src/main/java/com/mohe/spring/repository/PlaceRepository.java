@@ -221,6 +221,29 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     Page<Long> findPlaceIdsForBatchProcessing(Pageable pageable);
 
     /**
+     * Find place IDs for batch processing with filters
+     * Filters out places with:
+     * - Review count less than 5
+     * - Categories containing '헤어', '미용실', '마트'
+     * Returns only IDs to avoid pagination issues with collection fetching
+     * Step 1: Get IDs with pagination (efficient)
+     */
+    @Query(value = """
+        SELECT p.id FROM places p
+        WHERE (p.crawler_found IS NULL)
+        AND (p.ready IS NULL OR p.ready = false)
+        AND (p.review_count IS NULL OR p.review_count >= 5)
+        AND NOT EXISTS (
+            SELECT 1 FROM unnest(p.category) AS cat
+            WHERE cat ILIKE '%헤어%'
+            OR cat ILIKE '%미용실%'
+            OR cat ILIKE '%마트%'
+        )
+        ORDER BY p.id ASC
+    """, nativeQuery = true)
+    Page<Long> findPlaceIdsForBatchProcessingWithFilters(Pageable pageable);
+
+    /**
      * Find place IDs where crawlerFound = true (for image update)
      * Returns only IDs to avoid pagination issues with collection fetching
      * Step 1: Get IDs with pagination (efficient)
