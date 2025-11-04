@@ -175,21 +175,31 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 - **Naver Place API** (required): Client ID/secret for place search (`NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`)
 - **Kakao Local API** (required): API key for place data (`KAKAO_API_KEY`)
 - **Embedding Service** (required): FastAPI service for text embeddings (`EMBEDDING_SERVICE_URL`)
-- **Google Places API** (optional): API key for enhanced place data (`GOOGLE_PLACES_API_KEY`)
-- **OpenAI API** (optional): Text generation (`OPENAI_API_KEY`)
-- **Gemini API** (optional): Image generation (`GEMINI_API_KEY`)
-- **Redis** (optional): Token storage (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`)
+- **OpenAI API** (optional): AI description generation (`OPENAI_API_KEY`, `OPENAI_MODEL`)
+- **Gemini API** (optional): Image generation (`GEMINI_API_KEY`, `GEMINI_BASE_URL`)
+- **Korean Government APIs** (optional): Weather/region data (`KMA_SERVICE_KEY`, `GOVT_API_KEY`, `VWORLD_API_KEY`, `SGIS_API_KEY`)
 - **Web Crawler** (optional): Python crawler service (`CRAWLER_SERVER_URL`)
+- **Image Processor** (optional): Node.js image processing (`IMAGE_PROCESSOR_URL`)
 - **Email SMTP** (optional): For OTP verification (`MAIL_USERNAME`, `MAIL_PASSWORD`)
 
-**Environment Variables**: The `.env.example` file contains all available configuration options:
-- Database configuration (PostgreSQL connection details)
-- JWT secret (minimum 64 characters required)
-- API keys for external services
-- Embedding service configuration (default: `http://embedding:2000`)
-- Batch job settings (chunk size, concurrency, scheduling)
-- Recommendation algorithm weights (Jaccard, Cosine, MBTI, time decay)
-- Image storage configuration (local vs remote)
+**Environment Variables**: The `.env.example` file is the central control panel for all configuration:
+- **Section 1**: Application basics (profile, port, log level)
+- **Section 2**: Database connection (PostgreSQL, HikariCP pool settings)
+- **Section 3**: JWT security (secret, token expiration)
+- **Section 4**: External APIs (Kakao, Naver - required for place data)
+- **Section 5**: Government APIs (optional - weather, regions, with fallback support)
+- **Section 6**: AI/ML services (embedding, OpenAI, Gemini)
+- **Section 7**: Web crawler (Python service for detailed place info)
+- **Section 8**: Image processor (Node.js service for image optimization)
+- **Section 9**: Email/SMTP (OTP verification)
+- **Section 10**: Batch job configuration (chunk size, concurrency, scheduling)
+- **Section 11**: Recommendation algorithm weights (highly tunable for personalization)
+- **Section 12**: Cache settings (weather, region data)
+- **Section 13**: JPA/Hibernate (DDL, SQL logging, Flyway)
+- **Section 14**: Development/test (mock coordinates for testing)
+- **Section 15**: Monitoring (Grafana, Prometheus)
+
+All hardcoded values have been moved to environment variables for easy control.
 
 **Batch Job Status Tracking**: Places have two status flags:
 - `crawler_found`: Whether the web crawler successfully found the place
