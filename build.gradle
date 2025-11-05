@@ -75,7 +75,10 @@ dependencies {
     
     // HTML sanitization for email content and HTML tag removal
     implementation 'org.jsoup:jsoup:1.17.2'
-    
+
+    // Caffeine Cache for Live Mode processing cache
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
     // OpenAI client with compatible versions for Java 21
     implementation 'com.aallam.openai:openai-client:3.8.0'
     implementation 'io.ktor:ktor-client-okhttp:2.3.9'
