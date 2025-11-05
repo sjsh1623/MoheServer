@@ -1,30 +1,24 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/mohe_db}
-    username: ${SPRING_DATASOURCE_USERNAME:mohe_user}
-    password: ${SPRING_DATASOURCE_PASSWORD:mohe_password}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mohe_db}
+    username: ${DB_USERNAME:mohe_user}
+    password: ${DB_PASSWORD:mohe_password}
+
   batch:
     job:
       enabled: false
 
 mohe:
   image:
-    storage-path: ${MOHE_IMAGE_STORAGE_PATH:./images}
-    server-url: ${MOHE_IMAGE_SERVER_URL:http://100.99.236.50:8080}
-    use-remote: ${MOHE_IMAGE_USE_REMOTE:false}
+    storage-path: ${IMAGE_STORAGE_PATH:./images}
+    server-url: ${IMAGE_SERVER_URL:http://localhost:8080}
+    use-remote: ${IMAGE_USE_REMOTE:false}
   image-processor:
     url: ${IMAGE_PROCESSOR_URL:http://100.99.236.50:5200}
-
-api:
-  kakao:
-    key: ${KAKAO_API_KEY:}
-
-  naver:
-    client-id: ${NAVER_CLIENT_ID:}
-    client-secret: ${NAVER_CLIENT_SECRET:}
 
 crawler:
   base-url: ${CRAWLER_SERVER_URL:http://localhost:4000}
 
-# OpenAI Configuration
-OPENAI_API_KEY: ${OPENAI_API_KEY}
+embedding:
+  service:
+    url: ${EMBEDDING_SERVICE_URL:http://localhost:2000}
