@@ -7,6 +7,11 @@ import com.mohe.spring.repository.PlaceImageRepository;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.repository.BookmarkRepository;
 import com.mohe.spring.service.LlmService;
+import com.mohe.spring.service.livemode.LiveModeService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Page;
@@ -25,12 +30,20 @@ import java.util.stream.Collectors;
 
 @Service
 public class PlaceService {
-    
+
+    private static final Logger logger = LoggerFactory.getLogger(PlaceService.class);
+
     private final PlaceRepository placeRepository;
     private final VectorSearchService vectorSearchService;
     private final BookmarkRepository bookmarkRepository;
     private final LlmService llmService;
     private final PlaceImageRepository placeImageRepository;
+
+    @Autowired(required = false)
+    private LiveModeService liveModeService;
+
+    @Value("${live.mode.enabled:false}")
+    private boolean liveModeEnabled;
 
     public PlaceService(PlaceRepository placeRepository, VectorSearchService vectorSearchService,
                         BookmarkRepository bookmarkRepository, LlmService llmService,
@@ -569,6 +582,23 @@ public class PlaceService {
         if (places == null || places.isEmpty()) {
             return List.of();
         }
+
+        // Live Mode: ready=false인 장소를 실시간 처리
+        if (liveModeEnabled && liveModeService != null) {
+            logger.info("🚀 Live Mode enabled - processing {} places", places.size());
+            return places.stream()
+                .map(place -> {
+                    if (!isReady(place)) {
+                        // 실시간 처리 시도
+                        return liveModeService.processPlaceRealtime(place);
+                    }
+                    return place;
+                })
+                .filter(this::isReady) // 처리 완료된 것만 반환
+                .collect(Collectors.toList());
+        }
+
+        // 기존 방식: ready=true만 필터링
         return places.stream()
             .filter(this::isReady)
             .collect(Collectors.toList());

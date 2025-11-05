@@ -272,6 +272,102 @@ mohe:
 - 30km 이내 데이터: 30%
 - 벡터 검색 결과와 교집합하여 최종 추천
 
+## 🚀 Live Mode (실시간 데이터 처리)
+
+### 개요
+
+Live Mode는 사용자 조회 시점에 `ready=false`인 장소를 실시간으로 처리하는 기능입니다. 기존 배치 방식과 달리, 사용자가 장소를 조회할 때 즉시 크롤링 → AI 요약 → 벡터화 → 이미지 저장을 수행합니다.
+
+### 동작 방식
+
+**기존 방식 (LIVE_MODE=false, 기본값):**
+```
+사용자 조회 → ready=true인 데이터만 반환
+```
+
+**Live Mode (LIVE_MODE=true):**
+```
+사용자 조회
+  ↓
+ready=false 장소 발견
+  ↓
+실시간 처리 (최대 2분)
+  ├─ 크롤링 (Naver/Kakao)
+  ├─ AI 요약 생성 (OpenAI)
+  ├─ 벡터화 (Kanana Embedding)
+  └─ 이미지 저장
+  ↓
+ready=true 설정
+  ↓
+사용자에게 완성된 데이터 반환
+```
+
+### 설정 방법
+
+`.env` 파일 수정:
+
+```bash
+# Live Mode 활성화 (기본값: false)
+LIVE_MODE_ENABLED=true
+
+# 처리 타임아웃 (밀리초, 기본값: 120000 = 2분)
+LIVE_MODE_TIMEOUT=120000
+
+# 캐시 유효 시간 (초, 기본값: 3600 = 1시간)
+# 같은 장소를 1시간 내 재조회 시 중복 처리 방지
+LIVE_MODE_CACHE_TTL=3600
+
+# 캐시 최대 크기 (기본값: 1000)
+LIVE_MODE_CACHE_MAX_SIZE=1000
+```
+
+### 권장 사용 환경
+
+✅ **개발/테스트 환경:**
+- `LIVE_MODE_ENABLED=true` 설정
+- 크롤러, OpenAI, Embedding 서비스가 모두 활성화된 상태에서만 사용
+- 빠른 데이터 확인 및 테스트 가능
+
+❌ **프로덕션 환경:**
+- `LIVE_MODE_ENABLED=false` 권장 (기본값)
+- 이유:
+  - OpenAI API 비용 증가
+  - 응답 시간 지연 (최대 2분)
+  - 서버 부하 증가
+- 대신 배치 작업으로 미리 데이터 처리
+
+### 주요 특징
+
+- **중복 처리 방지**: Caffeine Cache를 사용하여 같은 장소에 대한 동시 요청 방지
+- **타임아웃 처리**: 2분 내 처리 완료하지 못하면 부분 데이터 반환
+- **배치 로직 재사용**: `UpdateCrawledDataJob` + `VectorEmbeddingJob` 로직을 그대로 활용
+- **비동기 처리**: CompletableFuture를 사용하여 백그라운드에서 처리
+
+### 로그 확인
+
+Live Mode 활성화 시 다음과 같은 로그가 출력됩니다:
+
+```
+🚀 LiveModeService initialized - timeout: 120000ms, cache TTL: 3600s
+🚀 Live Mode enabled - processing 5 places
+🎬 Starting real-time processing for place: 강남 카페 (ID: 123)
+🔍 Starting crawl for '강남 카페'
+🤖 Generating OpenAI description...
+🧮 Starting vectorization...
+✅ Real-time processing completed for place: 강남 카페 (ready=true)
+```
+
+### 문제 해결
+
+| 문제 | 원인 | 해결책 |
+|------|------|--------|
+| `LiveModeService not found` | Live Mode 비활성화 상태 | `.env`에서 `LIVE_MODE_ENABLED=true` 설정 |
+| `Processing timeout` | 크롤러/AI 서비스 응답 지연 | `LIVE_MODE_TIMEOUT` 값 증가 (예: 180000) |
+| `Crawling failed` | 크롤러 서버 다운 | `CRAWLER_SERVER_URL` 확인 및 크롤러 재시작 |
+| `Vectorization failed` | Embedding 서비스 다운 | `EMBEDDING_SERVICE_URL` 확인 및 서비스 재시작 |
+
+---
+
 ## 🔄 배치 작업
 
 ### Spring Batch Job 실행

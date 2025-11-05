@@ -1,32 +1,32 @@
 spring:
   batch:
     job:
-      enabled: false  # Disable automatic job execution in Docker
+      enabled: false
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:mohe_db}
+    username: ${DB_USERNAME:mohe_user}
+    password: ${DB_PASSWORD:mohe_password}
 
-  # Spring Boot DevTools configuration for hot reload in development
   devtools:
     restart:
-      enabled: true  # Enable automatic restart when classpath files change
-      poll-interval: 2s  # How often to poll for classpath changes
-      quiet-period: 1s  # Wait time after last change before triggering restart
+      enabled: true
+      poll-interval: 2s
+      quiet-period: 1s
     livereload:
-      enabled: true  # Enable LiveReload server for browser auto-refresh
+      enabled: true
 
 mohe:
   image:
-    storage-path: /images
-    server-url: ${MOHE_IMAGE_SERVER_URL:http://100.99.236.50:8080}
-    use-remote: ${MOHE_IMAGE_USE_REMOTE:true}
+    storage-path: ${IMAGE_STORAGE_PATH:/images}
+    server-url: ${IMAGE_SERVER_URL:http://100.99.236.50:8080}
+    use-remote: ${IMAGE_USE_REMOTE:true}
   image-processor:
     url: ${IMAGE_PROCESSOR_URL:http://100.99.236.50:5200}
 
 crawler:
   base-url: ${CRAWLER_SERVER_URL:http://localhost:4000}
 
-# OpenAI Configuration
-OPENAI_API_KEY: ${OPENAI_API_KEY:}
+embedding:
+  service:
+    url: ${EMBEDDING_SERVICE_URL:http://embedding:2000}
