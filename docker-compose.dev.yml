@@ -55,6 +55,8 @@ services:
       GOOGLE_PLACES_API_KEY: ""
       OPENAI_API_KEY: ""
       GEMINI_API_KEY: ""
+      # Override gradle.properties JAVA_HOME for container
+      JAVA_HOME: /opt/java/openjdk
     volumes:
       - .:/app
       - /app/build
@@ -62,7 +64,7 @@ services:
     networks:
       - mohe-network-dev
     restart: unless-stopped
-    command: ["./gradlew", "bootRun", "--continuous"]
+    command: ["gradle", "bootRun", "--no-daemon"]
 
   frontend:
     build:
