@@ -34,11 +34,13 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, Long> {
     /**
      * Find places with most bookmarks within distance from user location
      * Fixed: Use Bookmark join instead of p.bookmarks
+     * Filter: Only return ready=true places
      */
     @Query("""
         SELECT p FROM Place p
         LEFT JOIN Bookmark b ON b.place.id = p.id
         WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+        AND COALESCE(p.ready, false) = true
         AND (
             6371 * acos(
                 cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS double))) *
@@ -59,10 +61,12 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, Long> {
     /**
      * Find places with most bookmarks (fallback when no location provided)
      * Fixed: Use Bookmark join instead of p.bookmarks
+     * Filter: Only return ready=true places
      */
     @Query("""
         SELECT p FROM Place p
         LEFT JOIN Bookmark b ON b.place.id = p.id
+        WHERE COALESCE(p.ready, false) = true
         GROUP BY p.id
         ORDER BY COUNT(b) DESC, p.rating DESC
     """)

@@ -490,7 +490,33 @@ public class PlaceService {
             );
         }
 
+        // Expand search radius progressively if still not enough results
         if (selected.size() < safeLimit) {
+            addPlacesWithinDistance(
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 50.0, safeLimit * 4),
+                selected,
+                latitude,
+                longitude,
+                0.0,
+                50.0,
+                safeLimit
+            );
+        }
+
+        if (selected.size() < safeLimit) {
+            addPlacesWithinDistance(
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 100.0, safeLimit * 4),
+                selected,
+                latitude,
+                longitude,
+                0.0,
+                100.0,
+                safeLimit
+            );
+        }
+
+        // Only use location-independent fallback as last resort if no location-based results found
+        if (selected.isEmpty()) {
             placeRepository.findRecommendablePlaces(PageRequest.of(0, safeLimit)).getContent()
                 .stream()
                 .filter(this::isReady)
