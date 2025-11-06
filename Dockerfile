@@ -1,20 +1,16 @@
-# Build stage
-FROM gradle:8.11.1-jdk21 AS build
+# Build stage - Use Gradle 8.5 with JDK 21 to avoid wrapper compatibility issues
+FROM gradle:8.5-jdk21 AS build
 
 WORKDIR /app
 
-# Copy gradle wrapper (skip gradle.properties as it contains local paths)
-COPY gradle gradle
-COPY gradlew .
-
-# Copy gradle files
+# Copy gradle files (no need for wrapper, use container's gradle directly)
 COPY build.gradle settings.gradle ./
 
 # Copy source code
 COPY src ./src
 
-# Build the application
-RUN ./gradlew clean build -x test --no-daemon
+# Build the application using container's gradle (not wrapper)
+RUN gradle clean build -x test --no-daemon
 
 # Runtime stage
 FROM eclipse-temurin:21-jre
