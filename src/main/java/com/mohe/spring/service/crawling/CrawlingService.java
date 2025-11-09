@@ -27,16 +27,19 @@ public class CrawlingService {
     private final ObjectMapper objectMapper;
 
     public CrawlingService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
-                          @Value("${crawler.base-url:http://localhost:4000}") String baseUrl) {
+                          @Value("${crawler.base-url:http://localhost:4000}") String baseUrl,
+                          @Value("${crawler.timeout-minutes:30}") int timeoutMinutes) {
         // HttpClient 설정: 타임아웃 증가 및 연결 풀 설정
         // 크롤러는 Selenium으로 실제 브라우저를 구동하므로 매우 긴 타임아웃 필요
+        System.out.println("🌐 CrawlingService initialized with timeout: " + timeoutMinutes + " minutes");
+
         HttpClient httpClient = HttpClient.create()
-                .responseTimeout(Duration.ofMinutes(15))  // 응답 타임아웃 15분으로 증가
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 120000)  // 연결 타임아웃 2분으로 증가
+                .responseTimeout(Duration.ofMinutes(timeoutMinutes))  // 응답 타임아웃 (환경변수로 설정 가능)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 180000)  // 연결 타임아웃 3분
                 .option(ChannelOption.SO_KEEPALIVE, true)  // Keep-Alive 활성화
                 .doOnConnected(conn -> conn
-                        .addHandlerLast(new ReadTimeoutHandler(900, TimeUnit.SECONDS))  // 읽기 타임아웃 15분으로 증가
-                        .addHandlerLast(new WriteTimeoutHandler(180, TimeUnit.SECONDS)));  // 쓰기 타임아웃 3분으로 증가
+                        .addHandlerLast(new ReadTimeoutHandler(timeoutMinutes * 60, TimeUnit.SECONDS))  // 읽기 타임아웃
+                        .addHandlerLast(new WriteTimeoutHandler(300, TimeUnit.SECONDS)));  // 쓰기 타임아웃 5분
 
         this.webClient = webClientBuilder
                 .baseUrl(baseUrl)

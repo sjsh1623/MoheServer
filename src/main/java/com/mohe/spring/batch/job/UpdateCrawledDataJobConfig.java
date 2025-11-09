@@ -18,11 +18,16 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.integration.async.AsyncItemProcessor;
+import org.springframework.batch.integration.async.AsyncItemWriter;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.math.BigDecimal;
@@ -31,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Future;
 
 @Configuration
 public class UpdateCrawledDataJobConfig {
@@ -40,6 +46,18 @@ public class UpdateCrawledDataJobConfig {
     private final OpenAiDescriptionService openAiDescriptionService;
     private final ImageService imageService;
     private final PlaceRepository placeRepository;
+
+    @Value("${batch.async.core-pool-size:10}")
+    private int corePoolSize;
+
+    @Value("${batch.async.max-pool-size:20}")
+    private int maxPoolSize;
+
+    @Value("${batch.async.queue-capacity:100}")
+    private int queueCapacity;
+
+    @Value("${batch.chunk-size:20}")
+    private int chunkSize;
 
     public UpdateCrawledDataJobConfig(
         CrawlingService crawlingService,
@@ -55,6 +73,28 @@ public class UpdateCrawledDataJobConfig {
         this.placeRepository = placeRepository;
     }
 
+    /**
+     * 비동기 병렬 처리를 위한 TaskExecutor
+     * - corePoolSize: 최소 스레드 풀 크기 (기본 10)
+     * - maxPoolSize: 최대 스레드 풀 크기 (기본 20)
+     * - queueCapacity: 대기 큐 크기 (기본 100)
+     */
+    @Bean(name = "batchTaskExecutor")
+    public TaskExecutor batchTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(maxPoolSize);
+        executor.setQueueCapacity(queueCapacity);
+        executor.setThreadNamePrefix("batch-async-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+
+        System.out.println("🚀 Batch TaskExecutor initialized: core=" + corePoolSize +
+                         ", max=" + maxPoolSize + ", queue=" + queueCapacity);
+        return executor;
+    }
+
     @Bean
     public Job updateCrawledDataJob(JobRepository jobRepository, Step updateCrawledDataStep) {
         return new JobBuilder("updateCrawledDataJob", jobRepository)
@@ -63,15 +103,44 @@ public class UpdateCrawledDataJobConfig {
     }
 
     @Bean
-    public Step updateCrawledDataStep(JobRepository jobRepository, PlatformTransactionManager transactionManager, ItemReader<Place> placeReader, ItemProcessor<Place, Place> placeProcessor, ItemWriter<Place> placeWriter) {
+    public Step updateCrawledDataStep(
+            JobRepository jobRepository,
+            PlatformTransactionManager transactionManager,
+            ItemReader<Place> placeReader,
+            ItemProcessor<Place, Place> placeProcessor,
+            ItemWriter<Place> placeWriter,
+            TaskExecutor batchTaskExecutor
+    ) {
+        // AsyncItemProcessor 설정
+        AsyncItemProcessor<Place, Place> asyncItemProcessor = new AsyncItemProcessor<>();
+        asyncItemProcessor.setDelegate(placeProcessor);
+        asyncItemProcessor.setTaskExecutor(batchTaskExecutor);
+
+        // AsyncItemWriter 설정
+        AsyncItemWriter<Place> asyncItemWriter = new AsyncItemWriter<>();
+        asyncItemWriter.setDelegate(placeWriter);
+
+        try {
+            asyncItemProcessor.afterPropertiesSet();
+            asyncItemWriter.afterPropertiesSet();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize async processors", e);
+        }
+
+        System.out.println("🔧 Async batch step configured: chunkSize=" + chunkSize);
+
         return new StepBuilder("updateCrawledDataStep", jobRepository)
-                .<Place, Place>chunk(5, transactionManager)
+                .<Place, Future<Place>>chunk(chunkSize, transactionManager)
                 .reader(placeReader)
-                .processor(placeProcessor)
-                .writer(placeWriter)
+                .processor(asyncItemProcessor)
+                .writer(asyncItemWriter)
                 .faultTolerant()
-                .skip(org.springframework.web.reactive.function.client.WebClientResponseException.class)
+                .skip(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+                .skip(org.hibernate.StaleStateException.class)
+                .skip(org.springframework.dao.OptimisticLockingFailureException.class)
                 .skipLimit(Integer.MAX_VALUE)
+                .noRollback(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+                .noRollback(org.hibernate.StaleStateException.class)
                 .build();
     }
 
@@ -102,9 +171,8 @@ public class UpdateCrawledDataJobConfig {
                     System.err.println("❌ Crawling failed for '" + place.getName() + "' - null response from crawler");
                     place.setCrawlerFound(false);
                     place.setReady(false);
-                    placeRepository.save(place);
-                    System.out.println("💾 Saved place '" + place.getName() + "' with crawler_found=false to database");
-                    return null;
+                    // Don't save here - will be saved by writer
+                    return place;  // Return place so writer can save it
                 }
 
                 CrawledDataDto crawledData = response.getData();
@@ -154,8 +222,8 @@ public class UpdateCrawledDataJobConfig {
                 // Crawling succeeded but lack of information -> crawler_found = true, ready = false
                 place.setCrawlerFound(true);
                 place.setReady(false);
-                placeRepository.save(place);
-                return null;
+                // Don't save here - will be saved by writer
+                return place;  // Return place so writer can save it
             }
 
             description.setAiSummary(sanitizeText(aiSummaryText));
@@ -250,8 +318,8 @@ public class UpdateCrawledDataJobConfig {
                     // Crawling succeeded but AI issue -> crawler_found = true, ready = false
                     place.setCrawlerFound(true);
                     place.setReady(false);
-                    placeRepository.save(place);
-                    return null;
+                    // Don't save here - will be saved by writer
+                    return place;  // Return place so writer can save it
                 }
             }
 
@@ -371,16 +439,16 @@ public class UpdateCrawledDataJobConfig {
                 }
                 place.setCrawlerFound(false);
                 place.setReady(false);
-                placeRepository.save(place);
-                return null;
+                // Writer가 저장 처리
+                return place;
             } catch (Exception e) {
                 // 기타 예외 (connection refused, timeout 등) = 크롤링 실패 -> crawler_found = false, ready = false
                 System.err.println("❌ Crawling failed for '" + place.getName() + "' due to error: " + e.getMessage());
                 e.printStackTrace();
                 place.setCrawlerFound(false);
                 place.setReady(false);
-                placeRepository.save(place);
-                return null;
+                // Writer가 저장 처리
+                return place;
             }
         };
     }
@@ -389,23 +457,88 @@ public class UpdateCrawledDataJobConfig {
     public ItemWriter<Place> placeWriter() {
         return chunk -> {
             System.out.println("📝 Starting to save batch of " + chunk.getItems().size() + " places...");
-            // Save places individually and flush after each to avoid Hibernate session conflicts
             int savedCount = 0;
+
             for (Place place : chunk.getItems()) {
-                try {
-                    placeRepository.saveAndFlush(place);
-                    savedCount++;
-                    System.out.println("💾 [" + savedCount + "/" + chunk.getItems().size() + "] Saved place '" + place.getName() +
-                        "' (ID: " + place.getId() + ", crawler_found=" + place.getCrawlerFound() +
-                        ", ready=" + place.getReady() + ") to database");
-                } catch (Exception e) {
-                    System.err.println("❌ Failed to save place '" + place.getName() + "': " + e.getMessage());
-                    e.printStackTrace();
-                }
+                // Refresh entity from DB to get managed state
+                Place freshPlace = placeRepository.findById(place.getId())
+                    .orElseThrow(() -> new IllegalStateException("Place not found: " + place.getId()));
+
+                // Clear existing collections to avoid orphan removal conflicts
+                freshPlace.getDescriptions().clear();
+                freshPlace.getImages().clear();
+                freshPlace.getBusinessHours().clear();
+                freshPlace.getSns().clear();
+                freshPlace.getReviews().clear();
+
+                // Flush to ensure orphans are deleted before adding new items
+                placeRepository.flush();
+
+                // Update fields with new data
+                updatePlaceFields(freshPlace, place);
+
+                // Save the updated entity
+                placeRepository.saveAndFlush(freshPlace);
+                savedCount++;
+
+                System.out.println("💾 [" + savedCount + "/" + chunk.getItems().size() + "] Saved place '" + freshPlace.getName() +
+                    "' (ID: " + freshPlace.getId() + ", crawler_found=" + freshPlace.getCrawlerFound() +
+                    ", ready=" + freshPlace.getReady() + ") to database");
             }
-            // Log batch write success
+
             System.out.println("✅ Successfully saved batch: " + savedCount + "/" + chunk.getItems().size() + " places written to database");
         };
+    }
+
+    /**
+     * Update fresh entity with data from processed entity
+     */
+    private void updatePlaceFields(Place target, Place source) {
+        target.setName(source.getName());
+        target.setLatitude(source.getLatitude());
+        target.setLongitude(source.getLongitude());
+        target.setRoadAddress(source.getRoadAddress());
+        target.setWebsiteUrl(source.getWebsiteUrl());
+        target.setRating(source.getRating());
+        target.setReviewCount(source.getReviewCount());
+        target.setCategory(source.getCategory());
+        target.setKeyword(source.getKeyword());
+        target.setParkingAvailable(source.getParkingAvailable());
+        target.setPetFriendly(source.getPetFriendly());
+        target.setReady(source.getReady());
+        target.setCrawlerFound(source.getCrawlerFound());
+
+        // Copy collections
+        if (source.getDescriptions() != null) {
+            source.getDescriptions().forEach(desc -> {
+                desc.setPlace(target);
+                target.getDescriptions().add(desc);
+            });
+        }
+        if (source.getImages() != null) {
+            source.getImages().forEach(img -> {
+                img.setPlace(target);
+                target.getImages().add(img);
+            });
+        }
+        if (source.getBusinessHours() != null) {
+            source.getBusinessHours().forEach(hour -> {
+                hour.setPlace(target);
+                target.getBusinessHours().add(hour);
+            });
+        }
+        if (source.getSns() != null) {
+            source.getSns().forEach(s -> {
+                s.setPlace(target);
+                target.getSns().add(s);
+            });
+        }
+        if (source.getReviews() != null) {
+            source.getReviews().forEach(review -> {
+                review.setPlace(target);
+                target.getReviews().add(review);
+            });
+        }
     }
 
     private String prepareReviewSnippet(List<String> reviews) {
