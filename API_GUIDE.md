@@ -38,6 +38,15 @@ Swagger UI(`http://localhost:8080/swagger-ui.html`)와 OpenAPI 스펙(`http://lo
 | GET | `/api/bookmarks` | Bearer (ROLE_USER) | 페이징된 북마크 목록을 가져옵니다. |
 | GET | `/api/bookmarks/{placeId}` | Bearer (ROLE_USER) | 특정 장소의 북마크 여부를 확인합니다. |
 
+## 댓글
+| 메서드 | 경로 | 권한 | 설명 |
+| --- | --- | --- | --- |
+| POST | `/api/places/{placeId}/comments` | Bearer (ROLE_USER) | 특정 장소에 댓글과 평점을 작성합니다. |
+| GET | `/api/places/{placeId}/comments` | 공개 | 특정 장소의 댓글 목록을 최신순으로 조회합니다(페이징). |
+| GET | `/api/user/comments` | Bearer (ROLE_USER) | 로그인한 사용자가 작성한 모든 댓글을 조회합니다. |
+| PUT | `/api/comments/{commentId}` | Bearer (ROLE_USER) | 본인이 작성한 댓글을 수정합니다. |
+| DELETE | `/api/comments/{commentId}` | Bearer (ROLE_USER) | 본인이 작성한 댓글을 삭제합니다. |
+
 ## 장소 탐색 & 유틸리티
 | 메서드 | 경로 | 권한 | 설명 |
 | --- | --- | --- | --- |
