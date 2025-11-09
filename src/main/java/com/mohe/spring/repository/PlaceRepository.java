@@ -84,17 +84,6 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     """)
     Page<Place> findRecommendablePlaces(Pageable pageable);
 
-    /**
-     * Live Mode용: ready 필터 제거
-     * Live Mode 활성화 시 ready=false인 장소도 조회하여 실시간 처리
-     */
-    @Query("""
-        SELECT p FROM Place p
-        WHERE (p.rating >= 0.0 OR p.rating IS NULL)
-        ORDER BY p.rating DESC, p.name ASC
-    """)
-    Page<Place> findAllPlacesForLiveMode(Pageable pageable);
-
     @Query("SELECT p FROM Place p WHERE p.createdAt < :oldDate AND p.rating < :ratingThreshold")
     List<Place> findOldLowRatedPlaces(
         @Param("oldDate") OffsetDateTime oldDate,
