@@ -102,7 +102,7 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
   - `location/`: Location registries (Seoul, Jeju, Yongin regions)
   - `category/`: Search categories and excluded categories
 - **config/**: Spring configuration classes (Security, Batch, OpenAPI, LLM, Vector, Async)
-- **controller/**: REST endpoints organized by domain (20+ controllers including Auth, User, Place, Recommendation, Batch)
+- **controller/**: REST endpoints organized by domain (20+ controllers including Auth, User, Place, Comment, Recommendation, Batch)
 - **dto/**: Data transfer objects with validation annotations
 - **entity/**: JPA entities representing database tables
 - **repository/**: Spring Data JPA repositories (with custom queries for vector search)
@@ -140,6 +140,25 @@ ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(...))
 3. Email verification with 5-digit OTP codes
 
 **Profile Management**: Users can set comprehensive preferences including MBTI type, age range, transportation method, and space preferences (workshop, exhibition, nature, etc.).
+
+**Comment System**: User-generated content feature for place reviews:
+- **Entity**: `Comment` with User and Place relationships (Many-to-One)
+- **Features**: CRUD operations with ownership validation
+  - Create: Authenticated users can write comments with optional ratings (1.0-5.0)
+  - Read: Public access to place comments (paginated, latest first)
+  - Update/Delete: Only comment authors can modify their own comments
+- **Repository**: Custom queries for pagination, filtering, and statistics
+  - `findByPlaceIdOrderByCreatedAtDesc`: Get comments for a place
+  - `findByUserIdOrderByCreatedAtDesc`: Get user's comment history
+  - `getAverageRatingByPlaceId`: Calculate average rating per place
+- **API Endpoints**:
+  - `POST /api/places/{placeId}/comments` - Create comment (auth required)
+  - `GET /api/places/{placeId}/comments` - List place comments (public)
+  - `GET /api/user/comments` - List my comments (auth required)
+  - `PUT /api/comments/{commentId}` - Update comment (author only)
+  - `DELETE /api/comments/{commentId}` - Delete comment (author only)
+- **Database**: `comments` table with indices on place_id, user_id, created_at
+- **Migration**: V5__create_comments_table.sql
 
 **Web Crawler Integration**: External Python crawler service for place data enrichment:
 - Configured via `CRAWLER_SERVER_URL` (default: `http://localhost:5000`)
