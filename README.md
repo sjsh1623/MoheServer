@@ -212,6 +212,35 @@ java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
 - **주소 정보**: `GET /api/address/reverse?lat=37.5665&lon=126.9780` - 좌표를 주소로 변환 (Naver API)
 - **관리자/데이터 관리** *(Bearer ADMIN)*: `POST /api/admin/place-management/check-availability`, `POST /api/place-enhancement/batch-enhance`, `POST /api/admin/similarity/calculate`
 - **배치/동기화**: `POST /api/batch/jobs/place-collection`, `POST /api/batch/jobs/update-crawled-data`
+- **한국 행정구역 API**: `GET /api/korean-regions/all`, `GET /api/korean-regions/dong-level`, `GET /api/korean-regions/search-locations`
+
+### 배치 작업 지역 데이터 소스 (2025-11-14 업데이트)
+
+배치 작업(`PlaceCollectionJob`)은 이제 **정부 API 기반 동적 지역 로딩**을 지원합니다:
+
+**데이터 소스 우선순위:**
+1. **정부 표준지역코드 API** (권장) - 실시간 행정구역 데이터 (3600+ 동/읍/면)
+2. **FallbackRegionService** - API 장애 시 하드코딩된 1000+ 지역 데이터
+3. **Legacy Enum** - `SeoulLocation`, `JejuLocation`, `YonginLocation` (Deprecated)
+
+**설정 방법 (.env):**
+```bash
+# 정부 API 사용 (권장)
+BATCH_LOCATION_USE_GOVERNMENT_API=true
+BATCH_LOCATION_USE_LEGACY_ENUMS=false
+
+# 정부 API 키 (공공데이터포털에서 발급)
+GOVT_API_KEY=your_govt_api_key_here
+
+# 긴급 폴백 모드 (API 서버 화재 등)
+IS_GOV_SERVER_DOWN=N
+```
+
+**특징:**
+- 24시간 자동 캐싱으로 API 호출 최소화
+- 행정구역 변경 시 자동 반영
+- 서울/경기/제주 외 전국 17개 시도 지원
+- 배치 작업 시 지역 필터링 지원: `region=seoul`, `region=gyeonggi`, `region=jeju` 등
 
 ## 📍 Mock 위치 설정 (선택 사항)
 
@@ -296,7 +325,7 @@ curl -X POST http://localhost:8080/api/batch/jobs/stop-all
 
 | 엔드포인트 | 메서드 | 설명 |
 |-----------|--------|------|
-| `/api/batch/jobs/running` | GET | 실행 중인 배치 작업 목록 조회 (executionId, 상태, Step 진행률 포함) |
+| `/api/batch/jobs/running` | GET | 실행 중인 배치 작업 목록 조회 (executi`onId, 상태, Step 진행률 포함) |
 | `/api/batch/jobs/stop/{executionId}` | POST | 특정 배치 작업 중지 (현재 청크 완료 후 안전하게 종료) |
 | `/api/batch/jobs/stop-all` | POST | 모든 실행 중인 배치 작업 중지 |
 

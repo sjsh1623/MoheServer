@@ -230,6 +230,21 @@ All hardcoded values have been moved to environment variables for easy control.
 - POST `/api/batch/jobs/stop/{executionId}` - Stop specific job gracefully after current chunk
 - POST `/api/batch/jobs/stop-all` - Stop all running jobs
 
+**Batch Location Data Source (Updated: 2025-11-14)**:
+- **Default**: Korean Government Standard Region Code API (정부 표준지역코드 API)
+- **Fallback**: Hardcoded region data (1000+ locations in FallbackRegionService)
+- **Legacy**: Enum-based locations (SeoulLocation, JejuLocation, YonginLocation) - Deprecated
+- **Configuration**:
+  ```bash
+  # .env settings
+  BATCH_LOCATION_USE_GOVERNMENT_API=true   # Use government API (recommended)
+  BATCH_LOCATION_USE_LEGACY_ENUMS=false    # Use legacy enums (deprecated)
+  IS_GOV_SERVER_DOWN=N                     # Emergency fallback mode
+  ```
+- **API Key**: Required for government API (`GOVT_API_KEY` in `.env`)
+- **Caching**: 24-hour in-memory cache to minimize API calls
+- **Region Coverage**: All 17 provinces + 240+ cities + 3600+ dong-level regions
+
 ## Common Issues and Solutions
 
 ### Batch Processing with Hibernate
