@@ -110,13 +110,23 @@ public class AuthService {
         tempUser.setId(tempUserId);
         tempUser.setEmail(request.getEmail());
         tempUser.setVerificationCode(verificationCode);
-        tempUser.setExpiresAt(OffsetDateTime.now().plusMinutes(10));
+        tempUser.setOtp(verificationCode);
+        OffsetDateTime expiryTime = OffsetDateTime.now().plusMinutes(10);
+        tempUser.setExpiresAt(expiryTime);
+        tempUser.setExpiryDate(expiryTime);
         
         tempUserRepository.save(tempUser);
-        
-        // Skip actual email sending as per requirements
-        // emailService.sendVerificationEmail(request.getEmail(), verificationCode);
-        
+
+        // Send verification email if EmailService is available
+        emailService.ifPresent(service -> {
+            try {
+                service.sendVerificationEmail(request.getEmail(), verificationCode);
+            } catch (Exception e) {
+                // Log but don't fail - verification code is stored in DB
+                System.out.println("Failed to send email, but verification code is: " + verificationCode);
+            }
+        });
+
         return new SignupResponse(tempUserId);
     }
     
@@ -231,9 +241,16 @@ public class AuthService {
         passwordResetToken.setExpiresAt(OffsetDateTime.now().plusHours(1));
         
         passwordResetTokenRepository.save(passwordResetToken);
-        
-        // Skip actual email sending as per requirements
-        // emailService.sendPasswordResetEmail(user.getEmail(), resetToken);
+
+        // Send password reset email if EmailService is available
+        emailService.ifPresent(service -> {
+            try {
+                service.sendPasswordResetEmail(user.getEmail(), resetToken);
+            } catch (Exception e) {
+                // Log but don't fail - reset token is stored in DB
+                System.out.println("Failed to send password reset email, but reset token is: " + resetToken);
+            }
+        });
     }
     
     public void resetPassword(ResetPasswordRequest request) {

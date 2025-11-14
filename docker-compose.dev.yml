@@ -64,7 +64,7 @@ services:
     networks:
       - mohe-network-dev
     restart: unless-stopped
-    command: ["gradle", "bootRun", "--no-daemon"]
+    command: ["gradle", "bootRun", "--no-daemon", "-Dorg.gradle.java.home=/opt/java/openjdk"]
 
   frontend:
     build:

@@ -15,7 +15,10 @@ public class TempUser {
     
     @Column(name = "verification_code", nullable = false)
     private String verificationCode;
-    
+
+    @Column(name = "otp", nullable = false)
+    private String otp;
+
     private String nickname;
     
     @Column(name = "password_hash")
@@ -29,7 +32,10 @@ public class TempUser {
     
     @Column(name = "expires_at", nullable = false)
     private OffsetDateTime expiresAt;
-    
+
+    @Column(name = "expiry_date", nullable = false)
+    private OffsetDateTime expiryDate;
+
     // Default constructor for JPA
     public TempUser() {}
     
@@ -79,7 +85,15 @@ public class TempUser {
     public void setVerificationCode(String verificationCode) {
         this.verificationCode = verificationCode;
     }
-    
+
+    public String getOtp() {
+        return otp;
+    }
+
+    public void setOtp(String otp) {
+        this.otp = otp;
+    }
+
     public String getNickname() {
         return nickname;
     }
@@ -118,5 +132,13 @@ public class TempUser {
     
     public void setExpiresAt(OffsetDateTime expiresAt) {
         this.expiresAt = expiresAt;
+    }
+
+    public OffsetDateTime getExpiryDate() {
+        return expiryDate;
+    }
+
+    public void setExpiryDate(OffsetDateTime expiryDate) {
+        this.expiryDate = expiryDate;
     }
 }
