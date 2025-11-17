@@ -133,12 +133,33 @@ public class AuthService {
     public EmailVerificationResponse verifyEmail(EmailVerificationRequest request) {
         TempUser tempUser = tempUserRepository.findValidTempUser(request.getTempUserId(), OffsetDateTime.now())
                 .orElseThrow(() -> new RuntimeException("유효하지 않은 인증 요청입니다"));
-        
+
+        // Trim whitespace from input OTP code (common issue when copying from email)
+        String inputOtp = request.getOtpCode() != null ? request.getOtpCode().trim() : "";
+
+        // Debug logging
+        System.out.println("=== OTP Verification Debug ===");
+        System.out.println("Input OTP (raw): '" + request.getOtpCode() + "'");
+        System.out.println("Input OTP (trimmed): '" + inputOtp + "'");
+        System.out.println("Stored OTP: '" + tempUser.getOtp() + "'");
+        System.out.println("Stored VerificationCode: '" + tempUser.getVerificationCode() + "'");
+
         // Accept bypass code "00000" or the actual verification code
-        if (!request.getOtpCode().equals("00000") && !tempUser.getVerificationCode().equals(request.getOtpCode())) {
+        // Check both otp and verificationCode fields for compatibility
+        boolean isBypassCode = "00000".equals(inputOtp);
+        boolean isValidOtp = tempUser.getOtp() != null && tempUser.getOtp().equals(inputOtp);
+        boolean isValidVerificationCode = tempUser.getVerificationCode() != null && tempUser.getVerificationCode().equals(inputOtp);
+
+        System.out.println("isBypassCode: " + isBypassCode);
+        System.out.println("isValidOtp: " + isValidOtp);
+        System.out.println("isValidVerificationCode: " + isValidVerificationCode);
+        System.out.println("==============================");
+
+        if (!isBypassCode && !isValidOtp && !isValidVerificationCode) {
+            System.out.println("❌ OTP verification failed - tempUserId: " + request.getTempUserId());
             throw new RuntimeException("인증 코드가 일치하지 않습니다");
         }
-        
+
         return new EmailVerificationResponse(true);
     }
     

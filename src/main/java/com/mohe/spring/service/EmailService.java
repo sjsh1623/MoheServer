@@ -98,7 +98,6 @@ public class EmailService {
                         <div style="width:48px; height:48px; border-radius:16px; background:linear-gradient(135deg, #1d4ed8, #3b82f6); display:flex; align-items:center; justify-content:center; color:#ffffff; font-weight:700; font-size:18px;">M</div>
                         <div>
                             <p style="font-size:12px; letter-spacing:0.2em; text-transform:uppercase; color:#94a3b8; margin:0;">MOHE</p>
-                            <p style="font-size:18px; font-weight:600; color:#0f172a; margin:4px 0 0 0;">Toss Inspired Experience</p>
                         </div>
                     </div>
                     <div style="background-color:#ffffff; border-radius:28px; padding:40px 36px; box-shadow:0 24px 60px rgba(15, 23, 42, 0.08);">
