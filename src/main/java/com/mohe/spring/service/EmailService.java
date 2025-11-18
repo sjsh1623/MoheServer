@@ -1,5 +1,6 @@
 package com.mohe.spring.service;
 
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Safelist;
@@ -129,6 +130,7 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
 
             helper.setTo(to);
+            helper.setFrom(new InternetAddress("with.mohe@gmail.com", "Mohe "));
             helper.setSubject(subject);
             helper.setText(sanitizedContent, true); // true = HTML content
 
