@@ -18,9 +18,12 @@ public class RefreshToken {
     @Column(unique = true, nullable = false)
     private String token;
     
+    @Column(name = "expiry_date")
+    private OffsetDateTime expiryDate;  // Legacy column - kept for database compatibility
+
     @Column(name = "expires_at", nullable = false)
     private OffsetDateTime expiresAt;
-    
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt = OffsetDateTime.now();
     
@@ -79,6 +82,7 @@ public class RefreshToken {
     
     public void setExpiresAt(OffsetDateTime expiresAt) {
         this.expiresAt = expiresAt;
+        this.expiryDate = expiresAt;  // Keep both fields in sync for database compatibility
     }
     
     public OffsetDateTime getCreatedAt() {

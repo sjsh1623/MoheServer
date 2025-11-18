@@ -16,9 +16,12 @@ public class User {
     @Column(unique = true, nullable = false)
     private String email;
     
+    @Column(name = "password")
+    private String password;  // Legacy column - kept for database compatibility
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
-    
+
     @Column(unique = true)
     private String nickname;
     
@@ -127,12 +130,21 @@ public class User {
         this.email = email;
     }
     
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
     public String getPasswordHash() {
         return passwordHash;
     }
-    
+
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+        this.password = passwordHash;  // Keep both fields in sync for database compatibility
     }
     
     public String getNickname() {
