@@ -1,22 +1,23 @@
 services:
-  # postgres:
-  #   image: pgvector/pgvector:pg15
-  #   container_name: mohe-postgres
-  #   environment:
-  #     POSTGRES_DB: mohe_db
-  #     POSTGRES_USER: mohe_user
-  #     POSTGRES_PASSWORD: mohe_password
-  #   ports:
-  #     - "16239:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   networks:
-  #     - mohe-network
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U mohe_user -d mohe_db"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: mohe-postgres
+    environment:
+      POSTGRES_DB: mohe_db
+      POSTGRES_USER: mohe_user
+      POSTGRES_PASSWORD: mohe_password
+    ports:
+      - "16239:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mohe-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mohe_user -d mohe_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
   # embedding:
   #   build:
@@ -24,7 +25,7 @@ services:
   #     dockerfile: Dockerfile
   #   container_name: mohe-embedding
   #   ports:
-  #     - "8001:8000"
+  #     - "6000:8000"
   #   volumes:
   #     - embedding_cache:/root/.cache/huggingface
   #   networks:
@@ -40,20 +41,20 @@ services:
   # Production app service
   app:
     build: .
-    container_name: mohe-spring-app
+    container_name: spring
     ports:
       - "8000:8080"
-    # depends_on:
-    #   postgres:
-    #     condition: service_healthy
-    #   embedding:
-    #     condition: service_healthy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # embedding:
+      #   condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      EMBEDDING_SERVICE_URL: http://host.docker.internal:6000
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mohe_db
+      SPRING_DATASOURCE_USERNAME: mohe_user
+      SPRING_DATASOURCE_PASSWORD: mohe_password
+      EMBEDDING_SERVICE_URL: http://embedding:8000
       IMAGE_PROCESSOR_URL: ${IMAGE_PROCESSOR_URL:-http://100.99.236.50:5200}
       JWT_SECRET: ${JWT_SECRET}
       KAKAO_API_KEY: ${KAKAO_API_KEY}
@@ -61,16 +62,15 @@ services:
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       CRAWLER_SERVER_URL: http://host.docker.internal:4000
-      KMA_SERVICE_KEY: ${KMA_SERVICE_KEY}
+      KMA_SERVICE_KEY: ${KMA_SERVICE_KEY:-}
     env_file:
       - .env
     networks:
       - mohe-network
+      - proxy_network
     restart: unless-stopped
     volumes:
       - /Users/andrewlim/Desktop/Developer/Mohe/images:/images
-    profiles:
-      - production
 
   # Development app service with hot reload
   app-dev:
@@ -80,17 +80,17 @@ services:
     container_name: mohe-spring-app-dev
     ports:
       - "8000:8080"
-    # depends_on:
-    #   postgres:
-    #     condition: service_healthy
-    #   embedding:
-    #     condition: service_healthy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # embedding:
+      #   condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      EMBEDDING_SERVICE_URL: http://host.docker.internal:6000
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mohe_db
+      SPRING_DATASOURCE_USERNAME: mohe_user
+      SPRING_DATASOURCE_PASSWORD: mohe_password
+      EMBEDDING_SERVICE_URL: http://embedding:8000
       IMAGE_PROCESSOR_URL: ${IMAGE_PROCESSOR_URL:-http://100.99.236.50:5200}
       JWT_SECRET: ${JWT_SECRET}
       KAKAO_API_KEY: ${KAKAO_API_KEY}
@@ -98,7 +98,7 @@ services:
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       CRAWLER_SERVER_URL: http://host.docker.internal:4000
-      KMA_SERVICE_KEY: ${KMA_SERVICE_KEY}
+      KMA_SERVICE_KEY: ${KMA_SERVICE_KEY:-}
     env_file:
       - .env
     networks:
@@ -126,3 +126,6 @@ volumes:
 networks:
   mohe-network:
     driver: bridge
+  proxy_network:
+    external: true
+    name: proxy_network
