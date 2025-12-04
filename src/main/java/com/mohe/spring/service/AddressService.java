@@ -82,12 +82,16 @@ public class AddressService {
      */
     private AddressInfo getAddressFromNaver(double latitude, double longitude) {
         logger.info("Getting address from Naver for coordinates: {}, {}", latitude, longitude);
-        
+        logger.debug("Using Naver API credentials - Client ID: {}", naverClientId != null ? naverClientId.substring(0, 4) + "..." : "null");
+
         try {
             String coords = longitude + "," + latitude; // Naver uses lon,lat format
+            String apiUrl = "https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc?coords=" + coords + "&sourcecrs=epsg:4326&output=json&orders=roadaddr";
+            logger.debug("Naver API request URL: {}", apiUrl);
+
             @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
-                .uri("https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc?coords=" + coords + "&sourcecrs=epsg:4326&output=json&orders=roadaddr")
+                .uri(apiUrl)
                 .header("X-NCP-APIGW-API-KEY-ID", naverClientId)
                 .header("X-NCP-APIGW-API-KEY", naverClientSecret)
                 .retrieve()
@@ -98,14 +102,42 @@ public class AddressService {
                         .filter(throwable -> throwable instanceof WebClientResponseException)
                 )
                 .block(Duration.ofSeconds(3));
-            
+
             if (response == null) {
+                logger.error("❌ Empty response from Naver Geocoding API");
                 throw new RuntimeException("Empty response from Naver Geocoding");
             }
-            
+
+            // Check for API error response
+            if (response.containsKey("error")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> error = (Map<String, Object>) response.get("error");
+                String errorCode = (String) error.get("errorCode");
+                String errorMessage = (String) error.get("message");
+                String errorDetails = (String) error.get("details");
+
+                logger.error("❌ Naver API Error - Code: {}, Message: {}, Details: {}",
+                    errorCode, errorMessage, errorDetails);
+                logger.error("💡 해결 방법:");
+                logger.error("   1. Naver Cloud Platform Console 접속: https://console.ncloud.com");
+                logger.error("   2. AI·NAVER API > Application 메뉴에서 '{}' 확인", naverClientId);
+                logger.error("   3. 서비스 선택 탭에서 'Reverse Geocoding' 체크 여부 확인");
+                logger.error("   4. 자세한 가이드: /Users/andrewlim/Desktop/Mohe/NAVER_API_SETUP_GUIDE.md");
+
+                if ("200".equals(errorCode)) {
+                    throw new RuntimeException("Naver API Authentication Failed - API 키를 확인하세요. 가이드: NAVER_API_SETUP_GUIDE.md");
+                } else if ("429".equals(errorCode)) {
+                    throw new RuntimeException("Naver API Quota Exceeded - Reverse Geocoding 서비스를 활성화하세요. 가이드: NAVER_API_SETUP_GUIDE.md");
+                } else {
+                    throw new RuntimeException("Naver API Error: " + errorMessage);
+                }
+            }
+
+            logger.info("✅ Successfully received response from Naver API");
             return parseNaverResponse(response, latitude, longitude);
         } catch (Exception error) {
-            logger.error("Failed to get address from Naver: {}", error.getMessage());
+            logger.error("❌ Failed to get address from Naver: {}", error.getMessage());
+            logger.error("🔍 Falling back to approximate location based on coordinates");
             throw error;
         }
     }
