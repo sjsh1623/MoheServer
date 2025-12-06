@@ -4,6 +4,7 @@ import com.mohe.spring.dto.*;
 import com.mohe.spring.entity.*;
 import com.mohe.spring.repository.*;
 import com.mohe.spring.security.JwtTokenProvider;
+import com.mohe.spring.security.UserPrincipal;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -229,15 +230,19 @@ public class AuthService {
     public TokenRefreshResponse refreshToken(TokenRefreshRequest request) {
         RefreshToken refreshToken = refreshTokenRepository.findValidToken(request.getRefreshToken(), OffsetDateTime.now())
                 .orElseThrow(() -> new RuntimeException("유효하지 않은 리프레시 토큰입니다"));
-        
+
+        User user = refreshToken.getUser();
+
+        // Create authentication with proper authorities (ROLE_USER)
+        UserPrincipal userPrincipal = UserPrincipal.create(user);
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                refreshToken.getUser().getEmail(),
+                userPrincipal,
                 null,
-                List.of()
+                userPrincipal.getAuthorities()  // Include ROLE_USER
         );
-        
+
         String accessToken = jwtTokenProvider.generateAccessToken(authentication);
-        
+
         return new TokenRefreshResponse(
             accessToken,
             "Bearer",
