@@ -59,14 +59,17 @@ public class AddressService {
         try {
             if (naverClientId != null && !naverClientId.isBlank() &&
                 naverClientSecret != null && !naverClientSecret.isBlank()) {
-                logger.info("Attempting to get address from Naver API");
+                logger.info("✅ Naver API credentials found, attempting API call");
                 address = getAddressFromNaver(latitude, longitude);
             } else {
-                logger.info("Naver API keys not configured, using fallback address");
+                logger.warn("⚠️ Naver API keys not configured in environment variables");
+                logger.warn("   Set NAVER_CLIENT_ID and NAVER_CLIENT_SECRET in .env file");
+                logger.warn("   Using fallback approximate location");
                 address = createFallbackAddress(latitude, longitude);
             }
         } catch (Exception error) {
-            logger.warn("Failed to get address from Naver API, using fallback", error);
+            logger.error("❌ Naver API failed: {}", error.getMessage());
+            logger.warn("🔄 Using fallback approximate location based on coordinates");
             address = createFallbackAddress(latitude, longitude);
         }
         
@@ -81,13 +84,13 @@ public class AddressService {
      * Get address using Naver Reverse Geocoding API
      */
     private AddressInfo getAddressFromNaver(double latitude, double longitude) {
-        logger.info("Getting address from Naver for coordinates: {}, {}", latitude, longitude);
+        logger.info("🗺️ Getting address from Naver API for coordinates: lat={}, lon={}", latitude, longitude);
         logger.debug("Using Naver API credentials - Client ID: {}", naverClientId != null ? naverClientId.substring(0, 4) + "..." : "null");
 
         try {
             String coords = longitude + "," + latitude; // Naver uses lon,lat format
             String apiUrl = "https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc?coords=" + coords + "&sourcecrs=epsg:4326&output=json&orders=roadaddr";
-            logger.debug("Naver API request URL: {}", apiUrl);
+            logger.info("📡 Naver API request: {}", apiUrl);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
@@ -268,18 +271,47 @@ public class AddressService {
      * Approximate Korean location based on coordinates
      */
     private ApproximateLocation getApproximateLocation(double lat, double lon) {
-        // Seoul area (37.4-37.7, 126.7-127.2)
+        // Seoul area (37.4-37.7, 126.7-127.2) - More precise district mapping
         if (lat >= 37.4 && lat <= 37.7 && lon >= 126.7 && lon <= 127.2) {
+            // North Seoul (lat >= 37.6)
             if (lat >= 37.6 && lon <= 126.9) {
                 return new ApproximateLocation("서울특별시 강서구", "강서구", "서울특별시", "강서구", "");
             } else if (lat >= 37.6 && lon >= 127.0) {
                 return new ApproximateLocation("서울특별시 강북구", "강북구", "서울특별시", "강북구", "");
-            } else if (lat >= 37.5 && lat < 37.6 && lon <= 126.9) {
+            }
+            // Central-North Seoul (37.55-37.6)
+            else if (lat >= 37.55 && lat < 37.6 && lon <= 126.9) {
                 return new ApproximateLocation("서울특별시 마포구", "마포구", "서울특별시", "마포구", "");
-            } else if (lat >= 37.5 && lat < 37.6 && lon >= 127.0) {
-                return new ApproximateLocation("서울특별시 강남구", "강남구", "서울특별시", "강남구", "");
-            } else {
+            } else if (lat >= 37.55 && lat < 37.6 && lon >= 127.0 && lon < 127.05) {
+                return new ApproximateLocation("서울특별시 성북구", "성북구", "서울특별시", "성북구", "");
+            } else if (lat >= 37.55 && lat < 37.6 && lon >= 127.05) {
+                return new ApproximateLocation("서울특별시 성동구", "성동구", "서울특별시", "성동구", "");
+            }
+            // Central Seoul (37.5-37.55)
+            else if (lat >= 37.5 && lat < 37.55 && lon <= 126.9) {
+                return new ApproximateLocation("서울특별시 용산구", "용산구", "서울특별시", "용산구", "");
+            } else if (lat >= 37.5 && lat < 37.55 && lon >= 126.9 && lon < 127.0) {
                 return new ApproximateLocation("서울특별시 중구", "중구", "서울특별시", "중구", "");
+            } else if (lat >= 37.5 && lat < 37.55 && lon >= 127.0 && lon < 127.05) {
+                return new ApproximateLocation("서울특별시 광진구", "광진구", "서울특별시", "광진구", "");
+            } else if (lat >= 37.5 && lat < 37.55 && lon >= 127.05) {
+                return new ApproximateLocation("서울특별시 강동구", "강동구", "서울특별시", "강동구", "");
+            }
+            // South Seoul (37.45-37.5)
+            else if (lat >= 37.45 && lat < 37.5 && lon <= 126.9) {
+                return new ApproximateLocation("서울특별시 영등포구", "영등포구", "서울특별시", "영등포구", "");
+            } else if (lat >= 37.45 && lat < 37.5 && lon >= 126.9 && lon < 127.0) {
+                return new ApproximateLocation("서울특별시 동작구", "동작구", "서울특별시", "동작구", "");
+            } else if (lat >= 37.45 && lat < 37.5 && lon >= 127.0 && lon < 127.05) {
+                return new ApproximateLocation("서울특별시 서초구", "서초구", "서울특별시", "서초구", "");
+            } else if (lat >= 37.45 && lat < 37.5 && lon >= 127.05) {
+                return new ApproximateLocation("서울특별시 강남구", "강남구", "서울특별시", "강남구", "");
+            }
+            // Very South Seoul (< 37.45)
+            else if (lat >= 37.4 && lat < 37.45 && lon >= 127.0) {
+                return new ApproximateLocation("서울특별시 송파구", "송파구", "서울특별시", "송파구", "");
+            } else {
+                return new ApproximateLocation("서울특별시 관악구", "관악구", "서울특별시", "관악구", "");
             }
         }
         
