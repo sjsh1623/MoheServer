@@ -32,5 +32,9 @@ public class WebConfig implements WebMvcConfigurer {
         // Serve images from /images/places directory
         registry.addResourceHandler("/images/places/**")
                 .addResourceLocations(resourceLocation);
+
+        // Serve profile images from /uploads/profile-images directory
+        registry.addResourceHandler("/uploads/profile-images/**")
+                .addResourceLocations("file:uploads/profile-images/");
     }
 }

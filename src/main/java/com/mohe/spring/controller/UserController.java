@@ -16,6 +16,15 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/user")
@@ -297,4 +306,114 @@ public class UserController {
             );
         }
     }
+
+    @PostMapping("/profile/image")
+    @Operation(
+        summary = "프로필 이미지 업로드",
+        description = "사용자 프로필 이미지를 업로드합니다."
+    )
+    @ApiResponses(
+        value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "이미지 업로드 성공",
+                content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                        value = """
+                        {
+                          "success": true,
+                          "data": {
+                            "imageUrl": "/uploads/profile-images/uuid-filename.jpg"
+                          }
+                        }
+                        """
+                    )
+                )
+            )
+        }
+    )
+    public ResponseEntity<ApiResponse<ImageUploadResponse>> uploadProfileImage(
+            @Parameter(description = "이미지 파일", required = true)
+            @RequestParam("image") MultipartFile file,
+            HttpServletRequest httpRequest) {
+        try {
+            // Validate file
+            if (file.isEmpty()) {
+                return ResponseEntity.badRequest().body(
+                    ApiResponse.error(
+                        ErrorCode.VALIDATION_ERROR,
+                        "파일이 비어있습니다",
+                        httpRequest.getRequestURI()
+                    )
+                );
+            }
+
+            // Validate file type
+            String contentType = file.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                return ResponseEntity.badRequest().body(
+                    ApiResponse.error(
+                        ErrorCode.VALIDATION_ERROR,
+                        "이미지 파일만 업로드 가능합니다",
+                        httpRequest.getRequestURI()
+                    )
+                );
+            }
+
+            // Validate file size (max 5MB)
+            if (file.getSize() > 5 * 1024 * 1024) {
+                return ResponseEntity.badRequest().body(
+                    ApiResponse.error(
+                        ErrorCode.VALIDATION_ERROR,
+                        "파일 크기는 5MB 이하여야 합니다",
+                        httpRequest.getRequestURI()
+                    )
+                );
+            }
+
+            // Create upload directory if not exists
+            Path uploadPath = Paths.get("uploads/profile-images");
+            if (!Files.exists(uploadPath)) {
+                Files.createDirectories(uploadPath);
+            }
+
+            // Generate unique filename
+            String originalFilename = file.getOriginalFilename();
+            String fileExtension = "";
+            if (originalFilename != null && originalFilename.contains(".")) {
+                fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+            String filename = UUID.randomUUID().toString() + fileExtension;
+
+            // Save file
+            Path filePath = uploadPath.resolve(filename);
+            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+            // Return URL
+            String imageUrl = "/uploads/profile-images/" + filename;
+            ImageUploadResponse response = new ImageUploadResponse(imageUrl);
+
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.VALIDATION_ERROR,
+                    "이미지 업로드에 실패했습니다: " + e.getMessage(),
+                    httpRequest.getRequestURI()
+                )
+            );
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.VALIDATION_ERROR,
+                    e.getMessage() != null ? e.getMessage() : "이미지 업로드에 실패했습니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        }
+    }
 }
+
+// Image upload response DTO
+record ImageUploadResponse(String imageUrl) {}

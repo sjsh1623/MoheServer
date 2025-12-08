@@ -98,7 +98,8 @@ public class SecurityConfig {
                     "/swagger-ui.html",
                     "/v3/api-docs/**",
                     "/swagger-resources/**",
-                    "/webjars/**"
+                    "/webjars/**",
+                    "/uploads/profile-images/**"
                 ).permitAll()
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
