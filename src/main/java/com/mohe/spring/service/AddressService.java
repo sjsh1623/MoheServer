@@ -41,6 +41,11 @@ public class AddressService {
         this.naverClientId = naverClientId;
         this.naverClientSecret = naverClientSecret;
         this.googleApiKey = googleApiKey;
+
+        // Log API configuration on initialization
+        logger.info("🔧 AddressService initialized");
+        logger.info("   Naver Client ID: {}", naverClientId != null && !naverClientId.isBlank() ? naverClientId.substring(0, Math.min(4, naverClientId.length())) + "..." : "NOT SET");
+        logger.info("   Naver Client Secret: {}", naverClientSecret != null && !naverClientSecret.isBlank() ? "SET (length: " + naverClientSecret.length() + ")" : "NOT SET");
     }
     
     /**
