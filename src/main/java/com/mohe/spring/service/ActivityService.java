@@ -48,25 +48,41 @@ public class ActivityService {
         User currentUser = getCurrentUser();
         Pageable pageable = PageRequest.of(0, 50, Sort.by(Sort.Direction.DESC, "viewedAt"));
         Page<RecentView> recentViews = recentViewRepository.findByUserOrderByViewedAtDesc(currentUser, pageable);
-        
+
         List<RecentPlaceData> recentPlaces = recentViews.getContent().stream()
                 .map(recentView -> {
+                    Place place = recentView.getPlace();
                     RecentPlaceData data = new RecentPlaceData();
-                    data.setId(recentView.getPlace().getId().toString());
-                    data.setTitle(recentView.getPlace().getName());
-                    data.setLocation(recentView.getPlace().getRoadAddress());
-                    data.setImage(null); // Gallery field removed
-                    data.setRating(recentView.getPlace().getRating());
+                    data.setId(place.getId().toString());
+                    data.setTitle(place.getName());
+                    data.setLocation(place.getRoadAddress());
+
+                    // Get first image from PlaceImage collection
+                    String imageUrl = null;
+                    if (place.getImages() != null && !place.getImages().isEmpty()) {
+                        imageUrl = place.getImages().stream()
+                                .sorted((img1, img2) -> {
+                                    Integer order1 = img1.getOrderIndex() != null ? img1.getOrderIndex() : Integer.MAX_VALUE;
+                                    Integer order2 = img2.getOrderIndex() != null ? img2.getOrderIndex() : Integer.MAX_VALUE;
+                                    return order1.compareTo(order2);
+                                })
+                                .findFirst()
+                                .map(img -> img.getUrl())
+                                .orElse(null);
+                    }
+                    data.setImage(imageUrl);
+
+                    data.setRating(place.getRating());
                     data.setViewedAt(recentView.getViewedAt());
                     data.setViewCount(1);
                     return data;
                 })
                 .collect(Collectors.toList());
-        
+
         RecentPlacesResponse response = new RecentPlacesResponse();
         response.setRecentPlaces(recentPlaces);
         response.setTotalCount((int) recentViews.getTotalElements());
-        
+
         return response;
     }
     

@@ -16,11 +16,17 @@ import java.util.Optional;
 
 @Repository
 public interface RecentViewRepository extends JpaRepository<RecentView, Long> {
-    
-    Page<RecentView> findByUserOrderByViewedAtDesc(User user, Pageable pageable);
-    
+
+    @Query(value = "SELECT rv FROM RecentView rv " +
+            "LEFT JOIN FETCH rv.place p " +
+            "LEFT JOIN FETCH p.images " +
+            "WHERE rv.user = :user " +
+            "ORDER BY rv.viewedAt DESC",
+            countQuery = "SELECT COUNT(rv) FROM RecentView rv WHERE rv.user = :user")
+    Page<RecentView> findByUserOrderByViewedAtDesc(@Param("user") User user, Pageable pageable);
+
     List<RecentView> findByUserOrderByViewedAtDesc(User user);
-    
+
     @Query("SELECT rv FROM RecentView rv WHERE rv.user.id = :userId AND rv.place.id = :placeId")
     Optional<RecentView> findByUserIdAndPlaceId(@Param("userId") Long userId, @Param("placeId") Long placeId);
     
