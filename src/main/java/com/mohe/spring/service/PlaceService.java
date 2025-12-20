@@ -1,6 +1,7 @@
 package com.mohe.spring.service;
 
 import com.mohe.spring.dto.*;
+import com.mohe.spring.dto.ReviewDto;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceImage;
 import com.mohe.spring.repository.PlaceImageRepository;
@@ -13,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import com.mohe.spring.util.NicknameGenerator;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -120,7 +122,7 @@ public class PlaceService {
         if (placeOpt.isEmpty()) {
             throw new RuntimeException("장소를 찾을 수 없습니다: " + id);
         }
-        
+
         Place place = placeOpt.get();
         if (!Boolean.TRUE.equals(place.getReady())) {
             throw new RuntimeException("준비되지 않은 장소입니다: " + id);
@@ -130,7 +132,17 @@ public class PlaceService {
         // Get similar places (simple implementation - same category)
         List<SimplePlaceDto> similarPlaces = List.of(); // TODO: Implement similarity logic
 
-        return new PlaceDetailResponse(placeDto, List.of(), false, similarPlaces);
+        // Convert reviews with random nicknames for crawled reviews
+        List<ReviewDto> reviewDtos = place.getReviews().stream()
+            .map(review -> new ReviewDto(
+                review.getId(),
+                review.getReviewText(),
+                NicknameGenerator.generateFromSeed(review.getId()), // Deterministic nickname based on review ID
+                review.getCreatedAt()
+            ))
+            .collect(Collectors.toList());
+
+        return new PlaceDetailResponse(placeDto, List.of(), false, similarPlaces, reviewDtos);
     }
     
     public PlaceSearchResponse searchPlaces(String q, String location, String weather, String time) {

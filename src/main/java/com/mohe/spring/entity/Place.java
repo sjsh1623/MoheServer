@@ -76,6 +76,9 @@ public class Place {
     @OneToMany(mappedBy = "place", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PlaceReview> reviews = new ArrayList<>();
 
+    @OneToMany(mappedBy = "place", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PlaceMenu> menus = new ArrayList<>();
+
     /**
      * 이미지 URL 리스트 (배치 처리용 임시 필드)
      * DB에 저장되지 않으며, Processor에서 Writer로 데이터 전달 시 사용

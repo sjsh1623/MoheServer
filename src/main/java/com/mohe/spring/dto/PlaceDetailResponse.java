@@ -7,6 +7,7 @@ public class PlaceDetailResponse {
     private List<String> images;
     private boolean isBookmarked;
     private List<SimplePlaceDto> similarPlaces;
+    private List<ReviewDto> reviews;
 
     public PlaceDetailResponse() {}
 
@@ -15,6 +16,15 @@ public class PlaceDetailResponse {
         this.images = images;
         this.isBookmarked = isBookmarked;
         this.similarPlaces = similarPlaces;
+        this.reviews = List.of();
+    }
+
+    public PlaceDetailResponse(SimplePlaceDto place, List<String> images, boolean isBookmarked, List<SimplePlaceDto> similarPlaces, List<ReviewDto> reviews) {
+        this.place = place;
+        this.images = images;
+        this.isBookmarked = isBookmarked;
+        this.similarPlaces = similarPlaces;
+        this.reviews = reviews != null ? reviews : List.of();
     }
 
     public SimplePlaceDto getPlace() {
@@ -47,5 +57,13 @@ public class PlaceDetailResponse {
 
     public void setSimilarPlaces(List<SimplePlaceDto> similarPlaces) {
         this.similarPlaces = similarPlaces;
+    }
+
+    public List<ReviewDto> getReviews() {
+        return reviews;
+    }
+
+    public void setReviews(List<ReviewDto> reviews) {
+        this.reviews = reviews;
     }
 }

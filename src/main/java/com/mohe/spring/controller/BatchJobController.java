@@ -30,6 +30,7 @@ public class BatchJobController {
     private final Job updateCrawledDataJob;
     private final Job vectorEmbeddingJob;
     private final Job imageUpdateJob;
+    private final Job imageRefreshJob;
 
     public BatchJobController(
             JobLauncher asyncJobLauncher,
@@ -38,7 +39,8 @@ public class BatchJobController {
             @org.springframework.beans.factory.annotation.Qualifier("placeCollectionJob") Job placeCollectionJob,
             @org.springframework.beans.factory.annotation.Qualifier("updateCrawledDataJob") Job updateCrawledDataJob,
             @org.springframework.beans.factory.annotation.Qualifier("vectorEmbeddingJob") Job vectorEmbeddingJob,
-            @org.springframework.beans.factory.annotation.Qualifier("imageUpdateJob") Job imageUpdateJob) {
+            @org.springframework.beans.factory.annotation.Qualifier("imageUpdateJob") Job imageUpdateJob,
+            @org.springframework.beans.factory.annotation.Qualifier("imageRefreshJob") Job imageRefreshJob) {
         this.asyncJobLauncher = asyncJobLauncher;
         this.jobOperator = jobOperator;
         this.jobExplorer = jobExplorer;
@@ -46,6 +48,7 @@ public class BatchJobController {
         this.updateCrawledDataJob = updateCrawledDataJob;
         this.vectorEmbeddingJob = vectorEmbeddingJob;
         this.imageUpdateJob = imageUpdateJob;
+        this.imageRefreshJob = imageRefreshJob;
     }
 
     @PostMapping("/place-collection")
@@ -364,6 +367,73 @@ public class BatchJobController {
 
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("BATCH_JOB_ERROR", error.get("message").toString(), "/api/batch/jobs/image-update"));
+        }
+    }
+
+    @PostMapping("/image-refresh")
+    @Operation(
+        summary = "이미지 새로고침 배치 실행 (전체/선택적)",
+        description = """
+            DB의 장소들에 대해 이미지를 새로 크롤링합니다.
+
+            **모드 (mode 파라미터)**:
+            - `NO_IMAGES` (기본값): 이미지가 없는 장소만 처리
+            - `ALL`: 모든 장소 처리
+            - `READY_ONLY`: ready=true인 장소만
+            - `NOT_READY`: ready=false인 장소만
+
+            **옵션**:
+            - `includeReviews`: true이면 리뷰도 함께 크롤링 (기본: false)
+
+            배치 작업은 백그라운드에서 비동기로 실행됩니다.
+            """
+    )
+    public ResponseEntity<ApiResponse<Map<String, Object>>> runImageRefreshJob(
+            @RequestParam(value = "mode", defaultValue = "NO_IMAGES") String mode,
+            @RequestParam(value = "includeReviews", defaultValue = "false") boolean includeReviews) {
+        try {
+            long startTime = System.currentTimeMillis();
+
+            // Validate mode
+            String validMode = mode.toUpperCase();
+            if (!validMode.equals("ALL") && !validMode.equals("NO_IMAGES") &&
+                !validMode.equals("READY_ONLY") && !validMode.equals("NOT_READY")) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("INVALID_MODE",
+                            "Invalid mode. Use: ALL, NO_IMAGES, READY_ONLY, NOT_READY",
+                            "/api/batch/jobs/image-refresh"));
+            }
+
+            logger.info("🖼️ Triggering Image Refresh Batch Job - mode: {}, includeReviews: {}", validMode, includeReviews);
+
+            JobParameters jobParameters = new JobParametersBuilder()
+                    .addLong("startTime", startTime)
+                    .addString("mode", validMode)
+                    .addString("includeReviews", String.valueOf(includeReviews))
+                    .toJobParameters();
+
+            // 비동기 실행 - 즉시 반환
+            asyncJobLauncher.run(imageRefreshJob, jobParameters);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("status", "STARTED");
+            result.put("message", "Image Refresh Batch Job has been triggered and is running in the background");
+            result.put("mode", validMode);
+            result.put("includeReviews", includeReviews);
+            result.put("startTime", startTime);
+
+            logger.info("✅ Image Refresh Batch Job triggered successfully");
+            return ResponseEntity.ok(ApiResponse.success(result));
+
+        } catch (Exception e) {
+            logger.error("❌ Failed to trigger Image Refresh Batch Job", e);
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "FAILED");
+            error.put("message", "Failed to trigger batch job: " + e.getMessage());
+
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("BATCH_JOB_ERROR", error.get("message").toString(), "/api/batch/jobs/image-refresh"));
         }
     }
 }

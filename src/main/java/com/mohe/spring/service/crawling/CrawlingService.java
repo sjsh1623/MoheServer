@@ -122,4 +122,70 @@ public class CrawlingService {
             return null; // Skip this place on error
         }
     }
+
+    /**
+     * 장소 메뉴만 크롤링
+     *
+     * @param placeName 장소명
+     * @param location 주소
+     * @return 메뉴 리스트를 포함한 Map
+     */
+    public Map<String, Object> fetchPlaceMenus(String placeName, String location) {
+        try {
+            Map<String, String> requestBody = new HashMap<>();
+            requestBody.put("searchQuery", String.format("%s %s", location != null ? location : "", placeName).trim());
+            requestBody.put("placeName", placeName);
+
+            Map<String, Object> response = webClient.post()
+                    .uri("/api/v1/place/menus")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .retry(2)
+                    .block(Duration.ofMinutes(10));
+
+            if (response == null || !Boolean.TRUE.equals(response.get("success"))) {
+                return null;
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) response.get("data");
+            return data;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 장소 리뷰만 크롤링
+     *
+     * @param placeName 장소명
+     * @param location 주소
+     * @return 리뷰 리스트를 포함한 Map
+     */
+    public Map<String, Object> fetchPlaceReviews(String placeName, String location) {
+        try {
+            Map<String, String> requestBody = new HashMap<>();
+            requestBody.put("searchQuery", String.format("%s %s", location != null ? location : "", placeName).trim());
+            requestBody.put("placeName", placeName);
+
+            Map<String, Object> response = webClient.post()
+                    .uri("/api/v1/place/reviews")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .retry(2)
+                    .block(Duration.ofMinutes(10));
+
+            if (response == null || !Boolean.TRUE.equals(response.get("success"))) {
+                return null;
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = (Map<String, Object>) response.get("data");
+            return data;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

@@ -313,4 +313,37 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
      */
     @Query("SELECT p FROM Place p WHERE p.id = :id")
     Optional<Place> findByIdForKeywordEmbedding(@Param("id") Long id);
+
+    /**
+     * Find all place IDs for image refresh batch processing
+     * Returns all place IDs ordered by ID for sequential processing
+     */
+    @Query("""
+        SELECT p.id FROM Place p
+        ORDER BY p.id ASC
+    """)
+    Page<Long> findAllPlaceIdsForImageRefresh(Pageable pageable);
+
+    /**
+     * Find place IDs that have no images or broken images for refresh
+     * Returns IDs of places without images
+     */
+    @Query("""
+        SELECT p.id FROM Place p
+        WHERE p.id NOT IN (
+            SELECT DISTINCT pi.place.id FROM PlaceImage pi
+        )
+        ORDER BY p.id ASC
+    """)
+    Page<Long> findPlaceIdsWithoutImages(Pageable pageable);
+
+    /**
+     * Find place IDs by ready status for selective image refresh
+     */
+    @Query("""
+        SELECT p.id FROM Place p
+        WHERE p.ready = :ready
+        ORDER BY p.id ASC
+    """)
+    Page<Long> findPlaceIdsByReady(@Param("ready") boolean ready, Pageable pageable);
 }

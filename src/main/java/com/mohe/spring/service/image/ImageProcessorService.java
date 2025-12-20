@@ -136,6 +136,88 @@ public class ImageProcessorService {
     }
 
     /**
+     * 메뉴 이미지 다운로드 및 저장 (ImageProcessor 노드 사용)
+     *
+     * @param placeId  Place ID
+     * @param menuName 메뉴명
+     * @param imageUrl 이미지 URL
+     * @return 저장된 이미지 경로 (예: /images/menu/123_menuName_1.jpg) 또는 null (실패 시)
+     */
+    public String saveMenuImage(Long placeId, String menuName, String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty()) {
+            logger.debug("No image URL provided for menu: {}", menuName);
+            return null;
+        }
+
+        try {
+            // 확장자 추출
+            String extension = extractExtensionFromUrl(imageUrl);
+
+            // 파일명 생성: menu/{placeId}_{menuName}_{uuid}.{ext}
+            String sanitizedMenuName = menuName.replaceAll("[^a-zA-Z0-9가-힣]", "_");
+            String uuid = java.util.UUID.randomUUID().toString().substring(0, 8);
+            String fileName = "menu/" + placeId + "_" + sanitizedMenuName + "_" + uuid + "." + extension;
+
+            String savedFileName = saveImageToProcessor(imageUrl, fileName);
+            if (savedFileName != null) {
+                String savedPath = "/images/" + savedFileName;
+                logger.info("✅ Saved menu image via ImageProcessor: {} from {}", savedPath, imageUrl);
+                return savedPath;
+            } else {
+                logger.warn("⚠️ Failed to save menu image via ImageProcessor: {}", imageUrl);
+                return null;
+            }
+        } catch (Exception e) {
+            logger.error("❌ Error saving menu image via ImageProcessor: {}", imageUrl, e);
+            return null;
+        }
+    }
+
+    /**
+     * 장소 이미지 저장 (기존 기능 - 폴더 구조 업데이트)
+     *
+     * @param placeId   Place ID
+     * @param placeName Place 이름
+     * @param imageUrls 이미지 URL 목록
+     * @return 저장된 이미지 경로 목록
+     */
+    public List<String> savePlaceImages(Long placeId, String placeName, List<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            logger.debug("No images to save for place: {}", placeName);
+            return List.of();
+        }
+
+        List<String> savedPaths = new ArrayList<>();
+
+        for (int i = 0; i < imageUrls.size(); i++) {
+            String imageUrl = imageUrls.get(i);
+            String extension = extractExtensionFromUrl(imageUrl);
+
+            // 파일명 생성: place/{placeId}_{placeName}_{index}.{ext}
+            String sanitizedName = placeName.replaceAll("[^a-zA-Z0-9가-힣]", "_");
+            String fileName = "place/" + placeId + "_" + sanitizedName + "_" + (i + 1) + "." + extension;
+
+            try {
+                String savedFileName = saveImageToProcessor(imageUrl, fileName);
+                if (savedFileName != null) {
+                    String savedPath = "/images/" + savedFileName;
+                    savedPaths.add(savedPath);
+                    logger.debug("✅ Saved place image via ImageProcessor: {} from {}", savedPath, imageUrl);
+                } else {
+                    logger.warn("⚠️ Failed to save place image via ImageProcessor: {}", imageUrl);
+                }
+            } catch (Exception e) {
+                logger.error("❌ Error saving place image via ImageProcessor: {}", imageUrl, e);
+            }
+        }
+
+        logger.info("✅ Saved {}/{} place images via ImageProcessor for: {} (id={})",
+                savedPaths.size(), imageUrls.size(), placeName, placeId);
+
+        return savedPaths;
+    }
+
+    /**
      * ImageProcessor 헬스 체크
      *
      * @return 서버 상태 (true: 정상, false: 비정상)
