@@ -67,8 +67,8 @@ public class ImageProcessorService {
             // 확장자 추출
             String extension = extractExtensionFromUrl(imageUrl);
 
-            // 파일명 생성 (확장자 포함 - ImageProcessor API 요구사항)
-            String fileName = generateFileName(placeId, placeName, i + 1) + "." + extension;
+            // 파일명 생성 (place/ 폴더에 저장)
+            String fileName = "place/" + generateFileName(placeId, placeName, i + 1) + "." + extension;
 
             try {
                 String savedFileName = saveImageToProcessor(imageUrl, fileName);

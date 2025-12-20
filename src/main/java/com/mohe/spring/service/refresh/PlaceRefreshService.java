@@ -19,7 +19,10 @@ import com.mohe.spring.service.image.ImageService;
 import com.mohe.spring.service.OpenAiDescriptionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalTime;
@@ -55,6 +58,7 @@ public class PlaceRefreshService {
     private final ImageService imageService;
     private final ImageProcessorService imageProcessorService;
     private final OpenAiDescriptionService openAiDescriptionService;
+    private final PlaceRefreshService self; // Self-injection for proxy-aware internal calls
 
     public PlaceRefreshService(
             PlaceRepository placeRepository,
@@ -62,13 +66,15 @@ public class PlaceRefreshService {
             CrawlingService crawlingService,
             ImageService imageService,
             ImageProcessorService imageProcessorService,
-            OpenAiDescriptionService openAiDescriptionService) {
+            OpenAiDescriptionService openAiDescriptionService,
+            @Lazy PlaceRefreshService self) {
         this.placeRepository = placeRepository;
         this.placeMenuRepository = placeMenuRepository;
         this.crawlingService = crawlingService;
         this.imageService = imageService;
         this.imageProcessorService = imageProcessorService;
         this.openAiDescriptionService = openAiDescriptionService;
+        this.self = self;
         logger.info("PlaceRefreshService initialized");
     }
 
@@ -86,7 +92,7 @@ public class PlaceRefreshService {
      * @param placeId 장소 ID
      * @return 새로고침 결과
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public PlaceRefreshResponseDto refreshPlaceData(Long placeId) {
         logger.info("Starting refresh for place ID: {}", placeId);
 
@@ -487,6 +493,24 @@ public class PlaceRefreshService {
     }
 
     /**
+     * 전체 Places 배치 새로고침 (비동기)
+     *
+     * <p>모든 장소에 대해 새로고침을 백그라운드에서 수행합니다.</p>
+     * <p>즉시 반환되며, 실제 작업은 별도 스레드에서 실행됩니다.</p>
+     */
+    @Async
+    public void refreshAllPlacesAsync() {
+        logger.info("🚀 Starting async batch refresh for all places");
+        try {
+            BatchRefreshResponseDto result = refreshAllPlaces();
+            logger.info("✅ Async batch refresh completed: {}/{} succeeded in {}ms",
+                    result.getSuccessCount(), result.getTotalPlaces(), result.getElapsedTimeMs());
+        } catch (Exception e) {
+            logger.error("❌ Async batch refresh failed: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
      * 전체 Places 배치 새로고침 (이미지, 리뷰, 메뉴, 영업시간)
      *
      * <p>모든 장소에 대해 새로고침을 수행합니다.</p>
@@ -509,7 +533,8 @@ public class PlaceRefreshService {
                 logger.info("[{}/{}] Refreshing place: {} (ID: {})",
                         successCount + failedCount + 1, totalPlaces, place.getName(), place.getId());
 
-                PlaceRefreshResponseDto result = refreshPlaceData(place.getId());
+                // Use self-injection to ensure @Transactional proxy is invoked
+                PlaceRefreshResponseDto result = self.refreshPlaceData(place.getId());
 
                 results.add(BatchRefreshResponseDto.PlaceRefreshSummary.builder()
                         .placeId(place.getId())
@@ -588,7 +613,8 @@ public class PlaceRefreshService {
                 logger.info("[{}/{}] Refreshing place: {} (ID: {})",
                         i + 1, totalPlaces, place.getName(), place.getId());
 
-                PlaceRefreshResponseDto result = refreshPlaceData(place.getId());
+                // Use self-injection to ensure @Transactional proxy is invoked
+                PlaceRefreshResponseDto result = self.refreshPlaceData(place.getId());
 
                 results.add(BatchRefreshResponseDto.PlaceRefreshSummary.builder()
                         .placeId(place.getId())
@@ -692,19 +718,22 @@ public class PlaceRefreshService {
     }
 
     /**
-     * 리뷰 업데이트 - 중복 체크 후 새 리뷰만 추가
+     * 리뷰 업데이트 - 앞부분 텍스트 비교로 중복 체크 후 새 리뷰만 추가
      */
+    private static final int REVIEW_PREFIX_LENGTH = 50; // 중복 체크용 앞부분 길이
+
     private List<String> updateReviews(Place place, List<String> crawledReviews) {
         if (crawledReviews == null || crawledReviews.isEmpty()) {
             logger.info("No reviews to update for place: {}", place.getName());
             return List.of();
         }
 
-        // 기존 리뷰 텍스트 수집 (중복 체크용)
-        Set<String> existingReviewTexts = place.getReviews().stream()
+        // 기존 리뷰 앞부분 텍스트 수집 (중복 체크용 - 앞 50자만 비교)
+        Set<String> existingReviewPrefixes = place.getReviews().stream()
                 .map(PlaceReview::getReviewText)
                 .filter(text -> text != null && !text.isEmpty())
                 .map(this::normalizeText)
+                .map(text -> text.substring(0, Math.min(REVIEW_PREFIX_LENGTH, text.length())))
                 .collect(Collectors.toSet());
 
         List<String> newReviewTexts = new ArrayList<>();
@@ -720,10 +749,11 @@ public class PlaceRefreshService {
 
             String sanitizedText = sanitizeText(reviewText);
             String normalizedText = normalizeText(sanitizedText);
+            String normalizedPrefix = normalizedText.substring(0, Math.min(REVIEW_PREFIX_LENGTH, normalizedText.length()));
 
-            // 중복 체크
-            if (existingReviewTexts.contains(normalizedText)) {
-                logger.debug("Skipping duplicate review: {}", sanitizedText.substring(0, Math.min(50, sanitizedText.length())));
+            // 중복 체크 (앞부분 텍스트 비교)
+            if (existingReviewPrefixes.contains(normalizedPrefix)) {
+                logger.debug("Skipping duplicate review (prefix match): {}", normalizedPrefix);
                 continue;
             }
 
@@ -740,7 +770,7 @@ public class PlaceRefreshService {
             review.setOrderIndex(++currentMaxIndex);
             place.getReviews().add(review);
 
-            existingReviewTexts.add(normalizedText);
+            existingReviewPrefixes.add(normalizedPrefix);
             newReviewTexts.add(sanitizedText);
         }
 

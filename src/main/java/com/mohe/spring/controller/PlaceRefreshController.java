@@ -306,48 +306,54 @@ public class PlaceRefreshController {
     }
 
     /**
-     * 전체 Places 배치 새로고침
+     * 전체 Places 배치 새로고침 (비동기)
      *
      * @param request HTTP 요청
-     * @return 배치 새로고침 결과
+     * @return 즉시 응답 (백그라운드에서 실행)
      */
     @PostMapping("/refresh/all")
     @Operation(
-        summary = "전체 장소 배치 새로고침",
+        summary = "전체 장소 배치 새로고침 (비동기)",
         description = """
             모든 장소의 데이터를 새로 크롤링하여 업데이트합니다.
 
             - 이미지, 리뷰, 메뉴, 영업시간 전체 업데이트
-            - 장소 수가 많으면 시간이 오래 걸릴 수 있음
-            - 페이지네이션이 필요한 경우 /refresh/batch 사용 권장
+            - **비동기 실행**: 즉시 응답 반환 후 백그라운드에서 처리
+            - 진행 상황은 서버 로그에서 확인 가능
             """
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "200",
-            description = "배치 새로고침 성공",
+            responseCode = "202",
+            description = "배치 새로고침 시작됨 (백그라운드 실행)",
             content = @Content(
                 mediaType = "application/json",
-                schema = @Schema(implementation = BatchRefreshResponseDto.class)
+                schema = @Schema(implementation = ApiResponse.class)
             )
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "500",
-            description = "배치 새로고침 실패"
+            description = "배치 새로고침 시작 실패"
         )
     })
-    public ResponseEntity<ApiResponse<BatchRefreshResponseDto>> refreshAllPlaces(
+    public ResponseEntity<ApiResponse<Object>> refreshAllPlaces(
             HttpServletRequest request) {
         try {
-            logger.info("Batch refresh request for all places");
+            logger.info("🚀 Batch refresh request received - starting async execution");
 
-            BatchRefreshResponseDto result = placeRefreshService.refreshAllPlaces();
+            // 비동기로 실행 (즉시 응답)
+            placeRefreshService.refreshAllPlacesAsync();
 
-            return ResponseEntity.ok(ApiResponse.success(result));
+            return ResponseEntity.accepted()
+                    .body(ApiResponse.success(java.util.Map.of(
+                        "message", "전체 장소 새로고침이 시작되었습니다. 백그라운드에서 처리 중입니다.",
+                        "status", "STARTED",
+                        "timestamp", java.time.LocalDateTime.now().toString()
+                    )));
         } catch (Exception e) {
-            logger.error("Batch refresh failed", e);
+            logger.error("Batch refresh start failed", e);
             return ResponseEntity.status(500)
-                    .body(ApiResponse.error("BATCH_REFRESH_FAILED", e.getMessage(), request.getRequestURI()));
+                    .body(ApiResponse.error("BATCH_REFRESH_START_FAILED", e.getMessage(), request.getRequestURI()));
         }
     }
 
