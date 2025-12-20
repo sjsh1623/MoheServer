@@ -49,7 +49,7 @@ public class PlaceRefreshService {
     private static final Logger logger = LoggerFactory.getLogger(PlaceRefreshService.class);
 
     private static final int MAX_IMAGES = 5;
-    private static final int MAX_REVIEWS = 10;
+    private static final int MAX_REVIEWS = 20;
     private static final int MAX_MENUS = 50;
 
     private final PlaceRepository placeRepository;
@@ -146,8 +146,10 @@ public class PlaceRefreshService {
         List<PlaceRefreshResponseDto.MenuDto> savedMenus = new ArrayList<>();
         int menuWithImageCount = 0;
 
+        logger.info("🍽️ Starting menu crawl for place: {} (ID: {})", place.getName(), placeId);
         var menuData = crawlingService.fetchPlaceMenus(place.getName(), place.getRoadAddress());
         if (menuData != null) {
+            logger.info("✅ Menu data received for place: {} - keys: {}", place.getName(), menuData.keySet());
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> crawledMenus = (List<Map<String, Object>>) menuData.get("menus");
             if (crawledMenus != null && !crawledMenus.isEmpty()) {
@@ -191,7 +193,14 @@ public class PlaceRefreshService {
                             .isPopular(isPopular)
                             .build());
                 }
+                logger.info("🍽️ Saved {} menus ({} with images) for place: {}",
+                        savedMenus.size(), menuWithImageCount, place.getName());
+            } else {
+                logger.warn("⚠️ No menus found in crawled data for place: {}", place.getName());
             }
+        } else {
+            logger.warn("❌ Menu crawling failed or returned null for place: {} (ID: {})",
+                    place.getName(), placeId);
         }
 
         // 7. 저장
@@ -720,7 +729,7 @@ public class PlaceRefreshService {
     /**
      * 리뷰 업데이트 - 앞부분 텍스트 비교로 중복 체크 후 새 리뷰만 추가
      */
-    private static final int REVIEW_PREFIX_LENGTH = 50; // 중복 체크용 앞부분 길이
+    private static final int REVIEW_PREFIX_LENGTH = 10; // 중복 체크용 앞부분 길이
 
     private List<String> updateReviews(Place place, List<String> crawledReviews) {
         if (crawledReviews == null || crawledReviews.isEmpty()) {
@@ -755,12 +764,6 @@ public class PlaceRefreshService {
             if (existingReviewPrefixes.contains(normalizedPrefix)) {
                 logger.debug("Skipping duplicate review (prefix match): {}", normalizedPrefix);
                 continue;
-            }
-
-            // 최대 리뷰 수 체크
-            if (place.getReviews().size() >= MAX_REVIEWS) {
-                logger.info("Max reviews ({}) reached for place: {}", MAX_REVIEWS, place.getName());
-                break;
             }
 
             // 새 리뷰 추가
