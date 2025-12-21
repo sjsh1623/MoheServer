@@ -50,7 +50,7 @@ public class PlaceRefreshService {
 
     private static final int MAX_IMAGES = 5;
     private static final int MAX_REVIEWS = 20;
-    private static final int MAX_MENUS = 50;
+    private static final int MAX_MENUS = Integer.MAX_VALUE; // 메뉴 개수 제한 없음
 
     private final PlaceRepository placeRepository;
     private final PlaceMenuRepository placeMenuRepository;
@@ -153,6 +153,9 @@ public class PlaceRefreshService {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> crawledMenus = (List<Map<String, Object>>) menuData.get("menus");
             if (crawledMenus != null && !crawledMenus.isEmpty()) {
+                logger.info("🍽️ Raw menu data from crawler (first 3): {}",
+                    crawledMenus.stream().limit(3).toList());
+
                 // 기존 메뉴 삭제
                 placeMenuRepository.deleteByPlaceId(placeId);
                 placeRepository.flush();
@@ -174,12 +177,25 @@ public class PlaceRefreshService {
                     placeMenu.setDisplayOrder(i + 1);
 
                     // 이미지 다운로드
-                    if (imageUrl != null && !imageUrl.isEmpty() && !imageUrl.equals("https://search.pstatic.net/common/")) {
+                    // placeholder: https://search.pstatic.net/common/ (파라미터 없음)
+                    // 유효한 URL: https://search.pstatic.net/common/?autoRotate=true&quality=95&src=... (파라미터 있음)
+                    boolean isPlaceholder = "https://search.pstatic.net/common/".equals(imageUrl);
+                    logger.info("🍽️ Menu '{}' imageUrl: {} (placeholder: {})", name,
+                        imageUrl != null ? imageUrl.substring(0, Math.min(100, imageUrl.length())) : "null",
+                        isPlaceholder);
+
+                    if (imageUrl != null && !imageUrl.isEmpty() && !isPlaceholder) {
+                        logger.info("🖼️ Downloading menu image for '{}': {}...", name, imageUrl.substring(0, Math.min(80, imageUrl.length())));
                         String savedImagePath = imageProcessorService.saveMenuImage(placeId, name, imageUrl);
                         if (savedImagePath != null) {
                             placeMenu.setImagePath(savedImagePath);
                             menuWithImageCount++;
+                            logger.info("✅ Saved menu image for '{}': {}", name, savedImagePath);
+                        } else {
+                            logger.warn("⚠️ Failed to save menu image for '{}': {}...", name, imageUrl.substring(0, Math.min(80, imageUrl.length())));
                         }
+                    } else if (isPlaceholder) {
+                        logger.debug("⏭️ Skipping placeholder image for '{}'", name);
                     }
 
                     placeMenuRepository.save(placeMenu);
