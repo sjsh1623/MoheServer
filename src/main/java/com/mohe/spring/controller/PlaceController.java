@@ -1,6 +1,8 @@
 package com.mohe.spring.controller;
 
 import com.mohe.spring.dto.*;
+import com.mohe.spring.entity.PlaceMenu;
+import com.mohe.spring.repository.PlaceMenuRepository;
 import com.mohe.spring.service.PlaceService;
 import com.mohe.spring.service.VectorSearchService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,7 +21,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/places")
@@ -28,11 +32,15 @@ public class PlaceController {
 
     private final PlaceService placeService;
     private final VectorSearchService vectorSearchService;
+    private final PlaceMenuRepository placeMenuRepository;
     private final com.mohe.spring.config.LocationProperties locationProperties;
 
-    public PlaceController(PlaceService placeService, VectorSearchService vectorSearchService, com.mohe.spring.config.LocationProperties locationProperties) {
+    public PlaceController(PlaceService placeService, VectorSearchService vectorSearchService,
+                          PlaceMenuRepository placeMenuRepository,
+                          com.mohe.spring.config.LocationProperties locationProperties) {
         this.placeService = placeService;
         this.vectorSearchService = vectorSearchService;
+        this.placeMenuRepository = placeMenuRepository;
         this.locationProperties = locationProperties;
     }
     
@@ -207,7 +215,59 @@ public class PlaceController {
             );
         }
     }
-    
+
+    @GetMapping("/{id}/menus")
+    @Operation(
+        summary = "장소 메뉴 목록 조회",
+        description = "장소 ID로 메뉴 목록을 조회합니다. 메뉴명, 가격, 이미지 경로 등을 포함합니다."
+    )
+    @ApiResponses(
+        value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "메뉴 목록 조회 성공",
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = PlaceMenuListResponse.class)
+                )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "장소를 찾을 수 없음"
+            )
+        }
+    )
+    public ResponseEntity<ApiResponse<PlaceMenuListResponse>> getPlaceMenus(
+            @Parameter(description = "장소 ID", required = true, example = "1")
+            @PathVariable String id,
+            HttpServletRequest httpRequest) {
+        try {
+            Long placeId = Long.parseLong(id);
+            List<PlaceMenu> menus = placeMenuRepository.findByPlaceIdOrderByDisplayOrderAsc(placeId);
+            List<PlaceMenuDto> menuDtos = menus.stream()
+                .map(PlaceMenuDto::from)
+                .collect(Collectors.toList());
+            PlaceMenuListResponse response = new PlaceMenuListResponse(menuDtos);
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.VALIDATION_ERROR,
+                    "유효하지 않은 장소 ID 형식입니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.INTERNAL_SERVER_ERROR,
+                    e.getMessage() != null ? e.getMessage() : "메뉴 목록 조회에 실패했습니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        }
+    }
+
     @GetMapping("/search")
     @Operation(
         summary = "장소 검색",
