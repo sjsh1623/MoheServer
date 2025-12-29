@@ -170,4 +170,22 @@ public class AdminMonitorController {
 
         return ResponseEntity.ok(ApiResponse.success(result, "Pushed " + count + " places to queue on " + (serverName != null ? serverName : "local")));
     }
+
+    @RequestMapping(value = "/batch/execute/{serverName}", method = {RequestMethod.GET, RequestMethod.POST})
+    @Operation(summary = "Execute batch endpoint", description = "Execute any batch endpoint on specified server")
+    public ResponseEntity<ApiResponse<Object>> executeBatchEndpoint(
+            @PathVariable String serverName,
+            @RequestParam String path,
+            @RequestParam(defaultValue = "POST") String method,
+            @RequestBody(required = false) Map<String, Object> body
+    ) {
+        log.info("Executing batch endpoint on {} [{}]: {}", serverName, method, path);
+        try {
+            Object result = adminMonitorService.executeBatchEndpoint(serverName, method, path, body);
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            log.error("Failed to execute batch endpoint: {}", e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("BATCH_EXECUTE_FAILED", e.getMessage()));
+        }
+    }
 }

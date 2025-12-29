@@ -33,14 +33,14 @@ embedding:
 
 batch:
   service:
-    url: ${BATCH_SERVICE_URL:http://localhost:8081}
+    url: ${BATCH_SERVICE_URL:http://mohe-batch:8081}
   remote-servers:
     - name: local
-      url: ${BATCH_SERVICE_URL:http://localhost:8081}
+      url: ${BATCH_SERVICE_URL:http://mohe-batch:8081}
       enabled: true
     - name: server1
       url: ${BATCH_REMOTE_SERVER1_URL:http://100.66.53.117:8081}
-      enabled: ${BATCH_REMOTE_SERVER1_ENABLED:false}
+      enabled: ${BATCH_REMOTE_SERVER1_ENABLED:true}
     - name: server2
       url: ${BATCH_REMOTE_SERVER2_URL:http://100.72.151.106:8081}
-      enabled: ${BATCH_REMOTE_SERVER2_ENABLED:false}
+      enabled: ${BATCH_REMOTE_SERVER2_ENABLED:true}

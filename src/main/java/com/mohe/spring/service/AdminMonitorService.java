@@ -312,6 +312,47 @@ public class AdminMonitorService {
         return pushAllToQueue(null, menus, images, reviews);
     }
 
+    /**
+     * Execute any batch endpoint on specific server
+     */
+    public Object executeBatchEndpoint(String serverName, String method, String path, Map<String, Object> body) {
+        String serverUrl = getServerUrl(serverName);
+        try {
+            Map<String, Object> response;
+            if ("GET".equalsIgnoreCase(method)) {
+                response = webClient.get()
+                        .uri(serverUrl + path)
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                        .timeout(Duration.ofSeconds(30))
+                        .block();
+            } else if (body != null) {
+                response = webClient.post()
+                        .uri(serverUrl + path)
+                        .bodyValue(body)
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                        .timeout(Duration.ofSeconds(30))
+                        .block();
+            } else {
+                response = webClient.post()
+                        .uri(serverUrl + path)
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                        .timeout(Duration.ofSeconds(30))
+                        .block();
+            }
+
+            if (response != null && response.containsKey("data")) {
+                return response.get("data");
+            }
+            return response;
+        } catch (Exception e) {
+            log.error("Failed to execute batch endpoint {} on {}: {}", path, serverUrl, e.getMessage());
+            throw new RuntimeException("Failed to execute: " + e.getMessage());
+        }
+    }
+
     private AdminPlaceDto toAdminPlaceDto(Place place) {
         return AdminPlaceDto.builder()
                 .id(place.getId())
