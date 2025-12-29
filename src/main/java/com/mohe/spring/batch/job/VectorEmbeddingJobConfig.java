@@ -1,6 +1,7 @@
 package com.mohe.spring.batch.job;
 
 import com.mohe.spring.batch.reader.VectorEmbeddingReader;
+import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceKeywordEmbedding;
 import com.mohe.spring.repository.PlaceRepository;
@@ -146,21 +147,21 @@ public class VectorEmbeddingJobConfig {
 
                 System.out.println("💾 Saved " + savedCount + " embeddings for place_id=" + place.getId());
 
-                // Mark place as ready after successful vectorization
-                place.setReady(true);
+                // Mark place as embed_status=COMPLETED after successful vectorization
+                place.setEmbedStatus(EmbedStatus.COMPLETED);
 
                 // ✅ Success logging
                 System.out.println("✅ Successfully vectorized '" + place.getName() + "' - " +
                     "Keywords: " + String.join(", ", keywordsToProcess) + ", " +
                     "Vector dimension: 1792, " +
                     "Saved " + savedCount + " embeddings, " +
-                    "ready=true");
+                    "embed_status=COMPLETED");
 
                 return place;
             } catch (Exception e) {
                 System.err.println("❌ Vectorization failed for '" + place.getName() + "' due to error: " + e.getMessage());
                 e.printStackTrace();
-                // Keep crawler_found=true, ready=false
+                // Keep crawl_status=COMPLETED, embed_status=PENDING
                 placeRepository.save(place);
                 return null;
             }

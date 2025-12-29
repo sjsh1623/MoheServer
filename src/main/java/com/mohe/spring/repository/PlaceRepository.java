@@ -1,5 +1,7 @@
 package com.mohe.spring.repository;
 
+import com.mohe.spring.entity.CrawlStatus;
+import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,15 +22,16 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
 
     Page<Place> findByCategory(String category, Pageable pageable);
 
-    Page<Place> findByCategoryAndReadyTrue(String category, Pageable pageable);
+    @Query("SELECT p FROM Place p WHERE p.category = :category AND p.embedStatus = 'COMPLETED'")
+    Page<Place> findByCategoryAndEmbedCompleted(@Param("category") String category, Pageable pageable);
 
-    @Query("SELECT p FROM Place p WHERE p.ready = true AND (p.rating >= :minRating OR p.rating IS NULL) ORDER BY p.rating DESC, p.reviewCount DESC")
+    @Query("SELECT p FROM Place p WHERE p.embedStatus = 'COMPLETED' AND (p.rating >= :minRating OR p.rating IS NULL) ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findTopRatedPlaces(@Param("minRating") Double minRating, Pageable pageable);
 
-    @Query("SELECT p FROM Place p WHERE p.ready = true ORDER BY p.rating DESC, p.reviewCount DESC")
+    @Query("SELECT p FROM Place p WHERE p.embedStatus = 'COMPLETED' ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findPopularPlaces(Pageable pageable);
 
-    @Query("SELECT p FROM Place p WHERE p.ready = true AND (" +
+    @Query("SELECT p FROM Place p WHERE p.embedStatus = 'COMPLETED' AND (" +
            "LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
            "LOWER(p.roadAddress) LIKE LOWER(CONCAT('%', :query, '%')))")
     Page<Place> searchPlaces(@Param("query") String query, Pageable pageable);
@@ -64,14 +67,14 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query("""
         SELECT COUNT(*) FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
-        AND p.ready = true
+        AND p.embedStatus = 'COMPLETED'
     """)
     long countRecommendablePlaces();
 
     @Query("""
         SELECT COUNT(*) FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
-        AND p.ready = true
+        AND p.embedStatus = 'COMPLETED'
         AND (:category IS NULL OR p.category = :category)
     """)
     long countRecommendablePlacesByCategory(@Param("category") String category);
@@ -79,7 +82,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query("""
         SELECT p FROM Place p
         WHERE (p.rating >= 0.0 OR p.rating IS NULL)
-        AND p.ready = true
+        AND p.embedStatus = 'COMPLETED'
         ORDER BY p.rating DESC, p.name ASC
     """)
     Page<Place> findRecommendablePlaces(Pageable pageable);
@@ -103,7 +106,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query(value = """
         SELECT p.* FROM places p
         WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
-        AND COALESCE(p.ready, false) = true
+        AND p.embed_status = 'COMPLETED'
         AND (
             6371 * acos(
                 cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
@@ -127,7 +130,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         SELECT p.* FROM places p
         WHERE p.latitude IS NOT NULL
         AND p.longitude IS NOT NULL
-        AND COALESCE(p.ready, false) = true
+        AND p.embed_status = 'COMPLETED'
         AND (
             ABS(CAST(p.latitude AS DOUBLE PRECISION) - :latitude) * 111000 +
             ABS(CAST(p.longitude AS DOUBLE PRECISION) - :longitude) * 111000 * COS(RADIANS(:latitude))
@@ -157,7 +160,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query(value = """
         SELECT p.* FROM places p
         WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
-        AND COALESCE(p.ready, false) = true
+        AND p.embed_status = 'COMPLETED'
         AND (p.rating >= 3.0 OR p.rating IS NULL)
         AND (
             6371 * acos(
@@ -188,7 +191,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query("""
         SELECT p FROM Place p
         WHERE (p.rating >= 3.0 OR p.rating IS NULL)
-        AND p.ready = true
+        AND p.embedStatus = 'COMPLETED'
         ORDER BY p.rating DESC, p.reviewCount DESC
     """)
     List<Place> findGeneralPlacesForLLM(Pageable pageable);
@@ -205,17 +208,17 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     """)
     List<Place> findPlacesWithoutImages();
 
-    Page<Place> findByReady(boolean ready, Pageable pageable);
+    @Query("SELECT p FROM Place p WHERE p.embedStatus = :status")
+    Page<Place> findByEmbedStatus(@Param("status") EmbedStatus status, Pageable pageable);
 
     /**
-     * Find place IDs where both crawler_found and ready are null or false
+     * Find place IDs where crawl_status = PENDING
      * Returns only IDs to avoid pagination issues with collection fetching
      * Step 1: Get IDs with pagination (efficient)
      */
     @Query("""
         SELECT p.id FROM Place p
-        WHERE (p.crawlerFound IS NULL)
-        AND (p.ready IS NULL OR p.ready = false)
+        WHERE p.crawlStatus = 'PENDING'
         ORDER BY p.id ASC
     """)
     Page<Long> findPlaceIdsForBatchProcessing(Pageable pageable);
@@ -230,8 +233,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
      */
     @Query(value = """
         SELECT p.id FROM places p
-        WHERE (p.crawler_found IS NULL)
-        AND (p.ready IS NULL OR p.ready = false)
+        WHERE p.crawl_status = 'PENDING'
         AND (p.review_count IS NULL OR p.review_count >= 5)
         AND NOT EXISTS (
             SELECT 1 FROM unnest(p.category) AS cat
@@ -244,14 +246,14 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     Page<Long> findPlaceIdsForBatchProcessingWithFilters(Pageable pageable);
 
     /**
-     * Find place IDs where crawlerFound = true (for image update)
+     * Find place IDs where crawlStatus = COMPLETED (for embedding)
      * Returns only IDs to avoid pagination issues with collection fetching
      * Step 1: Get IDs with pagination (efficient)
      */
     @Query("""
         SELECT p.id FROM Place p
-        WHERE p.crawlerFound = true
-        AND (p.ready IS NULL OR p.ready = false)
+        WHERE p.crawlStatus = 'COMPLETED'
+        AND p.embedStatus = 'PENDING'
         ORDER BY p.id ASC
     """)
     Page<Long> findPlaceIdsForImageUpdate(Pageable pageable);
@@ -270,24 +272,24 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
      */
     @Query("""
         SELECT p FROM Place p
-        WHERE p.ready = false OR p.ready IS NULL
+        WHERE p.embedStatus = 'PENDING'
         ORDER BY p.id ASC
     """)
-    List<Place> findTop5ByReadyFalseOrReadyIsNull(Pageable pageable);
+    List<Place> findTop5ByEmbedPending(Pageable pageable);
 
-    default List<Place> findTop5ByReadyFalseOrReadyIsNull() {
-        return findTop5ByReadyFalseOrReadyIsNull(Pageable.ofSize(5));
+    default List<Place> findTop5ByEmbedPending() {
+        return findTop5ByEmbedPending(Pageable.ofSize(5));
     }
 
     /**
      * Find places for vector embedding batch processing
-     * Conditions: crawler_found = true, ready = false, mohe_description IS NOT NULL
+     * Conditions: crawl_status = COMPLETED, embed_status = PENDING, mohe_description IS NOT NULL
      */
     @Query("""
         SELECT p FROM Place p
         JOIN p.descriptions d
-        WHERE p.crawlerFound = true
-        AND p.ready = false
+        WHERE p.crawlStatus = 'COMPLETED'
+        AND p.embedStatus = 'PENDING'
         AND d.moheDescription IS NOT NULL
         AND d.moheDescription != ''
         ORDER BY p.id ASC
@@ -297,11 +299,11 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     /**
      * Find place IDs for keyword embedding batch processing
      * Step 1: Get IDs with pagination (efficient)
-     * Conditions: crawler_found = true
+     * Conditions: crawl_status = COMPLETED
      */
     @Query("""
         SELECT p.id FROM Place p
-        WHERE p.crawlerFound = true
+        WHERE p.crawlStatus = 'COMPLETED'
         ORDER BY p.id ASC
     """)
     Page<Long> findPlaceIdsForKeywordEmbedding(Pageable pageable);
@@ -338,12 +340,49 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     Page<Long> findPlaceIdsWithoutImages(Pageable pageable);
 
     /**
-     * Find place IDs by ready status for selective image refresh
+     * Find place IDs by embed status for selective image refresh
      */
     @Query("""
         SELECT p.id FROM Place p
-        WHERE p.ready = :ready
+        WHERE p.embedStatus = :status
         ORDER BY p.id ASC
     """)
-    Page<Long> findPlaceIdsByReady(@Param("ready") boolean ready, Pageable pageable);
+    Page<Long> findPlaceIdsByEmbedStatus(@Param("status") EmbedStatus status, Pageable pageable);
+
+    // ===== Admin Monitor Stats =====
+
+    /**
+     * Count total places
+     */
+    long count();
+
+    /**
+     * Count places where embed_status = COMPLETED
+     */
+    long countByEmbedStatus(EmbedStatus status);
+
+    /**
+     * Count places where crawl_status = COMPLETED
+     */
+    long countByCrawlStatus(CrawlStatus status);
+
+    /**
+     * Search places by name with status filters for admin
+     */
+    @Query("""
+        SELECT p FROM Place p
+        WHERE (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
+        AND (:status = 'all'
+            OR (:status = 'embedded' AND p.embedStatus = 'COMPLETED')
+            OR (:status = 'crawled' AND p.crawlStatus = 'COMPLETED')
+            OR (:status = 'pending' AND p.crawlStatus = 'PENDING')
+            OR (:status = 'failed' AND p.crawlStatus = 'FAILED')
+            OR (:status = 'not_found' AND p.crawlStatus = 'NOT_FOUND'))
+        ORDER BY p.updatedAt DESC
+    """)
+    Page<Place> searchPlacesForAdmin(
+        @Param("keyword") String keyword,
+        @Param("status") String status,
+        Pageable pageable
+    );
 }

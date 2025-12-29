@@ -2,6 +2,8 @@ package com.mohe.spring.batch.job;
 
 import com.mohe.spring.batch.reader.UpdateCrawledDataReader;
 import com.mohe.spring.dto.crawling.CrawledDataDto;
+import com.mohe.spring.entity.CrawlStatus;
+import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceBusinessHour;
 import com.mohe.spring.entity.PlaceDescription;
@@ -169,8 +171,8 @@ public class UpdateCrawledDataJobConfig {
 
                 if (response == null || response.getData() == null) {
                     System.err.println("❌ Crawling failed for '" + place.getName() + "' - null response from crawler");
-                    place.setCrawlerFound(false);
-                    place.setReady(false);
+                    place.setCrawlStatus(CrawlStatus.FAILED);
+                    place.setEmbedStatus(EmbedStatus.PENDING);
                     // Don't save here - will be saved by writer
                     return place;  // Return place so writer can save it
                 }
@@ -219,9 +221,9 @@ public class UpdateCrawledDataJobConfig {
             // Validate that we have some text to work with
             if (textForKeywords == null || textForKeywords.trim().isEmpty()) {
                 System.err.println("⚠️ Lack of information for '" + place.getName() + "' - no description text available (AI summary, original description, and reviews are all empty)");
-                // Crawling succeeded but lack of information -> crawler_found = true, ready = false
-                place.setCrawlerFound(true);
-                place.setReady(false);
+                // Crawling succeeded but lack of information -> crawl_status = COMPLETED, embed_status = PENDING
+                place.setCrawlStatus(CrawlStatus.COMPLETED);
+                place.setEmbedStatus(EmbedStatus.PENDING);
                 // Don't save here - will be saved by writer
                 return place;  // Return place so writer can save it
             }
@@ -315,9 +317,9 @@ public class UpdateCrawledDataJobConfig {
 
                 if (allKeywordsAreDefault) {
                     System.err.println("⚠️ AI issue for '" + place.getName() + "' - Fallback keyword generation also failed (all default)");
-                    // Crawling succeeded but AI issue -> crawler_found = true, ready = false
-                    place.setCrawlerFound(true);
-                    place.setReady(false);
+                    // Crawling succeeded but AI issue -> crawl_status = COMPLETED, embed_status = PENDING
+                    place.setCrawlStatus(CrawlStatus.COMPLETED);
+                    place.setEmbedStatus(EmbedStatus.PENDING);
                     // Don't save here - will be saved by writer
                     return place;  // Return place so writer can save it
                 }
@@ -416,9 +418,9 @@ public class UpdateCrawledDataJobConfig {
                 System.out.println("✅ Saved " + place.getReviews().size() + " reviews for '" + place.getName() + "'");
             }
 
-                // Mark place as crawler_found=true (description generated), but ready=false (vectorization not done yet)
-                place.setCrawlerFound(true);
-                place.setReady(false);
+                // Mark place as crawl_status=COMPLETED (description generated), but embed_status=PENDING (vectorization not done yet)
+                place.setCrawlStatus(CrawlStatus.COMPLETED);
+                place.setEmbedStatus(EmbedStatus.PENDING);
 
                 // ✅ Success logging
                 System.out.println("✅ Successfully crawled '" + place.getName() + "' - " +
@@ -427,26 +429,26 @@ public class UpdateCrawledDataJobConfig {
                     "Keywords: " + String.join(", ", place.getKeyword()) + ", " +
                     "Parking: " + (place.getParkingAvailable() != null ? place.getParkingAvailable() : "Unknown") + ", " +
                     "Pet-friendly: " + (place.getPetFriendly() != null ? place.getPetFriendly() : "Unknown") + ", " +
-                    "crawler_found=true, ready=false (awaiting vectorization)");
+                    "crawl_status=COMPLETED, embed_status=PENDING (awaiting vectorization)");
 
                 return place;
             } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
-                // HTTP 에러 = 크롤링 실패 -> crawler_found = false, ready = false
+                // HTTP 에러 = 크롤링 실패 -> crawl_status = FAILED, embed_status = PENDING
                 if (e.getStatusCode().value() == 404) {
                     System.err.println("❌ Crawling failed for '" + place.getName() + "' - not found by crawler (404)");
                 } else {
                     System.err.println("❌ Crawling failed for '" + place.getName() + "' - crawler server error: " + e.getStatusCode());
                 }
-                place.setCrawlerFound(false);
-                place.setReady(false);
+                place.setCrawlStatus(CrawlStatus.FAILED);
+                place.setEmbedStatus(EmbedStatus.PENDING);
                 // Writer가 저장 처리
                 return place;
             } catch (Exception e) {
-                // 기타 예외 (connection refused, timeout 등) = 크롤링 실패 -> crawler_found = false, ready = false
+                // 기타 예외 (connection refused, timeout 등) = 크롤링 실패 -> crawl_status = FAILED, embed_status = PENDING
                 System.err.println("❌ Crawling failed for '" + place.getName() + "' due to error: " + e.getMessage());
                 e.printStackTrace();
-                place.setCrawlerFound(false);
-                place.setReady(false);
+                place.setCrawlStatus(CrawlStatus.FAILED);
+                place.setEmbedStatus(EmbedStatus.PENDING);
                 // Writer가 저장 처리
                 return place;
             }
@@ -482,8 +484,8 @@ public class UpdateCrawledDataJobConfig {
                 savedCount++;
 
                 System.out.println("💾 [" + savedCount + "/" + chunk.getItems().size() + "] Saved place '" + freshPlace.getName() +
-                    "' (ID: " + freshPlace.getId() + ", crawler_found=" + freshPlace.getCrawlerFound() +
-                    ", ready=" + freshPlace.getReady() + ") to database");
+                    "' (ID: " + freshPlace.getId() + ", crawl_status=" + freshPlace.getCrawlStatus() +
+                    ", embed_status=" + freshPlace.getEmbedStatus() + ") to database");
             }
 
             System.out.println("✅ Successfully saved batch: " + savedCount + "/" + chunk.getItems().size() + " places written to database");
@@ -505,8 +507,8 @@ public class UpdateCrawledDataJobConfig {
         target.setKeyword(source.getKeyword());
         target.setParkingAvailable(source.getParkingAvailable());
         target.setPetFriendly(source.getPetFriendly());
-        target.setReady(source.getReady());
-        target.setCrawlerFound(source.getCrawlerFound());
+        target.setEmbedStatus(source.getEmbedStatus());
+        target.setCrawlStatus(source.getCrawlStatus());
 
         // Copy collections
         if (source.getDescriptions() != null) {

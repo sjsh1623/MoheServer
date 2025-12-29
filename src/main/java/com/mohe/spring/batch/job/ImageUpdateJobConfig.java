@@ -1,6 +1,7 @@
 package com.mohe.spring.batch.job;
 
 import com.mohe.spring.batch.reader.ImageUpdateReader;
+import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceImage;
 import com.mohe.spring.repository.PlaceImageRepository;
@@ -188,17 +189,17 @@ public class ImageUpdateJobConfig {
                         placeImageRepository.saveAll(newImages);
                         logger.info("✅ Saved {} new images for place: {}", newImages.size(), place.getName());
 
-                        // 3. Mark place as ready=true ONLY after successful image update
-                        place.setReady(true);
+                        // 3. Mark place as embed_status=COMPLETED ONLY after successful image update
+                        place.setEmbedStatus(EmbedStatus.COMPLETED);
                         placeRepository.save(place);
-                        logger.info("✅ Marked place as ready=true: {} (ID: {})", place.getName(), place.getId());
+                        logger.info("✅ Marked place as embed_status=COMPLETED: {} (ID: {})", place.getName(), place.getId());
                     } else {
-                        logger.warn("⚠️ No images saved for place: {} (ID: {}). ready remains false",
+                        logger.warn("⚠️ No images saved for place: {} (ID: {}). embed_status remains PENDING",
                             place.getName(), place.getId());
                     }
 
                 } catch (Exception e) {
-                    logger.error("❌ Error updating images for place: {} (ID: {}) - {}. ready remains false",
+                    logger.error("❌ Error updating images for place: {} (ID: {}) - {}. embed_status remains PENDING",
                         place.getName(), place.getId(), e.getMessage(), e);
                 }
             }

@@ -78,6 +78,7 @@ public class SecurityConfig {
                     "/api/terms/**",
                     "/api/batch/**",
                     "/api/batch/internal/**",
+                    "/api/admin/**",
                     "/api/test/**",
                     "/test/**",
                     "/api/address/**",

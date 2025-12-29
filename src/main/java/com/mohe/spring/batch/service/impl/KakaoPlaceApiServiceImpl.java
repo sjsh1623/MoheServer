@@ -159,7 +159,7 @@ public class KakaoPlaceApiServiceImpl implements KakaoPlaceApiService {
                 // 전화번호는 별도 필드가 없으므로 비워둠
                 // Rating, ReviewCount도 Kakao API에서 제공하지 않음
 
-                place.setReady(false); // 초기값
+                place.setEmbedStatus(com.mohe.spring.entity.EmbedStatus.PENDING); // 초기값
 
                 places.add(place);
 

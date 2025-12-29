@@ -22,3 +22,7 @@ crawler:
 embedding:
   service:
     url: ${EMBEDDING_SERVICE_URL:http://localhost:2000}
+
+batch:
+  service:
+    url: ${BATCH_SERVICE_URL:http://localhost:8081}

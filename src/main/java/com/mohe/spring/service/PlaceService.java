@@ -2,6 +2,7 @@ package com.mohe.spring.service;
 
 import com.mohe.spring.dto.*;
 import com.mohe.spring.dto.ReviewDto;
+import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceImage;
 import com.mohe.spring.repository.PlaceImageRepository;
@@ -102,7 +103,7 @@ public class PlaceService {
         
         Page<Place> placePage;
         if (category != null && !category.trim().isEmpty()) {
-            placePage = placeRepository.findByCategoryAndReadyTrue(category, pageRequest);
+            placePage = placeRepository.findByCategoryAndEmbedCompleted(category, pageRequest);
         } else {
             // Default to recommendable places sorted by rating
             placePage = placeRepository.findRecommendablePlaces(pageRequest);
@@ -124,7 +125,7 @@ public class PlaceService {
         }
 
         Place place = placeOpt.get();
-        if (!Boolean.TRUE.equals(place.getReady())) {
+        if (!EmbedStatus.COMPLETED.equals(place.getEmbedStatus())) {
             throw new RuntimeException("준비되지 않은 장소입니다: " + id);
         }
         SimplePlaceDto placeDto = convertToSimplePlaceDto(place);
@@ -574,7 +575,7 @@ public class PlaceService {
     }
 
     private boolean isReady(Place place) {
-        return place != null && Boolean.TRUE.equals(place.getReady());
+        return place != null && EmbedStatus.COMPLETED.equals(place.getEmbedStatus());
     }
 
     private List<Place> filterReady(List<Place> places) {

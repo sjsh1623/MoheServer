@@ -62,8 +62,8 @@ public class OpenAiCacheTestController {
     public ResponseEntity<TestResult> testOpenAiCache() {
         log.info("🧪 Starting OpenAI cache test with 5 places...");
 
-        // 1. Get 5 places that need processing (not ready)
-        List<Place> places = placeRepository.findTop5ByReadyFalseOrReadyIsNull();
+        // 1. Get 5 places that need processing (embed_status = PENDING)
+        List<Place> places = placeRepository.findTop5ByEmbedPending();
 
         if (places.isEmpty()) {
             log.warn("⚠️ No places available for testing");

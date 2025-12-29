@@ -1,5 +1,6 @@
 package com.mohe.spring.batch.reader;
 
+import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.repository.PlaceRepository;
 import org.slf4j.Logger;
@@ -20,8 +21,8 @@ import java.util.List;
  * <ul>
  *   <li>ALL: 모든 장소</li>
  *   <li>NO_IMAGES: 이미지가 없는 장소만</li>
- *   <li>READY_ONLY: ready=true인 장소만</li>
- *   <li>NOT_READY: ready=false인 장소만</li>
+ *   <li>READY_ONLY: embed_status=COMPLETED인 장소만</li>
+ *   <li>NOT_READY: embed_status=PENDING인 장소만</li>
  * </ul>
  *
  * <h3>처리 방식</h3>
@@ -109,8 +110,8 @@ public class ImageRefreshReader implements ItemReader<Place> {
         Page<Long> idsPage = switch (mode) {
             case ALL -> placeRepository.findAllPlaceIdsForImageRefresh(pageable);
             case NO_IMAGES -> placeRepository.findPlaceIdsWithoutImages(pageable);
-            case READY_ONLY -> placeRepository.findPlaceIdsByReady(true, pageable);
-            case NOT_READY -> placeRepository.findPlaceIdsByReady(false, pageable);
+            case READY_ONLY -> placeRepository.findPlaceIdsByEmbedStatus(EmbedStatus.COMPLETED, pageable);
+            case NOT_READY -> placeRepository.findPlaceIdsByEmbedStatus(EmbedStatus.PENDING, pageable);
         };
 
         currentPageIds = new ArrayList<>(idsPage.getContent());

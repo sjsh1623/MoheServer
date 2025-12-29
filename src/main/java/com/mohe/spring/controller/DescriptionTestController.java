@@ -52,8 +52,8 @@ public class DescriptionTestController {
         List<Map<String, Object>> results = new ArrayList<>();
 
         try {
-            // Get 5 places that need processing
-            List<Place> places = placeRepository.findTop5ByReadyFalseOrReadyIsNull();
+            // Get 5 places that need processing (embed_status = PENDING)
+            List<Place> places = placeRepository.findTop5ByEmbedPending();
 
             if (places.isEmpty()) {
                 response.put("success", false);

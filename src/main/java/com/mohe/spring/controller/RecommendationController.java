@@ -11,6 +11,7 @@ import com.mohe.spring.security.UserPrincipal;
 import com.mohe.spring.repository.UserRepository;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.repository.BookmarkRepository;
+import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.User;
 import com.mohe.spring.entity.Place;
 import io.swagger.v3.oas.annotations.Operation;
@@ -530,7 +531,7 @@ public class RecommendationController {
             }
 
             List<SimplePlaceDto> placeDtos = places.stream()
-                .filter(place -> Boolean.TRUE.equals(place.getReady()))
+                .filter(place -> EmbedStatus.COMPLETED.equals(place.getEmbedStatus()))
                 .map(this::convertToSimplePlaceDto)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
@@ -549,7 +550,7 @@ public class RecommendationController {
     }
 
     private SimplePlaceDto convertToSimplePlaceDto(Place place) {
-        if (place == null || place.getId() == null || !Boolean.TRUE.equals(place.getReady())) {
+        if (place == null || place.getId() == null || !EmbedStatus.COMPLETED.equals(place.getEmbedStatus())) {
             return null;
         }
 

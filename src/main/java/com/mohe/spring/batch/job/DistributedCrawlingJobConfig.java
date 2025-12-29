@@ -2,6 +2,8 @@ package com.mohe.spring.batch.job;
 
 import com.mohe.spring.batch.reader.DistributedPlaceReader;
 import com.mohe.spring.dto.crawling.CrawledDataDto;
+import com.mohe.spring.entity.CrawlStatus;
+import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceBusinessHour;
 import com.mohe.spring.entity.PlaceDescription;
@@ -140,11 +142,11 @@ public class DistributedCrawlingJobConfig {
                 if (response == null || response.getData() == null) {
                     System.err.println("❌ [" + lockService.getWorkerHostname() + "] Crawling failed for '" +
                         place.getName() + "' - null response from crawler");
-                    place.setCrawlerFound(false);
-                    place.setReady(false);
+                    place.setCrawlStatus(CrawlStatus.FAILED);
+                    place.setEmbedStatus(EmbedStatus.PENDING);
                     placeRepository.save(place);
                     System.out.println("💾 [" + lockService.getWorkerHostname() + "] Saved place '" +
-                        place.getName() + "' with crawler_found=false to database");
+                        place.getName() + "' with crawl_status=FAILED to database");
                     return null;
                 }
 
@@ -186,11 +188,11 @@ public class DistributedCrawlingJobConfig {
 
                 if (textForKeywords == null || textForKeywords.trim().isEmpty()) {
                     System.err.println("⚠️ No description available for " + place.getName());
-                    place.setCrawlerFound(true);
-                place.setReady(false);
-                placeRepository.save(place);
-                return null;
-            }
+                    place.setCrawlStatus(CrawlStatus.COMPLETED);
+                    place.setEmbedStatus(EmbedStatus.PENDING);
+                    placeRepository.save(place);
+                    return null;
+                }
 
                 description.setAiSummary(aiSummaryText);
                 description.setSearchQuery(searchQuery);
@@ -258,8 +260,8 @@ public class DistributedCrawlingJobConfig {
                     if (allKeywordsAreDefault) {
                         System.err.println("⚠️ AI issue for '" + place.getName() +
                             "' - Fallback keyword generation also failed (all default)");
-                        place.setCrawlerFound(true);
-                        place.setReady(false);
+                        place.setCrawlStatus(CrawlStatus.COMPLETED);
+                        place.setEmbedStatus(EmbedStatus.PENDING);
                         placeRepository.save(place);
                         return null;
                     }
@@ -350,9 +352,9 @@ public class DistributedCrawlingJobConfig {
                     }
                 }
 
-                // Mark as crawler_found=true (description generated), but ready=false (vectorization not done yet)
-                place.setCrawlerFound(true);
-                place.setReady(false);
+                // Mark as crawl_status=COMPLETED (description generated), but embed_status=PENDING (vectorization not done yet)
+                place.setCrawlStatus(CrawlStatus.COMPLETED);
+                place.setEmbedStatus(EmbedStatus.PENDING);
 
                 System.out.println("✅ [" + lockService.getWorkerHostname() + "] Completed: " +
                     place.getName());
@@ -360,8 +362,8 @@ public class DistributedCrawlingJobConfig {
                 return place;
             } catch (Exception e) {
                 System.err.println("❌ Error processing " + place.getName() + ": " + e.getMessage());
-                place.setCrawlerFound(false);
-                place.setReady(false);
+                place.setCrawlStatus(CrawlStatus.FAILED);
+                place.setEmbedStatus(EmbedStatus.PENDING);
                 placeRepository.save(place);
                 return null;
             }
@@ -381,8 +383,8 @@ public class DistributedCrawlingJobConfig {
                     savedCount++;
                     System.out.println("💾 [" + lockService.getWorkerHostname() + "] [" + savedCount + "/" +
                         chunk.getItems().size() + "] Saved place '" + place.getName() +
-                        "' (ID: " + place.getId() + ", crawler_found=" + place.getCrawlerFound() +
-                        ", ready=" + place.getReady() + ") to database");
+                        "' (ID: " + place.getId() + ", crawl_status=" + place.getCrawlStatus() +
+                        ", embed_status=" + place.getEmbedStatus() + ") to database");
                 } catch (Exception e) {
                     System.err.println("❌ [" + lockService.getWorkerHostname() + "] Failed to save place '" +
                         place.getName() + "': " + e.getMessage());
