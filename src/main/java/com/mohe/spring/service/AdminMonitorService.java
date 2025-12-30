@@ -394,6 +394,11 @@ public class AdminMonitorService {
      * Get Docker containers from specific server via Docker TCP API
      */
     public List<Map<String, Object>> getDockerContainersFromServer(String serverName) {
+        // For local server, use Docker CLI via socket
+        if ("local".equalsIgnoreCase(serverName)) {
+            return getDockerContainers();
+        }
+
         BatchServerConfig.RemoteServer server = findServer(serverName);
         if (server == null || server.getDockerHost() == null) {
             log.warn("Server {} not found or no Docker host configured", serverName);
@@ -443,6 +448,11 @@ public class AdminMonitorService {
      * Get Docker logs from specific server via Docker TCP API
      */
     public Map<String, Object> getDockerLogsFromServer(String serverName, String containerName, int lines) {
+        // For local server, use Docker CLI via socket
+        if ("local".equalsIgnoreCase(serverName)) {
+            return getDockerLogs(containerName, lines);
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("containerName", containerName);
         result.put("serverName", serverName);
