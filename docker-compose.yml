@@ -71,6 +71,8 @@ services:
     restart: unless-stopped
     volumes:
       - /Users/andrewlim/Desktop/Developer/Mohe/images:/images
+      # Docker socket for container monitoring
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
   # Development app service with hot reload
   app-dev:

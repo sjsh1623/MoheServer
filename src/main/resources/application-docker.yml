@@ -38,9 +38,15 @@ batch:
     - name: local
       url: ${BATCH_SERVICE_URL:http://mohe-batch:8081}
       enabled: true
+      docker-host: ${DOCKER_LOCAL_HOST:host.docker.internal}
+      docker-port: ${DOCKER_LOCAL_PORT:2375}
     - name: server1
       url: ${BATCH_REMOTE_SERVER1_URL:http://100.66.53.117:8081}
       enabled: ${BATCH_REMOTE_SERVER1_ENABLED:true}
+      docker-host: ${DOCKER_SERVER1_HOST:100.66.53.117}
+      docker-port: ${DOCKER_SERVER1_PORT:2375}
     - name: server2
       url: ${BATCH_REMOTE_SERVER2_URL:http://100.72.151.106:8081}
       enabled: ${BATCH_REMOTE_SERVER2_ENABLED:true}
+      docker-host: ${DOCKER_SERVER2_HOST:100.72.151.106}
+      docker-port: ${DOCKER_SERVER2_PORT:2375}

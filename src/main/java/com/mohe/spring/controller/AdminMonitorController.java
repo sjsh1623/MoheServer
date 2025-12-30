@@ -188,4 +188,52 @@ public class AdminMonitorController {
             return ResponseEntity.ok(ApiResponse.error("BATCH_EXECUTE_FAILED", e.getMessage()));
         }
     }
+
+    @GetMapping("/docker/containers")
+    @Operation(summary = "Get Docker containers", description = "Returns list of all Docker containers with status from local server")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getDockerContainers() {
+        log.debug("Fetching Docker containers from local");
+        List<Map<String, Object>> containers = adminMonitorService.getDockerContainers();
+        return ResponseEntity.ok(ApiResponse.success(containers));
+    }
+
+    @GetMapping("/docker/containers/{serverName}")
+    @Operation(summary = "Get Docker containers from specific server", description = "Returns list of all Docker containers from specified server via Docker TCP API")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getDockerContainersFromServer(
+            @PathVariable String serverName
+    ) {
+        log.debug("Fetching Docker containers from server: {}", serverName);
+        List<Map<String, Object>> containers = adminMonitorService.getDockerContainersFromServer(serverName);
+        return ResponseEntity.ok(ApiResponse.success(containers));
+    }
+
+    @GetMapping("/docker/logs/{containerName}")
+    @Operation(summary = "Get Docker logs", description = "Returns logs from specified Docker container on local server")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getDockerLogs(
+            @PathVariable String containerName,
+            @RequestParam(defaultValue = "100") int lines
+    ) {
+        log.debug("Fetching Docker logs for {} (last {} lines)", containerName, lines);
+        Map<String, Object> logs = adminMonitorService.getDockerLogs(containerName, lines);
+        return ResponseEntity.ok(ApiResponse.success(logs));
+    }
+
+    @GetMapping("/docker/logs/{serverName}/{containerName}")
+    @Operation(summary = "Get Docker logs from specific server", description = "Returns logs from specified Docker container on specified server via Docker TCP API")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getDockerLogsFromServer(
+            @PathVariable String serverName,
+            @PathVariable String containerName,
+            @RequestParam(defaultValue = "100") int lines
+    ) {
+        log.debug("Fetching Docker logs for {} from server {} (last {} lines)", containerName, serverName, lines);
+        Map<String, Object> logs = adminMonitorService.getDockerLogsFromServer(serverName, containerName, lines);
+        return ResponseEntity.ok(ApiResponse.success(logs));
+    }
+
+    @GetMapping("/batch/config/{serverName}")
+    @Operation(summary = "Get server config", description = "Returns server configuration including max workers")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getServerConfig(@PathVariable String serverName) {
+        Map<String, Object> config = adminMonitorService.getServerConfig(serverName);
+        return ResponseEntity.ok(ApiResponse.success(config));
+    }
 }

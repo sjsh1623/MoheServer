@@ -29,6 +29,8 @@ public class BatchServerConfig {
         private String name;
         private String url;
         private boolean enabled = false;
+        private String dockerHost;  // Tailscale IP or hostname
+        private int dockerPort = 2375;  // Docker TCP API port
     }
 
     public List<RemoteServer> getEnabledServers() {

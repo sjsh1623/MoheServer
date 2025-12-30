@@ -47,6 +47,8 @@ public class AdminMonitorService {
             serverInfo.put("url", server.getUrl());
             serverInfo.put("enabled", server.isEnabled());
             serverInfo.put("status", checkServerHealth(server.getUrl()) ? "online" : "offline");
+            serverInfo.put("dockerHost", server.getDockerHost());
+            serverInfo.put("dockerPort", server.getDockerPort());
             servers.add(serverInfo);
         }
         return servers;
@@ -310,6 +312,259 @@ public class AdminMonitorService {
      */
     public int pushAllToQueue(boolean menus, boolean images, boolean reviews) {
         return pushAllToQueue(null, menus, images, reviews);
+    }
+
+    /**
+     * Get Docker container logs
+     */
+    public Map<String, Object> getDockerLogs(String containerName, int lines) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("containerName", containerName);
+        result.put("lines", lines);
+        result.put("timestamp", LocalDateTime.now());
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                "docker", "logs", "--tail", String.valueOf(lines), containerName
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            StringBuilder output = new StringBuilder();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            }
+
+            int exitCode = process.waitFor();
+            result.put("success", exitCode == 0);
+            result.put("logs", output.toString());
+            result.put("exitCode", exitCode);
+
+        } catch (Exception e) {
+            log.error("Failed to get Docker logs for {}: {}", containerName, e.getMessage());
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            result.put("logs", "");
+        }
+
+        return result;
+    }
+
+    /**
+     * Get list of Docker containers
+     */
+    public List<Map<String, Object>> getDockerContainers() {
+        List<Map<String, Object>> containers = new ArrayList<>();
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                "docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}\t{{.Image}}"
+            );
+            Process process = pb.start();
+
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split("\t");
+                    if (parts.length >= 3) {
+                        Map<String, Object> container = new HashMap<>();
+                        container.put("name", parts[0]);
+                        container.put("status", parts[1]);
+                        container.put("image", parts[2]);
+                        container.put("running", parts[1].toLowerCase().contains("up"));
+                        containers.add(container);
+                    }
+                }
+            }
+
+            process.waitFor();
+        } catch (Exception e) {
+            log.error("Failed to list Docker containers: {}", e.getMessage());
+        }
+
+        return containers;
+    }
+
+    /**
+     * Get Docker containers from specific server via Docker TCP API
+     */
+    public List<Map<String, Object>> getDockerContainersFromServer(String serverName) {
+        BatchServerConfig.RemoteServer server = findServer(serverName);
+        if (server == null || server.getDockerHost() == null) {
+            log.warn("Server {} not found or no Docker host configured", serverName);
+            return getDockerContainers(); // Fallback to local
+        }
+
+        String dockerUrl = String.format("http://%s:%d", server.getDockerHost(), server.getDockerPort());
+        List<Map<String, Object>> containers = new ArrayList<>();
+
+        try {
+            List<Map<String, Object>> response = webClient.get()
+                    .uri(dockerUrl + "/containers/json?all=true")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                    .timeout(Duration.ofSeconds(10))
+                    .block();
+
+            if (response != null) {
+                for (Map<String, Object> container : response) {
+                    Map<String, Object> containerInfo = new HashMap<>();
+
+                    // Extract container name (remove leading /)
+                    @SuppressWarnings("unchecked")
+                    List<String> names = (List<String>) container.get("Names");
+                    String name = names != null && !names.isEmpty()
+                            ? names.get(0).replaceFirst("^/", "")
+                            : (String) container.get("Id");
+
+                    containerInfo.put("name", name);
+                    containerInfo.put("id", container.get("Id"));
+                    containerInfo.put("image", container.get("Image"));
+                    containerInfo.put("status", container.get("Status"));
+                    containerInfo.put("state", container.get("State"));
+                    containerInfo.put("running", "running".equalsIgnoreCase((String) container.get("State")));
+                    containers.add(containerInfo);
+                }
+            }
+            log.debug("Fetched {} containers from {}", containers.size(), dockerUrl);
+        } catch (Exception e) {
+            log.error("Failed to fetch containers from {}: {}", dockerUrl, e.getMessage());
+        }
+
+        return containers;
+    }
+
+    /**
+     * Get Docker logs from specific server via Docker TCP API
+     */
+    public Map<String, Object> getDockerLogsFromServer(String serverName, String containerName, int lines) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("containerName", containerName);
+        result.put("serverName", serverName);
+        result.put("lines", lines);
+        result.put("timestamp", LocalDateTime.now());
+
+        BatchServerConfig.RemoteServer server = findServer(serverName);
+        if (server == null || server.getDockerHost() == null) {
+            log.warn("Server {} not found or no Docker host configured, using local", serverName);
+            return getDockerLogs(containerName, lines);
+        }
+
+        String dockerUrl = String.format("http://%s:%d", server.getDockerHost(), server.getDockerPort());
+
+        try {
+            // Docker API uses container ID or name
+            String logsUrl = String.format("%s/containers/%s/logs?stdout=true&stderr=true&tail=%d&timestamps=false",
+                    dockerUrl, containerName, lines);
+
+            String logs = webClient.get()
+                    .uri(logsUrl)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+
+            // Docker logs API returns raw bytes with stream headers, clean them up
+            String cleanedLogs = cleanDockerLogs(logs);
+
+            result.put("success", true);
+            result.put("logs", cleanedLogs);
+            log.debug("Fetched {} bytes of logs for {} from {}",
+                    cleanedLogs != null ? cleanedLogs.length() : 0, containerName, dockerUrl);
+        } catch (Exception e) {
+            log.error("Failed to fetch logs for {} from {}: {}", containerName, dockerUrl, e.getMessage());
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            result.put("logs", "Error: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * Clean Docker log output (remove stream headers)
+     */
+    private String cleanDockerLogs(String logs) {
+        if (logs == null) return "";
+
+        StringBuilder cleaned = new StringBuilder();
+        int i = 0;
+        while (i < logs.length()) {
+            // Docker multiplexed stream format: 8-byte header + payload
+            // Header: [stream_type(1), 0, 0, 0, size(4 bytes big-endian)]
+            if (i + 8 <= logs.length()) {
+                char streamType = logs.charAt(i);
+                // Check if this looks like a Docker stream header
+                if ((streamType == 1 || streamType == 2) &&
+                    logs.charAt(i + 1) == 0 && logs.charAt(i + 2) == 0 && logs.charAt(i + 3) == 0) {
+                    // Read size from bytes 4-7
+                    int size = ((logs.charAt(i + 4) & 0xFF) << 24) |
+                               ((logs.charAt(i + 5) & 0xFF) << 16) |
+                               ((logs.charAt(i + 6) & 0xFF) << 8) |
+                               (logs.charAt(i + 7) & 0xFF);
+                    i += 8; // Skip header
+                    if (size > 0 && i + size <= logs.length()) {
+                        cleaned.append(logs, i, i + size);
+                        i += size;
+                        continue;
+                    }
+                }
+            }
+            // Not a stream header, just append the character
+            cleaned.append(logs.charAt(i));
+            i++;
+        }
+        return cleaned.toString();
+    }
+
+    /**
+     * Find server by name
+     */
+    private BatchServerConfig.RemoteServer findServer(String serverName) {
+        if (serverName == null) return null;
+        return batchServerConfig.getRemoteServers().stream()
+                .filter(s -> serverName.equals(s.getName()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Get server configuration including max workers
+     */
+    public Map<String, Object> getServerConfig(String serverName) {
+        String serverUrl = getServerUrl(serverName);
+        Map<String, Object> config = new HashMap<>();
+        config.put("serverName", serverName != null ? serverName : "local");
+        config.put("serverUrl", serverUrl);
+        config.put("maxWorkers", 10); // Support up to 10 workers
+
+        try {
+            Map<String, Object> response = webClient.get()
+                    .uri(serverUrl + "/batch/config")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .timeout(Duration.ofSeconds(5))
+                    .block();
+
+            if (response != null && response.containsKey("data")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> data = (Map<String, Object>) response.get("data");
+                config.putAll(data);
+            }
+        } catch (Exception e) {
+            log.debug("Could not fetch server config from {}: {}", serverUrl, e.getMessage());
+            // Return default config
+            config.put("totalWorkers", 10);
+            config.put("threadsPerWorker", 1);
+            config.put("chunkSize", 10);
+        }
+
+        return config;
     }
 
     /**
