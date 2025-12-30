@@ -639,11 +639,26 @@ public class AdminMonitorService {
         WorkerStatusResponse.WorkerInfo info = new WorkerStatusResponse.WorkerInfo();
         info.setWorkerId(getString(data, "workerId"));
         info.setThreads(getInt(data, "threads"));
-        info.setProcessedCount(getLong(data, "processedCount"));
-        info.setFailedCount(getLong(data, "failedCount"));
+        // MoheBatch uses 'tasksProcessed', fallback to 'processedCount'
+        long processed = getLong(data, "tasksProcessed");
+        if (processed == 0) {
+            processed = getLong(data, "processedCount");
+        }
+        info.setProcessedCount(processed);
+        // MoheBatch uses 'tasksFailed', fallback to 'failedCount'
+        long failed = getLong(data, "tasksFailed");
+        if (failed == 0) {
+            failed = getLong(data, "failedCount");
+        }
+        info.setFailedCount(failed);
         info.setLastHeartbeat(getString(data, "lastHeartbeat"));
         info.setStatus(getString(data, "status"));
-        info.setCurrentTask(getString(data, "currentTask"));
+        // MoheBatch uses 'currentTaskId', fallback to 'currentTask'
+        String task = getString(data, "currentTaskId");
+        if (task == null) {
+            task = getString(data, "currentTask");
+        }
+        info.setCurrentTask(task);
         return info;
     }
 
