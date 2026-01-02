@@ -63,9 +63,6 @@ dependencies {
     // PostgreSQL driver
     runtimeOnly 'org.postgresql:postgresql'
 
-    // Flyway for database migrations
-    implementation 'org.flywaydb:flyway-core:9.22.3'
-
     // BCrypt is already included in spring-boot-starter-security
     
     // Redis for token storage (optional)
