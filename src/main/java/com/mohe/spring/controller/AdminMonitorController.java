@@ -236,4 +236,11 @@ public class AdminMonitorController {
         Map<String, Object> config = adminMonitorService.getServerConfig(serverName);
         return ResponseEntity.ok(ApiResponse.success(config));
     }
+
+    @GetMapping("/batch/current-jobs/{serverName}")
+    @Operation(summary = "Get current running jobs", description = "Returns currently running jobs on specified server including type, description, and processing details")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getCurrentJobs(@PathVariable String serverName) {
+        Map<String, Object> currentJobs = adminMonitorService.getCurrentJobs(serverName);
+        return ResponseEntity.ok(ApiResponse.success(currentJobs));
+    }
 }

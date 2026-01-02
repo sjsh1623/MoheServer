@@ -682,4 +682,35 @@ public class AdminMonitorService {
         Object value = map.get(key);
         return value != null ? value.toString() : null;
     }
+
+    /**
+     * Get current running jobs from specific server
+     */
+    public Map<String, Object> getCurrentJobs(String serverName) {
+        String serverUrl = getServerUrl(serverName);
+        try {
+            Map<String, Object> response = webClient.get()
+                    .uri(serverUrl + "/batch/current-jobs")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .timeout(Duration.ofSeconds(10))
+                    .block();
+
+            if (response != null && response.containsKey("data")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> data = (Map<String, Object>) response.get("data");
+                data.put("serverName", serverName != null ? serverName : "local");
+                return data;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch current jobs from MoheBatch ({}): {}", serverUrl, e.getMessage());
+        }
+
+        // Return empty on error
+        Map<String, Object> empty = new HashMap<>();
+        empty.put("serverName", serverName != null ? serverName : "local");
+        empty.put("activeJobCount", 0);
+        empty.put("activeJobs", Collections.emptyList());
+        return empty;
+    }
 }
