@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -31,18 +32,21 @@ public class ContextualRecommendationService {
     private final VectorSearchService vectorSearchService;
     private final KeywordEmbeddingService keywordEmbeddingService;
     private final PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository;
+    private final DynamicMessageService dynamicMessageService;
 
     public ContextualRecommendationService(
             WeatherService weatherService,
             PlaceService placeService,
             VectorSearchService vectorSearchService,
             KeywordEmbeddingService keywordEmbeddingService,
-            PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository) {
+            PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository,
+            DynamicMessageService dynamicMessageService) {
         this.weatherService = weatherService;
         this.placeService = placeService;
         this.vectorSearchService = vectorSearchService;
         this.keywordEmbeddingService = keywordEmbeddingService;
         this.placeKeywordEmbeddingRepository = placeKeywordEmbeddingRepository;
+        this.dynamicMessageService = dynamicMessageService;
     }
 
     public ContextualRecommendationResponse getContextualRecommendations(
@@ -72,10 +76,17 @@ public class ContextualRecommendationService {
             ));
 
         WeatherData weatherData = fetchWeatherData(safeLat, safeLon);
+        String weatherConditionCode = weatherData != null ? weatherData.getConditionCode() : "clear";
         String weatherCondition = weatherData != null ? weatherData.getConditionText() : "날씨 정보를 가져올 수 없음";
         String timeOfDay = weatherData != null ? weatherData.getDaypart() : getCurrentTimeOfDay();
 
+        // Generate dynamic message based on weather and time
+        String dynamicMessage = dynamicMessageService.generateMessage(weatherConditionCode, weatherCondition, timeOfDay);
+        List<String> dynamicSearchKeywords = dynamicMessageService.generateSearchKeywords(weatherConditionCode, weatherCondition, timeOfDay);
+
+        // Merge user query with dynamic keywords for embedding search
         List<String> contextKeywords = buildContextKeywords(query, weatherCondition, timeOfDay);
+        contextKeywords.addAll(dynamicSearchKeywords);
         List<Long> contextMatchedIds = findContextualPlaceIds(contextKeywords, candidateMap.keySet(), Math.max(safeLimit * 4, 60));
         List<Place> contextRankedPlaces = contextMatchedIds.stream()
             .map(candidateMap::get)
@@ -143,7 +154,9 @@ public class ContextualRecommendationService {
             context,
             weatherCondition,
             mapTimeContext(timeOfDay),
-            contextMessage
+            contextMessage,
+            dynamicMessage,
+            dynamicSearchKeywords
         );
     }
 
@@ -342,8 +355,10 @@ public class ContextualRecommendationService {
         }
     }
 
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
+
     private String getCurrentTimeOfDay() {
-        java.time.LocalTime now = java.time.LocalTime.now();
+        java.time.LocalTime now = java.time.LocalTime.now(KOREA_ZONE);
         int hour = now.getHour();
         if (hour >= 6 && hour < 12) return "아침";
         if (hour >= 12 && hour < 18) return "오후";

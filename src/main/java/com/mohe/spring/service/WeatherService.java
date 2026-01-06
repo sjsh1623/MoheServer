@@ -12,6 +12,7 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -258,8 +259,10 @@ class OpenMeteoProvider implements WeatherProvider {
         }
     }
     
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
+
     private String determineDaypart() {
-        int hour = LocalDateTime.now().getHour();
+        int hour = LocalDateTime.now(KOREA_ZONE).getHour();
         if (hour >= 6 && hour <= 11) return "morning";
         if (hour >= 12 && hour <= 17) return "afternoon";
         if (hour >= 18 && hour <= 21) return "evening";
@@ -443,8 +446,10 @@ class KMAWeatherProvider implements WeatherProvider {
                               humidityValue, windSpeedKmh, daypart);
     }
 
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
+
     private String determineDaypart() {
-        int hour = LocalDateTime.now().getHour();
+        int hour = LocalDateTime.now(KOREA_ZONE).getHour();
         if (hour >= 6 && hour <= 11) return "morning";
         if (hour >= 12 && hour <= 17) return "afternoon";
         if (hour >= 18 && hour <= 21) return "evening";

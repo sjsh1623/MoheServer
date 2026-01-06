@@ -270,7 +270,7 @@ public class RecommendationController {
         }
     )
     @GetMapping("/good-to-visit")
-    public ResponseEntity<ApiResponse<List<PlaceDto.PlaceResponse>>> getGoodToVisitRecommendations(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getGoodToVisitRecommendations(
             @Parameter(description = "위도 (필수)", required = true, example = "37.5636")
             @RequestParam Double lat,
             @Parameter(description = "경도 (필수)", required = true, example = "126.9976")
@@ -284,7 +284,7 @@ public class RecommendationController {
 
             // Validate inputs
             if (limit > 20) {
-                ApiResponse<List<PlaceDto.PlaceResponse>> errorResponse = ApiResponse.error("INVALID_LIMIT", "Limit cannot exceed 20");
+                ApiResponse<Map<String, Object>> errorResponse = ApiResponse.error("INVALID_LIMIT", "Limit cannot exceed 20");
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
@@ -298,12 +298,19 @@ public class RecommendationController {
                 limit
             );
 
-            // Return only the places list without context/recommendation metadata
-            return ResponseEntity.ok(ApiResponse.success(response.getPlaces()));
+            // Create response with dynamic message and places
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("dynamicMessage", response.getDynamicMessage());
+            result.put("weatherCondition", response.getWeatherCondition());
+            result.put("timeContext", response.getTimeContext());
+            result.put("searchKeywords", response.getSearchKeywords());
+            result.put("places", response.getPlaces());
+
+            return ResponseEntity.ok(ApiResponse.success(result));
 
         } catch (Exception e) {
             logger.error("Failed to generate good-to-visit recommendations", e);
-            ApiResponse<List<PlaceDto.PlaceResponse>> errorResponse = ApiResponse.error("RECOMMENDATION_ERROR", "Failed to generate recommendations: " + e.getMessage());
+            ApiResponse<Map<String, Object>> errorResponse = ApiResponse.error("RECOMMENDATION_ERROR", "Failed to generate recommendations: " + e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
         }
     }

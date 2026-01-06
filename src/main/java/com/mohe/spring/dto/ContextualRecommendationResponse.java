@@ -9,16 +9,30 @@ public class ContextualRecommendationResponse {
     private String weatherCondition;
     private String timeContext;
     private String recommendation;
+    private String dynamicMessage;  // Dynamic headline message based on weather/time
+    private List<String> searchKeywords;  // Keywords used for embedding search
 
     public ContextualRecommendationResponse() {}
 
-    public ContextualRecommendationResponse(List<PlaceDto.PlaceResponse> places, Map<String, Object> context, 
+    public ContextualRecommendationResponse(List<PlaceDto.PlaceResponse> places, Map<String, Object> context,
                                           String weatherCondition, String timeContext, String recommendation) {
         this.places = places;
         this.context = context;
         this.weatherCondition = weatherCondition;
         this.timeContext = timeContext;
         this.recommendation = recommendation;
+    }
+
+    public ContextualRecommendationResponse(List<PlaceDto.PlaceResponse> places, Map<String, Object> context,
+                                          String weatherCondition, String timeContext, String recommendation,
+                                          String dynamicMessage, List<String> searchKeywords) {
+        this.places = places;
+        this.context = context;
+        this.weatherCondition = weatherCondition;
+        this.timeContext = timeContext;
+        this.recommendation = recommendation;
+        this.dynamicMessage = dynamicMessage;
+        this.searchKeywords = searchKeywords;
     }
 
     public List<PlaceDto.PlaceResponse> getPlaces() {
@@ -59,5 +73,21 @@ public class ContextualRecommendationResponse {
 
     public void setRecommendation(String recommendation) {
         this.recommendation = recommendation;
+    }
+
+    public String getDynamicMessage() {
+        return dynamicMessage;
+    }
+
+    public void setDynamicMessage(String dynamicMessage) {
+        this.dynamicMessage = dynamicMessage;
+    }
+
+    public List<String> getSearchKeywords() {
+        return searchKeywords;
+    }
+
+    public void setSearchKeywords(List<String> searchKeywords) {
+        this.searchKeywords = searchKeywords;
     }
 }
