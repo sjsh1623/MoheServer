@@ -228,10 +228,10 @@ public class AuthService {
     }
     
     public TokenRefreshResponse refreshToken(TokenRefreshRequest request) {
-        RefreshToken refreshToken = refreshTokenRepository.findValidToken(request.getRefreshToken(), OffsetDateTime.now())
+        RefreshToken existingRefreshToken = refreshTokenRepository.findValidToken(request.getRefreshToken(), OffsetDateTime.now())
                 .orElseThrow(() -> new RuntimeException("유효하지 않은 리프레시 토큰입니다"));
 
-        User user = refreshToken.getUser();
+        User user = existingRefreshToken.getUser();
 
         // Create authentication with proper authorities (ROLE_USER)
         UserPrincipal userPrincipal = UserPrincipal.create(user);
@@ -241,11 +241,25 @@ public class AuthService {
                 userPrincipal.getAuthorities()  // Include ROLE_USER
         );
 
+        // Generate new access token
         String accessToken = jwtTokenProvider.generateAccessToken(authentication);
+
+        // Generate new refresh token (token rotation for security)
+        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+
+        // Revoke old refresh token
+        refreshTokenRepository.revokeByToken(request.getRefreshToken());
+
+        // Save new refresh token
+        RefreshToken refreshTokenEntity = new RefreshToken();
+        refreshTokenEntity.setUser(user);
+        refreshTokenEntity.setToken(newRefreshToken);
+        refreshTokenEntity.setExpiresAt(OffsetDateTime.now().plusSeconds(jwtTokenProvider.getRefreshTokenExpiration() / 1000));
+        refreshTokenRepository.save(refreshTokenEntity);
 
         return new TokenRefreshResponse(
             accessToken,
-            "Bearer",
+            newRefreshToken,
             (int) (jwtTokenProvider.getAccessTokenExpiration() / 1000)
         );
     }

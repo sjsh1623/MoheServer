@@ -23,6 +23,14 @@ embedding:
   service:
     url: ${EMBEDDING_SERVICE_URL:http://localhost:2000}
 
+oauth:
+  kakao:
+    client-id: ${OAUTH_KAKAO_CLIENT_ID:}
+    client-secret: ${OAUTH_KAKAO_CLIENT_SECRET:}
+  google:
+    client-id: ${OAUTH_GOOGLE_CLIENT_ID:}
+    client-secret: ${OAUTH_GOOGLE_CLIENT_SECRET:}
+
 batch:
   service:
     url: ${BATCH_SERVICE_URL:http://localhost:8081}

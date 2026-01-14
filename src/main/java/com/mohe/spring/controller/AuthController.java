@@ -1,7 +1,9 @@
 package com.mohe.spring.controller;
 
 import com.mohe.spring.dto.*;
+import com.mohe.spring.security.UserPrincipal;
 import com.mohe.spring.service.AuthService;
+import com.mohe.spring.service.SocialAuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,17 +17,23 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
 @Tag(name = "인증 관리", description = "사용자 인증, 회원가입, 로그인 관련 API")
 public class AuthController {
-    
+
     private final AuthService authService;
-    
-    public AuthController(AuthService authService) {
+    private final SocialAuthService socialAuthService;
+
+    public AuthController(AuthService authService, SocialAuthService socialAuthService) {
         this.authService = authService;
+        this.socialAuthService = socialAuthService;
     }
     
     @PostMapping("/login")
@@ -504,6 +512,110 @@ public class AuthController {
                 ApiResponse.error(
                     ErrorCode.INVALID_TOKEN,
                     e.getMessage() != null ? e.getMessage() : "비밀번호 재설정에 실패했습니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        }
+    }
+
+    @PostMapping("/social/{provider}")
+    @SecurityRequirements
+    @Operation(
+        summary = "소셜 로그인",
+        description = "카카오 또는 구글 OAuth를 통해 로그인합니다."
+    )
+    @ApiResponses(
+        value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "소셜 로그인 성공",
+                content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = AuthDto.LoginResponse.class)
+                )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "소셜 로그인 실패"
+            )
+        }
+    )
+    public ResponseEntity<ApiResponse<LoginResponse>> socialLogin(
+            @Parameter(description = "소셜 로그인 제공자 (kakao, google)", required = true)
+            @PathVariable String provider,
+            @Parameter(description = "소셜 로그인 요청 정보", required = true)
+            @Valid @RequestBody SocialLoginRequest request,
+            HttpServletRequest httpRequest) {
+        try {
+            LoginResponse response;
+            switch (provider.toLowerCase()) {
+                case "kakao":
+                    response = socialAuthService.loginWithKakao(request);
+                    break;
+                case "google":
+                    response = socialAuthService.loginWithGoogle(request);
+                    break;
+                default:
+                    return ResponseEntity.badRequest().body(
+                        ApiResponse.error(
+                            ErrorCode.VALIDATION_ERROR,
+                            "지원하지 않는 소셜 로그인 제공자입니다: " + provider,
+                            httpRequest.getRequestURI()
+                        )
+                    );
+            }
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.SOCIAL_LOGIN_FAILED,
+                    e.getMessage() != null ? e.getMessage() : "소셜 로그인에 실패했습니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        }
+    }
+
+    @GetMapping("/social/linked")
+    @Operation(
+        summary = "연동된 소셜 계정 조회",
+        description = "현재 사용자에게 연동된 소셜 계정 목록을 조회합니다."
+    )
+    public ResponseEntity<ApiResponse<List<Map<String, String>>>> getLinkedAccounts(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            HttpServletRequest httpRequest) {
+        try {
+            List<Map<String, String>> accounts = socialAuthService.getLinkedAccounts(userPrincipal.getId());
+            return ResponseEntity.ok(ApiResponse.success(accounts));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.VALIDATION_ERROR,
+                    e.getMessage() != null ? e.getMessage() : "연동된 계정 조회에 실패했습니다",
+                    httpRequest.getRequestURI()
+                )
+            );
+        }
+    }
+
+    @PostMapping("/social/{provider}/unlink")
+    @Operation(
+        summary = "소셜 계정 연동 해제",
+        description = "특정 소셜 계정의 연동을 해제합니다."
+    )
+    public ResponseEntity<ApiResponse<Void>> unlinkSocialAccount(
+            @Parameter(description = "소셜 로그인 제공자 (kakao, google)", required = true)
+            @PathVariable String provider,
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            HttpServletRequest httpRequest) {
+        try {
+            socialAuthService.unlinkSocialAccount(userPrincipal.getId(), provider.toLowerCase());
+            return ResponseEntity.ok(ApiResponse.success("소셜 계정 연동이 해제되었습니다."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                ApiResponse.error(
+                    ErrorCode.VALIDATION_ERROR,
+                    e.getMessage() != null ? e.getMessage() : "소셜 계정 연동 해제에 실패했습니다",
                     httpRequest.getRequestURI()
                 )
             );

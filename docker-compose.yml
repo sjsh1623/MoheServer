@@ -70,7 +70,7 @@ services:
       - proxy_network
     restart: unless-stopped
     volumes:
-      - /Users/andrewlim/Desktop/Developer/Mohe/images:/images
+      - /Volumes/Andrew/images:/images
       # Docker socket for container monitoring
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
@@ -115,7 +115,7 @@ services:
       - gradle-cache:/root/.gradle
       - build-cache:/app/build
       # Mount images directory
-      - /Users/andrewlim/Desktop/Developer/Mohe/images:/images
+      - /Volumes/Andrew/images:/images
     profiles:
       - dev
 

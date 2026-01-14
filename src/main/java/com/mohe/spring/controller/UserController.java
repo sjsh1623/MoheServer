@@ -2,6 +2,7 @@ package com.mohe.spring.controller;
 
 import com.mohe.spring.dto.*;
 import com.mohe.spring.service.UserService;
+import com.mohe.spring.service.image.ImageProcessorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -18,25 +19,19 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.UUID;
-
 @RestController
 @RequestMapping("/api/user")
 @PreAuthorize("hasRole('USER')")
 @SecurityRequirement(name = "bearerAuth")
 @Tag(name = "사용자 관리", description = "사용자 프로필 및 선호도 관리 API")
 public class UserController {
-    
+
     private final UserService userService;
-    
-    public UserController(UserService userService) {
+    private final ImageProcessorService imageProcessorService;
+
+    public UserController(UserService userService, ImageProcessorService imageProcessorService) {
         this.userService = userService;
+        this.imageProcessorService = imageProcessorService;
     }
     
     @PutMapping("/preferences")
@@ -310,7 +305,7 @@ public class UserController {
     @PostMapping("/profile/image")
     @Operation(
         summary = "프로필 이미지 업로드",
-        description = "사용자 프로필 이미지를 업로드합니다."
+        description = "사용자 프로필 이미지를 업로드합니다. 이미지 프로세서 서버를 통해 저장됩니다."
     )
     @ApiResponses(
         value = {
@@ -324,7 +319,7 @@ public class UserController {
                         {
                           "success": true,
                           "data": {
-                            "imageUrl": "/uploads/profile-images/uuid-filename.jpg"
+                            "imageUrl": "/images/profile/uuid-filename.jpg"
                           }
                         }
                         """
@@ -372,37 +367,21 @@ public class UserController {
                 );
             }
 
-            // Create upload directory if not exists
-            Path uploadPath = Paths.get("uploads/profile-images");
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
+            // Upload to ImageProcessor service
+            String imageUrl = imageProcessorService.uploadProfileImage(file);
+
+            if (imageUrl == null) {
+                return ResponseEntity.badRequest().body(
+                    ApiResponse.error(
+                        ErrorCode.VALIDATION_ERROR,
+                        "이미지 업로드에 실패했습니다. 이미지 프로세서 서버에 문제가 있을 수 있습니다.",
+                        httpRequest.getRequestURI()
+                    )
+                );
             }
 
-            // Generate unique filename
-            String originalFilename = file.getOriginalFilename();
-            String fileExtension = "";
-            if (originalFilename != null && originalFilename.contains(".")) {
-                fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
-            }
-            String filename = UUID.randomUUID().toString() + fileExtension;
-
-            // Save file
-            Path filePath = uploadPath.resolve(filename);
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-
-            // Return URL
-            String imageUrl = "/uploads/profile-images/" + filename;
             ImageUploadResponse response = new ImageUploadResponse(imageUrl);
-
             return ResponseEntity.ok(ApiResponse.success(response));
-        } catch (IOException e) {
-            return ResponseEntity.badRequest().body(
-                ApiResponse.error(
-                    ErrorCode.VALIDATION_ERROR,
-                    "이미지 업로드에 실패했습니다: " + e.getMessage(),
-                    httpRequest.getRequestURI()
-                )
-            );
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(
                 ApiResponse.error(

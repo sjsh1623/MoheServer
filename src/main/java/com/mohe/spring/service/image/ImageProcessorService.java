@@ -4,13 +4,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -218,6 +223,67 @@ public class ImageProcessorService {
     }
 
     /**
+     * 프로필 이미지 업로드 (직접 파일 업로드)
+     *
+     * @param file 업로드할 이미지 파일
+     * @return 저장된 이미지 경로 (예: /images/profile/uuid.jpg) 또는 null (실패 시)
+     */
+    public String uploadProfileImage(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            logger.warn("No file provided for profile image upload");
+            return null;
+        }
+
+        try {
+            String url = imageProcessorUrl + "/upload";
+
+            // Multipart form data 설정
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+            // 파일을 ByteArrayResource로 변환
+            ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
+                @Override
+                public String getFilename() {
+                    return file.getOriginalFilename();
+                }
+            };
+
+            // Multipart 요청 바디 구성
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("image", fileResource);
+            body.add("subdir", "profile");  // profile 디렉토리에 저장
+
+            HttpEntity<MultiValueMap<String, Object>> entity = new HttpEntity<>(body, headers);
+
+            logger.debug("📤 Uploading profile image to ImageProcessor: {}", file.getOriginalFilename());
+
+            // API 호출
+            ResponseEntity<ImageUploadResponse> response = restTemplate.postForEntity(
+                    url,
+                    entity,
+                    ImageUploadResponse.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                String imageUrl = response.getBody().getImageUrl();
+                logger.info("✅ Profile image uploaded via ImageProcessor: {}", imageUrl);
+                return "/images/" + response.getBody().getFileName();
+            } else {
+                logger.error("❌ ImageProcessor returned non-2xx for profile upload: {}", response.getStatusCode());
+                return null;
+            }
+
+        } catch (IOException e) {
+            logger.error("❌ Failed to read file for profile upload: {}", e.getMessage(), e);
+            return null;
+        } catch (Exception e) {
+            logger.error("❌ Failed to upload profile image via ImageProcessor: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
      * ImageProcessor 헬스 체크
      *
      * @return 서버 상태 (true: 정상, false: 비정상)
@@ -333,6 +399,52 @@ public class ImageProcessorService {
 
         public void setFileName(String fileName) {
             this.fileName = fileName;
+        }
+    }
+
+    /**
+     * ImageProcessor 업로드 API 응답 DTO
+     */
+    private static class ImageUploadResponse {
+        private boolean success;
+        private String message;
+
+        @JsonProperty("fileName")
+        private String fileName;
+
+        @JsonProperty("imageUrl")
+        private String imageUrl;
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public void setSuccess(boolean success) {
+            this.success = success;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
+        }
+
+        public String getFileName() {
+            return fileName;
+        }
+
+        public void setFileName(String fileName) {
+            this.fileName = fileName;
+        }
+
+        public String getImageUrl() {
+            return imageUrl;
+        }
+
+        public void setImageUrl(String imageUrl) {
+            this.imageUrl = imageUrl;
         }
     }
 }

@@ -12,6 +12,7 @@ public final class ErrorCode {
     public static final String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
     public static final String INVALID_VERIFICATION_CODE = "INVALID_VERIFICATION_CODE";
     public static final String VERIFICATION_CODE_EXPIRED = "VERIFICATION_CODE_EXPIRED";
+    public static final String SOCIAL_LOGIN_FAILED = "SOCIAL_LOGIN_FAILED";
 
     private ErrorCode() {
         // Prevent instantiation
