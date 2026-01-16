@@ -94,11 +94,16 @@ public class BookmarkService {
         List<BookmarkData> bookmarkData = bookmarks.getContent().stream()
                 .map(bookmark -> {
                     BookmarkPlaceData placeData = new BookmarkPlaceData();
-                    placeData.setId(bookmark.getPlace().getId().toString());
-                    placeData.setName(bookmark.getPlace().getName());
-                    placeData.setLocation(bookmark.getPlace().getRoadAddress());
-                    placeData.setImage(null); // Gallery field removed
-                    placeData.setRating(bookmark.getPlace().getRating());
+                    Place place = bookmark.getPlace();
+                    placeData.setId(place.getId().toString());
+                    placeData.setName(place.getName());
+                    placeData.setLocation(place.getRoadAddress());
+                    // Get first image from place's images list
+                    String imageUrl = (place.getImages() != null && !place.getImages().isEmpty())
+                            ? place.getImages().get(0).getUrl()
+                            : null;
+                    placeData.setImage(imageUrl);
+                    placeData.setRating(place.getRating());
                     
                     BookmarkData data = new BookmarkData();
                     data.setId(bookmark.getId().toString());
