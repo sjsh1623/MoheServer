@@ -16,6 +16,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import com.mohe.spring.util.NicknameGenerator;
+import com.mohe.spring.event.RegionDiscoveryEvent;
+import org.springframework.context.ApplicationEventPublisher;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -28,27 +31,35 @@ import java.util.stream.Collectors;
 
 @Service
 public class PlaceService {
-    
+
     private final PlaceRepository placeRepository;
     private final VectorSearchService vectorSearchService;
     private final BookmarkRepository bookmarkRepository;
     private final LlmService llmService;
     private final PlaceImageRepository placeImageRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PlaceService(PlaceRepository placeRepository, VectorSearchService vectorSearchService,
                         BookmarkRepository bookmarkRepository, LlmService llmService,
-                        PlaceImageRepository placeImageRepository) {
+                        PlaceImageRepository placeImageRepository,
+                        ApplicationEventPublisher eventPublisher) {
         this.placeRepository = placeRepository;
         this.vectorSearchService = vectorSearchService;
         this.bookmarkRepository = bookmarkRepository;
         this.llmService = llmService;
         this.placeImageRepository = placeImageRepository;
+        this.eventPublisher = eventPublisher;
     }
     
     public PlaceRecommendationsResponse getRecommendations(Double latitude, Double longitude) {
         final int recommendationLimit = 20;
 
         final boolean hasLocation = latitude != null && longitude != null;
+
+        // 비동기로 주변 장소 탐색 이벤트 발행
+        if (hasLocation) {
+            publishDiscoveryEvent(latitude, longitude);
+        }
 
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -908,5 +919,13 @@ public class PlaceService {
         return places.stream()
             .filter(this::isCurrentlyOpen)
             .collect(Collectors.toList());
+    }
+
+    private void publishDiscoveryEvent(Double latitude, Double longitude) {
+        try {
+            eventPublisher.publishEvent(new RegionDiscoveryEvent(this, latitude, longitude, 2.0));
+        } catch (Exception e) {
+            // 이벤트 발행 실패는 메인 로직에 영향 없음
+        }
     }
 }
