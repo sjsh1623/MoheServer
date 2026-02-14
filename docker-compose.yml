@@ -2,10 +2,12 @@ services:
   postgres:
     image: pgvector/pgvector:pg15
     container_name: mohe-postgres
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: mohe_db
-      POSTGRES_USER: mohe_user
-      POSTGRES_PASSWORD: mohe_password
+      POSTGRES_DB: ${DB_NAME:-mohe_db}
+      POSTGRES_USER: ${DB_USERNAME:-mohe_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "16239:5432"
     volumes:
@@ -51,11 +53,11 @@ services:
       #   condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mohe_db
-      SPRING_DATASOURCE_USERNAME: mohe_user
-      SPRING_DATASOURCE_PASSWORD: mohe_password
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-mohe_db}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-mohe_user}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       EMBEDDING_SERVICE_URL: http://embedding:8000
-      IMAGE_PROCESSOR_URL: ${IMAGE_PROCESSOR_URL:-http://100.99.236.50:5200}
+      IMAGE_PROCESSOR_URL: ${IMAGE_PROCESSOR_URL}
       JWT_SECRET: ${JWT_SECRET}
       KAKAO_API_KEY: ${KAKAO_API_KEY}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
@@ -89,11 +91,11 @@ services:
       #   condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mohe_db
-      SPRING_DATASOURCE_USERNAME: mohe_user
-      SPRING_DATASOURCE_PASSWORD: mohe_password
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-mohe_db}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-mohe_user}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       EMBEDDING_SERVICE_URL: http://embedding:8000
-      IMAGE_PROCESSOR_URL: ${IMAGE_PROCESSOR_URL:-http://100.99.236.50:5200}
+      IMAGE_PROCESSOR_URL: ${IMAGE_PROCESSOR_URL}
       JWT_SECRET: ${JWT_SECRET}
       KAKAO_API_KEY: ${KAKAO_API_KEY}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
