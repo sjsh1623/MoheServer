@@ -148,6 +148,103 @@ public class OpenAiService implements LlmService {
     }
 
     /**
+     * 사용자 검색 쿼리 분석 - 카테고리, 키워드, 의도 추출
+     * @param userQuery 사용자의 자연어 검색 쿼리
+     * @return 분석 결과 (카테고리, 키워드, 검색 의도)
+     */
+    public QueryAnalysisResult analyzeSearchQuery(String userQuery) {
+        try {
+            String prompt = String.format(
+                "다음 사용자의 검색 쿼리를 분석해주세요.\n\n" +
+                "쿼리: \"%s\"\n\n" +
+                "다음 형식으로만 답변해주세요 (다른 설명 없이):\n" +
+                "카테고리: [음식/카페/활동/분위기/장소/기타 중 하나]\n" +
+                "키워드: [검색에 사용할 핵심 키워드 3-5개, 콤마로 구분]\n" +
+                "의도: [사용자가 찾고자 하는 것을 한 문장으로]\n" +
+                "감정: [편안함/활기참/로맨틱/힐링/모험/일상 중 하나]",
+                userQuery
+            );
+
+            String response = callOpenAi(prompt);
+            return parseQueryAnalysis(response, userQuery);
+
+        } catch (Exception e) {
+            logger.error("❌ 쿼리 분석 실패: {}", e.getMessage());
+            return new QueryAnalysisResult(userQuery, "기타", List.of(userQuery), userQuery, "일상");
+        }
+    }
+
+    private QueryAnalysisResult parseQueryAnalysis(String response, String originalQuery) {
+        String category = "기타";
+        List<String> keywords = new ArrayList<>();
+        String intent = originalQuery;
+        String mood = "일상";
+
+        try {
+            String[] lines = response.split("\n");
+            for (String line : lines) {
+                line = line.trim();
+                if (line.startsWith("카테고리:")) {
+                    category = line.substring("카테고리:".length()).trim().replaceAll("[\\[\\]]", "");
+                } else if (line.startsWith("키워드:")) {
+                    String keywordStr = line.substring("키워드:".length()).trim().replaceAll("[\\[\\]]", "");
+                    keywords = Arrays.stream(keywordStr.split(","))
+                        .map(String::trim)
+                        .filter(k -> !k.isEmpty())
+                        .collect(Collectors.toList());
+                } else if (line.startsWith("의도:")) {
+                    intent = line.substring("의도:".length()).trim().replaceAll("[\\[\\]]", "");
+                } else if (line.startsWith("감정:")) {
+                    mood = line.substring("감정:".length()).trim().replaceAll("[\\[\\]]", "");
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("쿼리 분석 파싱 실패, 기본값 사용: {}", e.getMessage());
+        }
+
+        if (keywords.isEmpty()) {
+            keywords = List.of(originalQuery);
+        }
+
+        return new QueryAnalysisResult(originalQuery, category, keywords, intent, mood);
+    }
+
+    /**
+     * 쿼리 분석 결과 클래스
+     */
+    public static class QueryAnalysisResult {
+        private final String originalQuery;
+        private final String category;
+        private final List<String> keywords;
+        private final String intent;
+        private final String mood;
+
+        public QueryAnalysisResult(String originalQuery, String category, List<String> keywords, String intent, String mood) {
+            this.originalQuery = originalQuery;
+            this.category = category;
+            this.keywords = keywords;
+            this.intent = intent;
+            this.mood = mood;
+        }
+
+        public String getOriginalQuery() { return originalQuery; }
+        public String getCategory() { return category; }
+        public List<String> getKeywords() { return keywords; }
+        public String getIntent() { return intent; }
+        public String getMood() { return mood; }
+
+        public String getEnrichedQuery() {
+            // 키워드들을 결합하여 향상된 검색어 생성
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.join(" ", keywords));
+            if (!mood.equals("일상")) {
+                sb.append(" ").append(mood);
+            }
+            return sb.toString();
+        }
+    }
+
+    /**
      * 이미지 생성 프롬프트 생성
      */
     public String generateImagePrompt(String placeName, String category, String description) {

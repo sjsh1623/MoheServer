@@ -7,6 +7,7 @@ import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceKeywordEmbedding;
 import com.mohe.spring.repository.PlaceKeywordEmbeddingRepository;
 import com.mohe.spring.repository.PlaceRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -20,9 +21,10 @@ import java.util.stream.Collectors;
  * 통합 검색 서비스 - 장소/지역/음식/활동 등 의미론적 Embedding 검색 지원
  *
  * 검색 방식:
- * 1. 키워드 검색 (LIKE) - 장소명, 주소
- * 2. Embedding 벡터 검색 - 의미론적 유사도 (음식, 활동, 분위기 등)
- * 3. 하이브리드 검색 - 키워드 + 벡터 결합
+ * 1. OpenAI 쿼리 분석 - 카테고리, 키워드, 의도 추출
+ * 2. Kanana Embedding 벡터 검색 - 의미론적 유사도
+ * 3. 키워드 검색 (LIKE) - 장소명, 주소
+ * 4. 하이브리드 검색 - 분석 결과 + 벡터 + 키워드 결합
  */
 @Service
 @Transactional(readOnly = true)
@@ -32,15 +34,19 @@ public class UnifiedSearchService {
     private final PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository;
     private final KeywordEmbeddingService keywordEmbeddingService;
     private final PlaceService placeService;
+    private final OpenAiService openAiService;
 
+    @Autowired
     public UnifiedSearchService(PlaceRepository placeRepository,
                                 PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository,
                                 KeywordEmbeddingService keywordEmbeddingService,
-                                PlaceService placeService) {
+                                PlaceService placeService,
+                                @Autowired(required = false) OpenAiService openAiService) {
         this.placeRepository = placeRepository;
         this.placeKeywordEmbeddingRepository = placeKeywordEmbeddingRepository;
         this.keywordEmbeddingService = keywordEmbeddingService;
         this.placeService = placeService;
+        this.openAiService = openAiService;
     }
 
     /**
@@ -62,10 +68,28 @@ public class UnifiedSearchService {
         String trimmedQuery = query.trim();
         int safeLimit = Math.max(1, Math.min(limit, 50));
 
-        // 1. Embedding 벡터 검색 (의미론적 검색)
-        List<Long> embeddingPlaceIds = searchByEmbedding(trimmedQuery, safeLimit * 3);
+        // 0. OpenAI 쿼리 분석 (카테고리, 키워드, 의도 추출)
+        String enrichedQuery = trimmedQuery;
+        String category = null;
+        String intent = null;
 
-        // 2. 키워드 검색 (장소명, 주소)
+        if (openAiService != null) {
+            try {
+                System.out.println("🔍 OpenAI 쿼리 분석 시작: " + trimmedQuery);
+                OpenAiService.QueryAnalysisResult analysis = openAiService.analyzeSearchQuery(trimmedQuery);
+                enrichedQuery = analysis.getEnrichedQuery();
+                category = analysis.getCategory();
+                intent = analysis.getIntent();
+                System.out.println("✅ OpenAI 분석 완료 - 카테고리: " + category + ", 키워드: " + analysis.getKeywords() + ", 의도: " + intent);
+            } catch (Exception e) {
+                System.err.println("⚠️ OpenAI 분석 실패, 원본 쿼리 사용: " + e.getMessage());
+            }
+        }
+
+        // 1. Kanana Embedding 벡터 검색 (의미론적 검색) - enrichedQuery 사용
+        List<Long> embeddingPlaceIds = searchByEmbedding(enrichedQuery, safeLimit * 3);
+
+        // 2. 키워드 검색 (장소명, 주소) - 원본 쿼리 사용
         List<Long> keywordPlaceIds = searchByKeyword(trimmedQuery, safeLimit * 2);
 
         // 3. 결과 병합 (Embedding 결과 우선, 키워드 결과 보조)
@@ -86,13 +110,18 @@ public class UnifiedSearchService {
 
         long searchTime = System.currentTimeMillis() - startTime;
 
+        String searchType = determineSearchType(embeddingPlaceIds, keywordPlaceIds);
+        if (openAiService != null && category != null) {
+            searchType = "ai-" + searchType;
+        }
+
         return UnifiedSearchResponse.builder()
             .places(placeDtos)
             .totalResults(placeDtos.size())
             .query(trimmedQuery)
-            .searchType(determineSearchType(embeddingPlaceIds, keywordPlaceIds))
+            .searchType(searchType)
             .searchTimeMs(searchTime)
-            .message(generateSearchMessage(trimmedQuery, placeDtos.size()))
+            .message(generateSearchMessage(trimmedQuery, placeDtos.size(), intent))
             .build();
     }
 
@@ -360,8 +389,18 @@ public class UnifiedSearchService {
      * 검색 메시지 생성
      */
     private String generateSearchMessage(String query, int resultCount) {
+        return generateSearchMessage(query, resultCount, null);
+    }
+
+    /**
+     * 검색 메시지 생성 (의도 포함)
+     */
+    private String generateSearchMessage(String query, int resultCount, String intent) {
         if (resultCount == 0) {
             return "'" + query + "'에 대한 검색 결과가 없습니다.";
+        }
+        if (intent != null && !intent.isEmpty() && !intent.equals(query)) {
+            return intent + " - " + resultCount + "개의 장소를 찾았습니다.";
         }
         return "'" + query + "' 검색 결과 " + resultCount + "개를 찾았습니다.";
     }
