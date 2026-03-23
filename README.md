@@ -1,449 +1,331 @@
-# MoheSpring 🌸
+# MoheSpring
 
-> 한국의 숨은 장소를 발견하고 MBTI 기반 개인화 추천을 제공하는 Spring Boot 애플리케이션
+> 한국의 숨은 장소를 발견하고 MBTI 기반 개인화 추천을 제공하는 Spring Boot API 서버
 
-[![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-brightgreen)](https://spring.io/projects/spring-boot)
-[![Spring Batch](https://img.shields.io/badge/Spring%20Batch-5.x-blue)](https://spring.io/projects/spring-batch)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Latest-blue)](https://www.postgresql.org/)
+## 기술 스택
 
-## 📋 목차
+- **Framework**: Spring Boot 3.2.0, Java 21
+- **Database**: PostgreSQL + pgvector, Flyway 마이그레이션
+- **Security**: Spring Security + JWT (Access/Refresh Token)
+- **Batch**: Spring Batch 5.x (비동기 병렬 처리)
+- **Build**: Gradle 8.5+ (Kotlin DSL)
 
-- [주요 기능](#주요-기능)
-- [기술 스택](#기술-스택)
-- [프로젝트 구조](#프로젝트-구조)
-- [시작하기](#시작하기)
-- [API 문서](#api-문서)
-- [배치 작업](#배치-작업)
-
-## ✨ 주요 기능
-
-### 🎯 핵심 기능
-- **장소 추천**: MBTI 기반 개인화 추천 알고리즘
-- **벡터 검색**: pgvector를 활용한 유사도 검색
-- **실시간 데이터 수집**: Naver/Google API 통합
-- **Spring Batch**: 대용량 장소 데이터 자동 수집
-- **JWT 인증**: Stateless 보안 아키텍처
-
-### 🔐 사용자 관리
-- 이메일 기반 회원가입 (OTP 인증)
-- JWT Access/Refresh Token
-- MBTI 프로필 설정
-- 사용자 선호도 관리
-
-### 📍 장소 기능
-- 장소 검색 및 상세 정보
-- 북마크 및 최근 본 장소
-- 카테고리별 분류
-- 평점 및 리뷰 집계
-
-### 🤖 추천 시스템
-- MBTI 기반 장소 추천
-- 벡터 유사도 기반 추천
-- 날씨 기반 추천
-- 시간대별 맞춤 추천
-
-## 🛠️ 기술 스택
-
-### Backend
-- **Framework**: Spring Boot 3.2.0
-- **Language**: Java 21
-- **Build Tool**: Gradle 8.5
-- **Batch**: Spring Batch 5.x
-
-### Database
-- **Production**: PostgreSQL (with pgvector extension)
-- **Test**: H2 In-Memory Database
-- **Connection Pool**: HikariCP
-
-### Security
-- **Authentication**: Spring Security + JWT
-- **Token Storage**: Redis (optional)
-- **Password**: BCrypt
-
-### External APIs
-- **Naver Local Search API**: 장소 데이터 수집
-- **Naver Reverse Geocoding API**: 좌표를 주소로 변환
-- **Korean Meteorological Administration API**: 날씨 정보 (단기예보)
-- **Google Places API**: 평점 및 상세 정보
-- **Korean Government API**: 행정구역 정보
-- **OpenAI API**: AI 기반 설명 생성
-- **OpenMeteo API**: 날씨 정보 (fallback)
-- **Embedding Service**: 한국어 벡터 임베딩 (kanana-nano-2.1b-embedding)
-
-## 📦 프로젝트 구조
-
-```
-src/main/java/com/mohe/spring/
-├── batch/              # Spring Batch (장소 데이터 수집)
-├── config/             # 설정 (Security, Batch, OpenAPI)
-├── controller/         # REST API Controllers
-├── dto/                # Data Transfer Objects
-├── entity/             # JPA Entities (Domain Models)
-├── repository/         # Spring Data JPA Repositories
-├── service/            # Business Logic Services
-├── security/           # JWT, UserDetails, Filters
-└── exception/          # Global Exception Handling
-```
-
-자세한 구조는 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) 참고
-
-## 🚀 시작하기
-
-### 필수 요구사항
-- Java 21+
-- Docker & Docker Compose
-- Gradle 8.5+
-
-### 환경 변수 설정
-
-`.env` 파일 생성:
+## 시작하기
 
 ```bash
-# Database
-DB_USERNAME=mohe_user
-DB_PASSWORD=your_password
-
-# Naver API (필수)
-NAVER_CLIENT_ID=your_client_id
-NAVER_CLIENT_SECRET=your_client_secret
-
-# 기상청 단기예보 API (선택사항)
-KMA_SERVICE_KEY=your_kma_service_key
-
-# Google Places API (선택사항)
-GOOGLE_PLACES_API_KEY=your_api_key
-
-# Embedding Service (필수 - 벡터 검색용)
-EMBEDDING_SERVICE_URL=http://localhost:6000
-
-# JWT Secret
-JWT_SECRET=your_secret_key_minimum_64_characters
-
-# Mock 위치 설정 (개발/테스트 환경 전용)
-# 설정되어 있으면 API 파라미터를 무시하고 이 값을 강제로 사용
-MOCK_LATITUDE=37.5636   # 서울 중구 (기본값)
-MOCK_LONGITUDE=126.9976
-```
-
-### Docker로 실행
-
-#### 🔥 개발 모드 (Hot Reload)
-
-코드 수정 시 자동으로 재컴파일 및 재시작됩니다. Spring Boot DevTools를 활용한 빠른 개발이 가능합니다.
-
-```bash
-# 개발 모드로 실행 (Hot Reload 활성화)
-docker compose --profile dev up --build app-dev
-
-# 백그라운드 실행
-docker compose --profile dev up --build -d app-dev
-
-# 로그 확인
-docker compose logs -f app-dev
-
-# 종료
-docker compose --profile dev down
-```
-
-**개발 모드 특징:**
-- ✅ 소스 코드 변경 시 자동 재시작 (약 5-15초)
-- ✅ 컨테이너 재빌드 불필요 - `src/` 디렉토리가 volume으로 마운트됨
-- ✅ Gradle 캐시 보존으로 빠른 재시작
-- ✅ LiveReload 지원 (브라우저 자동 새로고침)
-
-**주의사항:**
-- `build.gradle` 또는 `settings.gradle` 수정 시 컨테이너 재시작 필요
-- 의존성 추가 시 `--build` 플래그로 재빌드 필요
-
-#### 🚀 프로덕션 모드
-
-최적화된 JAR 파일을 사용하는 프로덕션 배포용 모드입니다.
-
-```bash
-# 프로덕션 모드로 실행
+# Docker로 실행
 docker compose --profile production up --build app
 
-# 백그라운드 실행
-docker compose --profile production up -d app
+# 개발 모드 (Hot Reload)
+docker compose --profile dev up --build app-dev
 
-# 종료
-docker compose --profile production down
+# 로컬 실행 (DB만 Docker)
+docker compose up postgres -d && ./gradlew bootRun
 ```
 
-### 로컬 개발 환경 (Docker 없이)
+### 환경 변수 (.env)
 
 ```bash
-# PostgreSQL만 Docker로 실행
-docker compose up postgres -d
-
-# Gradle로 애플리케이션 실행
-./gradlew bootRun
-
-# 또는 빌드 후 실행
-./gradlew build
-java -jar build/libs/MoheSpring-0.0.1-SNAPSHOT.jar
+DB_USERNAME=mohe_user
+DB_PASSWORD=your_password
+JWT_SECRET=your_secret_key_minimum_64_characters
+NAVER_CLIENT_ID=your_client_id
+NAVER_CLIENT_SECRET=your_client_secret
+EMBEDDING_SERVICE_URL=http://localhost:6000
+OPENAI_API_KEY=your_openai_key           # 선택
+VWORLD_API_KEY=your_vworld_key           # 역지오코딩
+TOUR_API_KEY=your_tour_api_key           # 한국관광공사
+KAKAO_API_KEY=your_kakao_key             # 카카오 로컬
+GOVT_API_KEY=your_govt_key               # 행정구역
+KMA_SERVICE_KEY=your_kma_key             # 기상청
 ```
 
-## 📚 API 문서
+## API 엔드포인트
 
-애플리케이션 실행 후:
+### 인증 (`/api/auth`)
 
-- 장소 추천 계열 API(`/api/places/recommendations`, `/api/places/new`, `/api/places/popular`, `/api/places/current-time`, `/api/recommendations/contextual`)는 위도/경도 파라미터가 필수이며, 좌표 기준 15km 이내 데이터 70% + 30km 이내 데이터 30%를 혼합 후 거리/평점/리뷰 가중치를 적용합니다.
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/auth/login` | 이메일/비밀번호 로그인, JWT 발급 | - |
+| POST | `/api/auth/signup` | 회원가입 시작, OTP 이메일 전송 | - |
+| POST | `/api/auth/verify-email` | OTP 코드 인증 | - |
+| POST | `/api/auth/check-nickname` | 닉네임 중복 확인 | - |
+| POST | `/api/auth/setup-password` | 비밀번호 설정 및 가입 완료 | - |
+| POST | `/api/auth/refresh` | Access Token 갱신 | - |
+| POST | `/api/auth/logout` | 로그아웃 (Refresh Token 무효화) | - |
+| POST | `/api/auth/forgot-password` | 비밀번호 재설정 이메일 요청 | - |
+| POST | `/api/auth/reset-password` | 비밀번호 재설정 완료 | - |
+| POST | `/api/auth/social/{provider}` | 소셜 로그인 (kakao/google) | - |
+| GET | `/api/auth/social/linked` | 연결된 소셜 계정 조회 | USER |
+| POST | `/api/auth/social/{provider}/unlink` | 소셜 계정 연결 해제 | USER |
+
+### 사용자 (`/api/user`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/user/profile` | 프로필 조회 | USER |
+| PUT | `/api/user/profile` | 닉네임/프로필 이미지 수정 | USER |
+| POST | `/api/user/profile/image` | 프로필 이미지 업로드 (5MB) | USER |
+| PUT | `/api/user/preferences` | MBTI/나이/공간/교통 수정 | USER |
+| POST | `/api/user/agreements` | 약관 동의 저장 | USER |
+| POST | `/api/user/onboarding/complete` | 온보딩 완료 처리 | USER |
+| GET | `/api/user/recent-places` | 최근 본 장소 | USER |
+| POST | `/api/user/recent-places` | 최근 본 장소 기록 | USER |
+| GET | `/api/user/my-places` | 내 등록 장소 | USER |
+
+### 장소 (`/api/places`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/places` | 장소 목록 (필터/정렬) | - |
+| GET | `/api/places/{id}` | 장소 상세 | - |
+| GET | `/api/places/{id}/menus` | 메뉴 목록 | - |
+| GET | `/api/places/search` | 장소 검색 (날씨/시간/위치 컨텍스트) | - |
+| GET | `/api/places/nearby` | 반경 내 주변 장소 (Haversine) | - |
+| GET | `/api/places/popular` | 인기 장소 (리뷰수/평점순) | - |
+| GET | `/api/places/list` | 일반 목록 (페이지네이션) | - |
+| GET | `/api/places/recommendations` | 위치 가중 추천 (15km 70% + 30km 30%) | - |
+| GET | `/api/places/new` | 신규 추천 | - |
+| GET | `/api/places/current-time` | 시간대 기반 추천 | - |
+| GET | `/api/places/vector-search` | 벡터 유사도 검색 | USER |
+| GET | `/api/places/debug` | 디버그 통계 | - |
+
+### 장소 새로고침 (`/api/places`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/places/{placeId}/refresh` | 전체 새로고침 (이미지+리뷰) | - |
+| POST | `/api/places/{placeId}/refresh/images` | 이미지만 새로고침 | - |
+| POST | `/api/places/{placeId}/refresh/reviews` | 리뷰만 새로고침 | - |
+| POST | `/api/places/{placeId}/refresh/business-hours` | 영업시간 새로고침 | - |
+| POST | `/api/places/{placeId}/refresh/menus` | 메뉴 새로고침 | - |
+| POST | `/api/places/refresh/all` | 전체 비동기 새로고침 | - |
+| POST | `/api/places/refresh/batch` | 배치 새로고침 (offset/limit) | - |
+
+### 북마크 (`/api/bookmarks`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/bookmarks/toggle` | 북마크 토글 | USER |
+| POST | `/api/bookmarks` | 북마크 추가 | USER |
+| DELETE | `/api/bookmarks/{placeId}` | 북마크 삭제 | USER |
+| GET | `/api/bookmarks` | 북마크 목록 (페이지네이션) | USER |
+| GET | `/api/bookmarks/{placeId}` | 북마크 여부 확인 | USER |
+
+### 댓글 (`/api`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/places/{placeId}/comments` | 댓글 작성 | USER |
+| GET | `/api/places/{placeId}/comments` | 댓글 목록 (페이지네이션) | - |
+| GET | `/api/user/comments` | 내 댓글 목록 | USER |
+| PUT | `/api/comments/{commentId}` | 댓글 수정 (작성자만) | USER |
+| DELETE | `/api/comments/{commentId}` | 댓글 삭제 (작성자만) | USER |
+
+### 추천 (`/api/recommendations`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/recommendations/enhanced` | MBTI 가중 유사도 추천 | USER |
+| GET | `/api/recommendations/mbti/{mbtiType}` | 특정 MBTI 타입 추천 | USER |
+| GET | `/api/recommendations/explanation` | 추천 알고리즘 설명 | USER |
+| GET | `/api/recommendations/good-to-visit` | 지금 가기 좋은 장소 (날씨/시간) | - |
+| GET | `/api/recommendations/contextual` | 컨텍스트 기반 추천 (듀얼 모드) | - |
+| POST | `/api/recommendations/query` | 레거시 쿼리 추천 | - |
+| GET | `/api/recommendations/current-time` | 현재 시간 기반 추천 | - |
+| GET | `/api/recommendations/bookmark-based` | 북마크 기반 추천 | - |
+
+### 검색 (`/api/search`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/search` | 통합 검색 (임베딩+키워드) | - |
+| GET | `/api/search/food` | 음식 전문 검색 | - |
+| GET | `/api/search/activity` | 활동/목적 기반 검색 | - |
+| GET | `/api/search/location` | 지역명 검색 | - |
+
+### 카테고리 (`/api/categories`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/categories/suggested` | 날씨/시간 기반 추천 카테고리 | - |
+| GET | `/api/categories/{category}/places` | 카테고리별 장소 (거리 가중) | - |
+
+### 컨텍스트 추천 (`/api/contextual-recommendations`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/contextual-recommendations/weather-based` | 날씨 기반 추천 | - |
+
+### 키워드 추천 (`/api/keyword-recommendations`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/keyword-recommendations/by-keyword` | 키워드 기반 추천 | USER |
+
+### 위치 (`/api/location`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/location/reverse-geocode?lat=&lng=` | 좌표→주소 변환 (Vworld API) | - |
+| POST | `/api/location/register-user-area?lat=&lng=` | 사용자 위치 등록 (크롤링 우선순위 큐) | - |
+
+### 주소 (`/api/address`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/address/reverse` | 좌표→주소 (Naver Reverse Geocoding) | - |
+| GET | `/api/address/test` | 주소 서비스 테스트 | - |
+
+### 날씨 (`/api/weather`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/weather/current` | 현재 날씨 (기상청/OpenMeteo) | - |
+| GET | `/api/weather/test` | 날씨 서비스 테스트 | - |
+
+### 한국 행정구역 (`/api/korean-regions`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/korean-regions/all` | 전체 행정구역 조회 | - |
+| GET | `/api/korean-regions/dong-level` | 동/읍/면 단위 조회 | - |
+| GET | `/api/korean-regions/search-locations` | 검색용 지역명 조회 | - |
+| GET | `/api/korean-regions/by-sido` | 시도별 행정구역 조회 | - |
+| POST | `/api/korean-regions/clear-cache` | 캐시 초기화 | - |
+| GET | `/api/korean-regions/cache-status` | 캐시 상태 확인 | - |
+
+### 벡터 (`/api/vector`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/vector/user/regenerate` | 사용자 선호 벡터 재생성 | USER |
+| POST | `/api/vector/place/{placeId}/regenerate` | 장소 벡터 재생성 | ADMIN |
+| GET | `/api/vector/similarity/places` | 벡터 기반 추천 | USER |
+| POST | `/api/vector/similarity/calculate` | 유사도 점수 계산 | USER |
+
+### 약관 (`/api/terms`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/terms` | 약관 목록 | - |
+| GET | `/api/terms/{termsId}` | 약관 전문 | - |
+
+### 지원 (`/api/support`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/support/contact` | 문의/피드백 제출 | USER |
+
+### 홈 (`/api/home`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/home/images` | 홈 화면 장소 이미지 (20개) | - |
+
+### 앱 (`/api/app`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/app/version` | 앱 버전 정보 | - |
+
+### 헬스체크
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/health` | 서버 헬스체크 | - |
+
+### 배치 작업 (`/api/batch/jobs`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/batch/jobs/place-collection` | 장소 수집 배치 시작 | - |
+| POST | `/api/batch/jobs/place-collection/{region}` | 특정 지역 장소 수집 | - |
+| POST | `/api/batch/jobs/update-crawled-data` | 크롤링 데이터 보강 | - |
+| POST | `/api/batch/jobs/vector-embedding` | 벡터 임베딩 생성 | - |
+| GET | `/api/batch/jobs/running` | 실행 중인 배치 목록 | - |
+| POST | `/api/batch/jobs/stop/{executionId}` | 특정 배치 중지 | - |
+| POST | `/api/batch/jobs/stop-all` | 모든 배치 중지 | - |
+| POST | `/api/batch/jobs/image-update` | 이미지 업데이트 | - |
+| POST | `/api/batch/jobs/image-refresh` | 이미지 새로고침 (모드별) | - |
+
+### 임베딩 배치 (`/api/batch/embeddings`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/batch/embeddings/run` | 키워드 임베딩 배치 실행 | - |
+| GET | `/api/batch/embeddings/stats` | 임베딩 통계 | - |
+| DELETE | `/api/batch/embeddings/place/{placeId}` | 장소 임베딩 삭제 | - |
+| GET | `/api/batch/embeddings/health` | 임베딩 서비스 헬스 | - |
+
+### 관리자 모니터링 (`/api/admin/monitor`)
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| GET | `/api/admin/monitor/dashboard` | 대시보드 통계 | ADMIN |
+| GET | `/api/admin/monitor/batch/servers` | 배치 서버 목록 | ADMIN |
+| GET | `/api/admin/monitor/places/stats` | 장소 통계 | ADMIN |
+| GET | `/api/admin/monitor/places/search` | 장소 검색 (필터) | ADMIN |
+| GET | `/api/admin/monitor/batch/stats` | 큐 통계 | ADMIN |
+| GET | `/api/admin/monitor/batch/stats/{serverName}` | 서버별 큐 통계 | ADMIN |
+| GET | `/api/admin/monitor/batch/workers` | 워커 목록 | ADMIN |
+| GET | `/api/admin/monitor/batch/workers/{serverName}` | 서버별 워커 | ADMIN |
+| POST | `/api/admin/monitor/batch/worker/start` | 워커 시작 | ADMIN |
+| POST | `/api/admin/monitor/batch/worker/start/{serverName}` | 서버별 워커 시작 | ADMIN |
+| POST | `/api/admin/monitor/batch/worker/stop` | 워커 중지 | ADMIN |
+| POST | `/api/admin/monitor/batch/worker/stop/{serverName}` | 서버별 워커 중지 | ADMIN |
+| POST | `/api/admin/monitor/batch/push-all` | 전체 큐 등록 | ADMIN |
+| POST | `/api/admin/monitor/batch/push-all/{serverName}` | 서버별 큐 등록 | ADMIN |
+| GET | `/api/admin/monitor/batch/execute/{serverName}` | 배치 엔드포인트 프록시 | ADMIN |
+| GET | `/api/admin/monitor/docker/containers` | Docker 컨테이너 목록 | ADMIN |
+| GET | `/api/admin/monitor/docker/containers/{serverName}` | 서버별 컨테이너 | ADMIN |
+| GET | `/api/admin/monitor/docker/logs/{containerName}` | Docker 로그 | ADMIN |
+| GET | `/api/admin/monitor/docker/logs/{serverName}/{containerName}` | 서버별 로그 | ADMIN |
+| GET | `/api/admin/monitor/batch/config/{serverName}` | 서버 설정 | ADMIN |
+| GET | `/api/admin/monitor/batch/current-jobs/{serverName}` | 실행 중 작업 | ADMIN |
+| GET | `/api/admin/monitor/crawling/map` | 크롤링 지도 시각화 데이터 | ADMIN |
+| POST | `/api/admin/monitor/crawling/start-queue` | 전국 큐 기반 크롤링 시작 | ADMIN |
+
+### 관리자 기능
+
+| Method | Path | 설명 | 인증 |
+|--------|------|------|------|
+| POST | `/api/admin/place-management/check-availability` | 장소 데이터 가용성 확인 | ADMIN |
+| POST | `/api/admin/place-management/fetch` | 외부 API 장소 수집 | ADMIN |
+| POST | `/api/admin/place-management/cleanup` | 저평점 장소 정리 | ADMIN |
+| POST | `/api/place-enhancement/place/{placeId}/enhance` | 장소 정보 보강 | ADMIN |
+| POST | `/api/place-enhancement/batch-enhance` | 일괄 장소 보강 | ADMIN |
+| POST | `/api/admin/similarity/calculate` | 유사도 전체 계산 | ADMIN |
+| POST | `/api/admin/similarity/refresh-topk` | Top-K 유사도 갱신 | ADMIN |
+| POST | `/api/admin/similarity/refresh-topk/{placeId}` | 단일 장소 Top-K | ADMIN |
+| POST | `/api/admin/similarity/calculate-pair/{id1}/{id2}` | 쌍별 유사도 계산 | ADMIN |
+| GET | `/api/admin/similarity/status` | 유사도 계산 상태 | ADMIN |
+| GET | `/api/admin/similarity/statistics` | 유사도 통계 | ADMIN |
+| POST | `/api/images/place/{placeId}/fetch` | 이미지 수집 | ADMIN |
+| POST | `/api/images/place/{placeId}/generate` | Gemini 이미지 생성 | ADMIN |
+| POST | `/api/images/upload` | 이미지 직접 업로드 | - |
+| POST | `/api/images/upload-from-urls` | URL 이미지 저장 | - |
+| DELETE | `/api/images/{placeId}` | 장소 이미지 삭제 | - |
+| POST | `/api/email/send` | 이메일 발송 | ADMIN |
+| POST | `/api/email/test` | 테스트 이메일 | ADMIN |
+
+## 배치 작업 파이프라인
+
+```
+Stage 1: 장소 수집 (Kakao/Tour API → DB)
+  ↓ crawl_status=PENDING
+Stage 2: 상세 크롤링 (Naver Selenium → 설명/이미지/리뷰)
+  ↓ crawl_status=COMPLETED, embed_status=PENDING
+Stage 3: 벡터 임베딩 (Kanana 2.1B → pgvector)
+  ↓ embed_status=COMPLETED
+→ 추천 엔진 사용 가능
+```
+
+## 문서
+
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **OpenAPI Spec**: http://localhost:8080/v3/api-docs
-- **Health Check**: http://localhost:8080/health
 
-### 문서 & 빠른 링크
-- [API 가이드 (한글)](API_GUIDE.md) - 컨트롤러별 엔드포인트와 권한 요약
-- [BATCH_GUIDE.md](BATCH_GUIDE.md) - 배치 작업 설정 및 운영 팁
-- [CLAUDE.md](CLAUDE.md) - Claude Code 사용 가이드 및 troubleshooting
+## 작성자
 
-### 대표 API 그룹
-- **인증/온보딩**: `POST /api/auth/login`, `POST /api/auth/signup`, `POST /api/auth/verify-email`
-- **사용자 & 활동** *(Bearer)*: `GET /api/user/profile`, `GET /api/user/recent-places`, `POST /api/bookmarks/toggle`
-- **장소 탐색**: `GET /api/places`, `GET /api/places/search`, `GET /api/places/vector-search` *(Bearer)*
-- **추천 서비스**:
-  - `GET /api/recommendations/good-to-visit?lat={lat}&lon={lon}&limit={limit}` - 지금 가기 좋은 장소 (게스트 가능)
-  - `GET /api/recommendations/enhanced` *(Bearer)* - MBTI 기반 개인화 추천
-  - `GET /api/recommendations/contextual?lat={lat}&lon={lon}` - 컨텍스트 기반 추천
-  - `GET /api/keyword-recommendations/by-keyword` *(Bearer)* - 키워드 기반 추천
-- **날씨 정보**: `GET /api/weather/current?lat=37.5665&lon=126.9780` - 좌표 기반 현재 날씨 조회 (기상청 API)
-- **주소 정보**: `GET /api/address/reverse?lat=37.5665&lon=126.9780` - 좌표를 주소로 변환 (Naver API)
-- **관리자/데이터 관리** *(Bearer ADMIN)*: `POST /api/admin/place-management/check-availability`, `POST /api/place-enhancement/batch-enhance`, `POST /api/admin/similarity/calculate`
-- **배치/동기화**: `POST /api/batch/jobs/place-collection`, `POST /api/batch/jobs/update-crawled-data`
-- **한국 행정구역 API**: `GET /api/korean-regions/all`, `GET /api/korean-regions/dong-level`, `GET /api/korean-regions/search-locations`
-
-### 배치 작업 지역 데이터 소스 (2025-11-14 업데이트)
-
-배치 작업(`PlaceCollectionJob`)은 이제 **정부 API 기반 동적 지역 로딩**을 지원합니다:
-
-**데이터 소스 우선순위:**
-1. **정부 표준지역코드 API** (권장) - 실시간 행정구역 데이터 (3600+ 동/읍/면)
-2. **FallbackRegionService** - API 장애 시 하드코딩된 1000+ 지역 데이터
-3. **Legacy Enum** - `SeoulLocation`, `JejuLocation`, `YonginLocation` (Deprecated)
-
-**설정 방법 (.env):**
-```bash
-# 정부 API 사용 (권장)
-BATCH_LOCATION_USE_GOVERNMENT_API=true
-BATCH_LOCATION_USE_LEGACY_ENUMS=false
-
-# 정부 API 키 (공공데이터포털에서 발급)
-GOVT_API_KEY=your_govt_api_key_here
-
-# 긴급 폴백 모드 (API 서버 화재 등)
-IS_GOV_SERVER_DOWN=N
-```
-
-**특징:**
-- 24시간 자동 캐싱으로 API 호출 최소화
-- 행정구역 변경 시 자동 반영
-- 서울/경기/제주 외 전국 17개 시도 지원
-- 배치 작업 시 지역 필터링 지원: `region=seoul`, `region=gyeonggi`, `region=jeju` 등
-
-## 📍 Mock 위치 설정 (선택 사항)
-
-개발/테스트 중 좌표 파라미터를 매번 넘기기 번거롭다면 환경 변수로 기본 좌표를 지정할 수 있습니다.
-
-### 동작 방식
-1. **API 요청에 lat/lon이 포함되어 있으면** → 항상 요청 값을 사용합니다.
-2. **파라미터가 비어 있고 ENV 기본값이 설정되어 있으면** → ENV 값을 기본값으로 사용합니다.
-3. **둘 다 없으면** → API가 좌표 파라미터를 요구합니다.
-
-### 설정 방법
-
-#### 방법 1: .env 파일 수정 (권장)
-```bash
-# 기본 좌표 지정 (요청에 좌표가 없을 때만 사용)
-MOCK_LATITUDE=37.4979   # 강남역
-MOCK_LONGITUDE=127.0276
-
-# 기본 좌표 사용해제 (프로덕션 권장)
-# MOCK_LATITUDE=
-# MOCK_LONGITUDE=
-```
-
-#### 방법 2: application-docker.yml 수정
-```yaml
-mohe:
-  location:
-    default-latitude: ${MOCK_LATITUDE:#{null}}
-    default-longitude: ${MOCK_LONGITUDE:#{null}}
-```
-
-### 주요 위치 좌표 참고
-
-| 위치 | 위도 (latitude) | 경도 (longitude) | 설명 |
-|------|----------------|-----------------|------|
-| **서울 중구** | `37.5636` | `126.9976` | 명동, 시청 일대 |
-| 강남역 | `37.4979` | `127.0276` | 강남 상권 중심지 |
-| 홍대입구역 | `37.5563` | `126.9227` | 홍대 상권 중심지 |
-| 서울역 | `37.5547` | `126.9707` | 서울역 일대 |
-| 광화문 | `37.5760` | `126.9769` | 광화문, 종로 일대 |
-| 여의도 | `37.5219` | `126.9245` | 여의도 금융가 |
-| 잠실역 | `37.5133` | `127.1000` | 잠실 롯데월드 일대 |
-| 신촌역 | `37.5559` | `126.9366` | 신촌 상권 중심지 |
-| 이태원역 | `37.5344` | `126.9944` | 이태원 상권 중심지 |
-| 건대입구역 | `37.5403` | `127.0695` | 건대 상권 중심지 |
-
-### 위치 기반 API 동작 방식
-
-위치 파라미터를 지원하는 API:
-- `/api/recommendations/contextual` - 컨텍스트 기반 추천 (날씨, 시간, 위치)
-- `/api/places/recommendations` - 일반 장소 추천
-- `/api/places/popular` - 인기 장소
-- `/api/places/new` - 신규 장소
-- `/api/recommendations/current-time` - 현재 시간 기반 추천
-
-**거리 기반 혼합 전략:**
-- 15km 이내 데이터: 70%
-- 30km 이내 데이터: 30%
-- 벡터 검색 결과와 교집합하여 최종 추천
-
-## 🔄 배치 작업
-
-### Spring Batch Job 실행
-
-```bash
-# API를 통한 배치 실행
-curl -X POST http://localhost:8080/api/batch/jobs/place-collection
-curl -X POST http://localhost:8080/api/batch/jobs/update-crawled-data
-curl -X POST http://localhost:8080/api/batch/jobs/vector-embedding
-
-# 실행 중인 배치 작업 조회
-curl http://localhost:8080/api/batch/jobs/running
-
-# 특정 배치 작업 중지 (executionId는 /running에서 조회)
-curl -X POST http://localhost:8080/api/batch/jobs/stop/123
-
-# 모든 실행 중인 배치 작업 중지
-curl -X POST http://localhost:8080/api/batch/jobs/stop-all
-```
-
-### 배치 작업 제어
-
-| 엔드포인트 | 메서드 | 설명 |
-|-----------|--------|------|
-| `/api/batch/jobs/running` | GET | 실행 중인 배치 작업 목록 조회 (executi`onId, 상태, Step 진행률 포함) |
-| `/api/batch/jobs/stop/{executionId}` | POST | 특정 배치 작업 중지 (현재 청크 완료 후 안전하게 종료) |
-| `/api/batch/jobs/stop-all` | POST | 모든 실행 중인 배치 작업 중지 |
-
-### 배치 작업 상태 플래그
-
-배치 작업(`UpdateCrawledDataJob`)은 각 장소의 처리 상태를 두 가지 플래그로 관리합니다:
-
-| 상황 | `crawler_found` | `ready` | 설명 |
-|------|----------------|---------|------|
-| **크롤링 실패** | `false` | `false` | 크롤러가 네이버 지도에서 장소를 찾지 못함 (404, 타임아웃 등) |
-| **정보 부족** | `true` | `false` | 크롤링은 성공했지만 설명 데이터가 없음 |
-| **AI 처리 실패** | `true` | `false` | 크롤링은 성공했지만 AI 키워드/벡터 생성 실패 |
-| **처리 완료** | `true` | `true` | 모든 처리 성공, API에서 사용 가능 |
-
-**재시도 정책:**
-- `crawler_found = false` → 크롤러 개선 후 재시도 권장
-- `crawler_found = true, ready = false` → AI 모델 개선 후 재시도 권장
-
-### 배치 처리 최적화
-
-배치 작업은 메모리 효율성과 안정성을 위해 다음과 같이 최적화되었습니다:
-
-- **Two-Step Query**: ID만 먼저 로드 후 엔티티 조회 (Hibernate pagination 이슈 해결)
-- **Page-by-Page Loading**: 한 번에 10개씩만 메모리에 로드 (메모리 효율)
-- **Collection Lazy Loading**: 여러 컬렉션을 개별 쿼리로 로드하여 MultipleBagFetchException 방지
-- **Graceful Shutdown**: 현재 청크 완료 후 안전하게 종료
-
-자세한 내용은 [BATCH_GUIDE.md](BATCH_GUIDE.md) 참고
-
-## 💻 개발 가이드
-
-### 코드 스타일
-- **EditorConfig**: `.editorconfig` 파일 참고
-- **Indentation**: 4 spaces (Java), 2 spaces (YAML/JSON)
-- **Line Length**: 120 characters max
-
-### 테스트 실행
-
-```bash
-# 전체 테스트
-./gradlew test
-
-# 빌드
-./gradlew clean build
-```
-
-## 📖 문서
-
-- [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - 상세 프로젝트 구조
-- [API_GUIDE.md](API_GUIDE.md) - REST API 개요 및 권한 체계
-- [BATCH_GUIDE.md](BATCH_GUIDE.md) - Spring Batch 가이드
-- [CLAUDE.md](CLAUDE.md) - Claude Code 사용 가이드 및 troubleshooting
-
-## 📝 주요 변경사항
-
-### 지금 가기 좋은 장소 추천 API (Good-to-Visit)
-- **엔드포인트**: `GET /api/recommendations/good-to-visit`
-- **필수 파라미터**: `lat` (위도), `lon` (경도), `limit` (기본값: 10, 최대: 20)
-- **응답 구조 간소화**: 불필요한 `context`, `weatherCondition`, `timeContext`, `recommendation` 필드 제거
-- **주소 필드 필수화**: 주소가 없는 장소는 자동으로 필터링
-  - `shortAddress`: 구 + 동 (예: "강남구 역삼동")
-  - `fullAddress`: 전체 도로명 주소
-  - `location`: shortAddress와 동일 (하위 호환성)
-- **거리 기반 혼합 전략**: 15km 이내 70% + 30km 이내 30%
-- **Fallback 로직**:
-  - 벡터 서버 다운 시 geo-weighted 후보를 그대로 사용
-  - 지역 데이터 부족 시 전국 추천 장소 반환
-- **영업시간 필터 제거**: 영업시간 정보가 없는 장소도 포함하여 더 많은 추천 제공
-
-**응답 예시:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 123,
-      "name": "카페 이름",
-      "imageUrl": "/images/...",
-      "images": ["..."],
-      "rating": 4.5,
-      "category": "카페",
-      "distance": 1.2,
-      "shortAddress": "강남구 역삼동",
-      "fullAddress": "서울특별시 강남구 역삼동 123-45",
-      "location": "강남구 역삼동"
-    }
-  ]
-}
-```
-
-### Embedding 서비스 설정
-- **포트 변경**: 기본 포트 8001 → 6000으로 변경
-- **환경 변수**: `EMBEDDING_SERVICE_URL=http://localhost:6000`
-- **모델**: kanana-nano-2.1b-embedding (1792 차원)
-- **Fallback**: 서비스 다운 시 zero vector 반환하여 geo-weighted 추천 제공
-
-### Place Description API
-- 장소 상세 정보 API에서 **mohe_description만 반환**하도록 최적화
-- `PlaceService.convertToSimplePlaceDto()` 메서드가 `mohe_description` 필드만 추출
-- 불필요한 description 필드 제거로 API 응답 크기 감소
-
-### 날씨 정보 API
-- **WeatherController 추가**: 좌표 기반 실시간 날씨 조회 (`GET /api/weather/current`)
-- **기상청 단기예보 API 통합**: 한국 좌표에 대해 정확한 날씨 정보 제공
-- **위경도 → 격자 좌표 변환**: Lambert Conformal Conic 투영법 적용
-- **OpenMeteo Fallback**: KMA API 키 미설정 시 또는 오류 시 자동 전환
-- **10분 캐싱**: 성능 최적화 및 API 호출 제한 방지
-
-### 주소 변환 API
-- **Naver Reverse Geocoding 활성화**: 좌표를 정확한 도로명 주소로 변환
-- **AddressController**: `GET /api/address/reverse` 엔드포인트
-- **1시간 캐싱**: 빠른 응답 제공
-
-## 👤 작성자
-
-**Andrew Lim (임석현)**
-- Email: sjsh1623@gmail.com
-
----
-
-⭐ 이 프로젝트가 도움이 되었다면 Star를 눌러주세요!
+**Andrew Lim (임석현)** - sjsh1623@gmail.com

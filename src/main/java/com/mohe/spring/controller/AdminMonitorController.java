@@ -1,8 +1,10 @@
 package com.mohe.spring.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mohe.spring.dto.ApiResponse;
 import com.mohe.spring.dto.admin.*;
 import com.mohe.spring.service.AdminMonitorService;
+import org.springframework.beans.factory.annotation.Value;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +29,13 @@ import java.util.Map;
 public class AdminMonitorController {
 
     private final AdminMonitorService adminMonitorService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+
+    @Value("${batch.collector.url:http://localhost:4001}")
+    private String batchCollectorUrl;
 
     @GetMapping("/dashboard")
     @Operation(summary = "Get dashboard overview", description = "Returns combined dashboard data including place stats, batch stats, and worker status")
@@ -242,5 +256,52 @@ public class AdminMonitorController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> getCurrentJobs(@PathVariable String serverName) {
         Map<String, Object> currentJobs = adminMonitorService.getCurrentJobs(serverName);
         return ResponseEntity.ok(ApiResponse.success(currentJobs));
+    }
+
+    /**
+     * 지역 크롤링 현황 지도 데이터 (Phase 5)
+     * batch_collector의 queue-monitoring을 프록시
+     */
+    @GetMapping("/crawling/map")
+    @Operation(summary = "Get crawling map data", description = "Returns region crawl queue status for map visualization")
+    public ResponseEntity<ApiResponse<Object>> getCrawlingMapData() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(batchCollectorUrl + "/api/batch/queue-monitoring"))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            Object data = objectMapper.readValue(response.body(), Object.class);
+            return ResponseEntity.ok(ApiResponse.success(data));
+        } catch (Exception e) {
+            log.warn("Failed to fetch crawling map data from batch collector: {}", e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("BATCH_COLLECTOR_UNAVAILABLE",
+                    "배치 콜렉터에 연결할 수 없습니다: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 큐 기반 전국 자동 순환 수집 시작 (Phase 4)
+     */
+    @PostMapping("/crawling/start-queue")
+    @Operation(summary = "Start queue-based crawling", description = "Start nationwide automatic crawling from the priority queue")
+    public ResponseEntity<ApiResponse<Object>> startQueueCrawling() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(batchCollectorUrl + "/api/batch/start-queue"))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(10))
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            Object data = objectMapper.readValue(response.body(), Object.class);
+            return ResponseEntity.ok(ApiResponse.success(data));
+        } catch (Exception e) {
+            log.error("Failed to start queue crawling: {}", e.getMessage());
+            return ResponseEntity.ok(ApiResponse.error("BATCH_COLLECTOR_UNAVAILABLE", e.getMessage()));
+        }
     }
 }

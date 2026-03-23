@@ -34,3 +34,5 @@ oauth:
 batch:
   service:
     url: ${BATCH_SERVICE_URL:http://localhost:8081}
+  collector:
+    url: ${BATCH_COLLECTOR_URL:http://localhost:4001}

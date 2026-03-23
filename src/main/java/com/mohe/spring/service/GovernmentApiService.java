@@ -142,23 +142,57 @@ public class GovernmentApiService {
     }
 
     /**
-     * 통계청 SGIS API를 통해 지역별 통계 정보 조회 (선택적)
+     * Vworld API를 통해 좌표 → 주소 역지오코딩
+     * point 파라미터는 경도,위도 순서
      */
-    public List<String> getPopularCategoriesByRegion(String regionCode) {
-        List<String> categories = new ArrayList<>();
-
+    public ReverseGeocodeResult reverseGeocode(double latitude, double longitude) {
         try {
-            // SGIS API 호출 로직 (실제 구현 시 필요)
-            // 현재는 기본 카테고리 반환
-            categories.add("카페");
-            categories.add("맛집");
-            categories.add("쇼핑");
+            if (vworldApiKey == null || vworldApiKey.isEmpty()) {
+                logger.warn("VWORLD_API_KEY가 설정되지 않아 역지오코딩을 수행할 수 없습니다.");
+                return ReverseGeocodeResult.empty();
+            }
+
+            String url = String.format(
+                "https://api.vworld.kr/req/address" +
+                "?service=address&request=getAddress&version=2.0&crs=epsg:4326" +
+                "&point=%s,%s&type=PARCEL&format=json&key=%s",
+                longitude,
+                latitude,
+                vworldApiKey
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                JsonNode root = objectMapper.readTree(response.body());
+                String status = root.path("response").path("status").asText();
+
+                if ("OK".equals(status)) {
+                    JsonNode results = root.path("response").path("result");
+                    if (results.isArray() && results.size() > 0) {
+                        JsonNode structure = results.get(0).path("structure");
+                        String fullText = results.get(0).path("text").asText();
+                        return new ReverseGeocodeResult(
+                            structure.path("level1").asText(),
+                            structure.path("level2").asText(),
+                            structure.path("level3").asText(),
+                            fullText
+                        );
+                    }
+                }
+            }
 
         } catch (Exception e) {
-            logger.debug("지역별 카테고리 조회 실패 for {}: {}", regionCode, e.getMessage());
+            logger.error("역지오코딩 중 오류: lat={}, lng={}", latitude, longitude, e);
         }
 
-        return categories;
+        return ReverseGeocodeResult.empty();
     }
 
     /**
@@ -211,6 +245,36 @@ public class GovernmentApiService {
         // ... 추가 매핑 로직
 
         return new RegionInfo(regionName, regionCode, latitude, longitude);
+    }
+
+    /**
+     * 역지오코딩 결과
+     */
+    public static class ReverseGeocodeResult {
+        private final String sido;
+        private final String sigungu;
+        private final String dong;
+        private final String fullAddress;
+
+        public ReverseGeocodeResult(String sido, String sigungu, String dong, String fullAddress) {
+            this.sido = sido;
+            this.sigungu = sigungu;
+            this.dong = dong;
+            this.fullAddress = fullAddress;
+        }
+
+        public static ReverseGeocodeResult empty() {
+            return new ReverseGeocodeResult("", "", "", "");
+        }
+
+        public boolean isEmpty() {
+            return sido == null || sido.isBlank();
+        }
+
+        public String getSido() { return sido; }
+        public String getSigungu() { return sigungu; }
+        public String getDong() { return dong; }
+        public String getFullAddress() { return fullAddress; }
     }
 
     /**

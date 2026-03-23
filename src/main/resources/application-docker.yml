@@ -42,6 +42,8 @@ oauth:
 batch:
   service:
     url: ${BATCH_SERVICE_URL:http://mohe-batch:8081}
+  collector:
+    url: ${BATCH_COLLECTOR_URL:http://mohe-batch-crawler:4001}
   remote-servers:
     - name: local
       url: ${BATCH_SERVICE_URL:http://mohe-batch:8081}
