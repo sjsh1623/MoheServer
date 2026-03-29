@@ -143,16 +143,37 @@ public class CategoryRecommendationService {
             }
         }
 
-        // 2. 시간+날씨 기반 카테고리 행들
+        // 2. 시간+날씨 기반 카테고리 (우선 10개) + 나머지 보충해서 30개
         List<Map<String, Object>> categoryRows = new ArrayList<>();
+        Set<String> usedKeys = new HashSet<>();
+
+        // 우선 카테고리 (시간+날씨 매칭)
         for (PlaceCategory category : rule.getRecommendedCategories()) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("key", category.getKey());
-            row.put("displayName", category.getDisplayName());
-            row.put("description", category.getDescription());
-            row.put("emoji", category.getEmoji());
-            categoryRows.add(row);
+            categoryRows.add(categoryToMap(category));
+            usedKeys.add(category.getKey());
         }
+
+        // 보충 카테고리 (항상 포함되면 좋은 인기 카테고리들)
+        List<PlaceCategory> filler = List.of(
+            PlaceCategory.CAFE, PlaceCategory.RESTAURANT, PlaceCategory.KOREAN_FOOD,
+            PlaceCategory.JAPANESE_FOOD, PlaceCategory.CHINESE_FOOD, PlaceCategory.WESTERN_FOOD,
+            PlaceCategory.CHICKEN, PlaceCategory.MEAT, PlaceCategory.SEAFOOD,
+            PlaceCategory.DESSERT_CAFE, PlaceCategory.BAKERY, PlaceCategory.BAR,
+            PlaceCategory.WINE_BAR, PlaceCategory.CRAFT_BEER, PlaceCategory.PUB,
+            PlaceCategory.GALLERY, PlaceCategory.MUSEUM, PlaceCategory.WORKSHOP,
+            PlaceCategory.PARK, PlaceCategory.WALKING_TRAIL, PlaceCategory.BOOKSTORE,
+            PlaceCategory.SHOPPING_MALL, PlaceCategory.CINEMA, PlaceCategory.KARAOKE,
+            PlaceCategory.BOARD_GAME, PlaceCategory.ESCAPE_ROOM, PlaceCategory.SPA,
+            PlaceCategory.FITNESS, PlaceCategory.HANOK, PlaceCategory.INSTAGRAMMABLE
+        );
+        for (PlaceCategory cat : filler) {
+            if (categoryRows.size() >= 30) break;
+            if (!usedKeys.contains(cat.getKey())) {
+                categoryRows.add(categoryToMap(cat));
+                usedKeys.add(cat.getKey());
+            }
+        }
+
         result.put("categoryRows", categoryRows);
 
         return result;
@@ -216,6 +237,15 @@ public class CategoryRecommendationService {
         }
 
         return null;
+    }
+
+    private Map<String, Object> categoryToMap(PlaceCategory category) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("key", category.getKey());
+        row.put("displayName", category.getDisplayName());
+        row.put("description", category.getDescription());
+        row.put("emoji", category.getEmoji());
+        return row;
     }
 
     private Map<String, Object> placeToSimpleDto(Place place, Double userLat, Double userLon) {
