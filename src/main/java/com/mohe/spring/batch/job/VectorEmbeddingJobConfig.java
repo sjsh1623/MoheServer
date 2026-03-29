@@ -143,11 +143,16 @@ public class VectorEmbeddingJobConfig {
                         }
                         if (!isNonZero) continue;
 
-                        // Save to global lookup cache
-                        try {
-                            lookupRepository.save(new KeywordEmbeddingLookup(kw, emb));
-                        } catch (Exception e) {
-                            // Unique constraint violation = another thread saved it first, OK
+                        // Save to global lookup cache (check first to avoid session corruption)
+                        if (lookupRepository.findByKeyword(kw).isEmpty()) {
+                            try {
+                                lookupRepository.saveAndFlush(new KeywordEmbeddingLookup(kw, emb));
+                            } catch (Exception e) {
+                                // Race condition: another thread saved it. Clear persistence context.
+                                try {
+                                    lookupRepository.flush();
+                                } catch (Exception ignored) {}
+                            }
                         }
                         cachedMap.put(kw, emb);
                     }
