@@ -258,6 +258,16 @@ public class AdminMonitorController {
         return ResponseEntity.ok(ApiResponse.success(currentJobs));
     }
 
+    @GetMapping("/pipeline/recent-crawls")
+    @Operation(summary = "Get recently crawled places", description = "Returns places updated in the last N minutes with location data")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getRecentCrawls(
+            @RequestParam(defaultValue = "5") int minutes,
+            @RequestParam(defaultValue = "50") int limit
+    ) {
+        List<Map<String, Object>> places = adminMonitorService.getRecentCrawls(minutes, limit);
+        return ResponseEntity.ok(ApiResponse.success(places));
+    }
+
     @GetMapping("/pipeline/stats")
     @Operation(summary = "Get full pipeline statistics", description = "Returns comprehensive pipeline stats: places, crawling, AI, embedding, images, reviews")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getPipelineStats() {

@@ -717,6 +717,42 @@ public class AdminMonitorService {
     }
 
     /**
+     * Recently crawled places with location for live map
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getRecentCrawls(int minutes, int limit) {
+        List<Object[]> rows = entityManager.createNativeQuery(
+            "SELECT p.id, p.name, p.latitude, p.longitude, p.road_address, " +
+            "p.crawl_status, p.embed_status, p.updated_at, p.review_count, " +
+            "COALESCE(array_length(p.keyword, 1), 0) as kw_count " +
+            "FROM places p " +
+            "WHERE p.updated_at > NOW() - CAST(:interval AS INTERVAL) " +
+            "AND p.crawl_status IN ('COMPLETED', 'FAILED') " +
+            "ORDER BY p.updated_at DESC " +
+            "LIMIT :lim"
+        ).setParameter("interval", minutes + " minutes")
+         .setParameter("lim", limit)
+         .getResultList();
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object[] row : rows) {
+            Map<String, Object> place = new LinkedHashMap<>();
+            place.put("id", ((Number) row[0]).longValue());
+            place.put("name", row[1]);
+            place.put("latitude", row[2] != null ? ((Number) row[2]).doubleValue() : null);
+            place.put("longitude", row[3] != null ? ((Number) row[3]).doubleValue() : null);
+            place.put("roadAddress", row[4]);
+            place.put("crawlStatus", row[5]);
+            place.put("embedStatus", row[6]);
+            place.put("updatedAt", row[7] != null ? row[7].toString() : null);
+            place.put("reviewCount", row[8] != null ? ((Number) row[8]).intValue() : 0);
+            place.put("keywordCount", row[9] != null ? ((Number) row[9]).intValue() : 0);
+            result.add(place);
+        }
+        return result;
+    }
+
+    /**
      * Full pipeline statistics for admin dashboard
      */
     @SuppressWarnings("unchecked")
