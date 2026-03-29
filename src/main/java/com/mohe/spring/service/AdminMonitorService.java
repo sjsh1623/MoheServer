@@ -6,13 +6,22 @@ import com.mohe.spring.entity.CrawlStatus;
 import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.repository.PlaceRepository;
+import com.mohe.spring.repository.KeywordEmbeddingLookupRepository;
+import com.mohe.spring.repository.PlaceKeywordEmbeddingRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.*;
+import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.explore.JobExplorer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -23,17 +32,41 @@ import java.util.stream.Collectors;
 public class AdminMonitorService {
 
     private final PlaceRepository placeRepository;
+    private final PlaceKeywordEmbeddingRepository embeddingRepository;
+    private final KeywordEmbeddingLookupRepository lookupRepository;
     private final WebClient webClient;
     private final BatchServerConfig batchServerConfig;
+    private final EntityManager entityManager;
+    private final JobLauncher asyncJobLauncher;
+    private final JobExplorer jobExplorer;
+    private final Map<String, Job> jobMap;
 
     public AdminMonitorService(
             PlaceRepository placeRepository,
+            PlaceKeywordEmbeddingRepository embeddingRepository,
+            KeywordEmbeddingLookupRepository lookupRepository,
             WebClient webClient,
-            BatchServerConfig batchServerConfig
+            BatchServerConfig batchServerConfig,
+            EntityManager entityManager,
+            JobLauncher asyncJobLauncher,
+            JobExplorer jobExplorer,
+            @Qualifier("updateCrawledDataJob") Job updateCrawledDataJob,
+            @Qualifier("vectorEmbeddingJob") Job vectorEmbeddingJob,
+            @Qualifier("imageUpdateJob") Job imageUpdateJob
     ) {
         this.placeRepository = placeRepository;
+        this.embeddingRepository = embeddingRepository;
+        this.lookupRepository = lookupRepository;
         this.webClient = webClient;
         this.batchServerConfig = batchServerConfig;
+        this.entityManager = entityManager;
+        this.asyncJobLauncher = asyncJobLauncher;
+        this.jobExplorer = jobExplorer;
+        this.jobMap = Map.of(
+            "updateCrawledDataJob", updateCrawledDataJob,
+            "vectorEmbeddingJob", vectorEmbeddingJob,
+            "imageUpdateJob", imageUpdateJob
+        );
     }
 
     /**
@@ -681,6 +714,125 @@ public class AdminMonitorService {
     private String getString(Map<String, Object> map, String key) {
         Object value = map.get(key);
         return value != null ? value.toString() : null;
+    }
+
+    /**
+     * Full pipeline statistics for admin dashboard
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getPipelineStats() {
+        Map<String, Object> stats = new LinkedHashMap<>();
+
+        // 1. Place status breakdown
+        List<Object[]> statusRows = entityManager.createNativeQuery(
+            "SELECT crawl_status, embed_status, COUNT(*) FROM places GROUP BY crawl_status, embed_status"
+        ).getResultList();
+
+        Map<String, Object> places = new LinkedHashMap<>();
+        long totalPlaces = 0;
+        long completedAndEmbedded = 0, completedPending = 0, pendingCrawl = 0, failed = 0, notFound = 0;
+        for (Object[] row : statusRows) {
+            String crawl = row[0] != null ? row[0].toString() : "null";
+            String embed = row[1] != null ? row[1].toString() : "null";
+            long count = ((Number) row[2]).longValue();
+            totalPlaces += count;
+            if ("COMPLETED".equals(crawl) && "COMPLETED".equals(embed)) completedAndEmbedded = count;
+            else if ("COMPLETED".equals(crawl) && "PENDING".equals(embed)) completedPending = count;
+            else if ("PENDING".equals(crawl)) pendingCrawl += count;
+            else if ("FAILED".equals(crawl)) failed += count;
+            else if ("NOT_FOUND".equals(crawl)) notFound += count;
+        }
+        places.put("total", totalPlaces);
+        places.put("fullyProcessed", completedAndEmbedded);
+        places.put("awaitingEmbedding", completedPending);
+        places.put("pendingCrawl", pendingCrawl);
+        places.put("failed", failed);
+        places.put("notFound", notFound);
+        stats.put("places", places);
+
+        // 2. Embedding stats
+        Map<String, Object> embedding = new LinkedHashMap<>();
+        embedding.put("cachedKeywords", lookupRepository.count());
+        embedding.put("totalVectors", embeddingRepository.count());
+        List<Long> distinctPlaces = embeddingRepository.findDistinctPlaceIds();
+        embedding.put("embeddedPlaces", distinctPlaces.size());
+        stats.put("embedding", embedding);
+
+        // 3. Content stats (descriptions, reviews, images, etc.)
+        Map<String, Object> content = new LinkedHashMap<>();
+        Object descCount = entityManager.createNativeQuery("SELECT COUNT(*) FROM place_descriptions WHERE mohe_description IS NOT NULL AND mohe_description <> ''").getSingleResult();
+        Object reviewCount = entityManager.createNativeQuery("SELECT COUNT(*) FROM place_reviews").getSingleResult();
+        Object imageCount = entityManager.createNativeQuery("SELECT COUNT(*) FROM place_images").getSingleResult();
+        Object bizHourCount = entityManager.createNativeQuery("SELECT COUNT(*) FROM place_business_hours").getSingleResult();
+        Object menuCount = entityManager.createNativeQuery("SELECT COUNT(*) FROM place_menus").getSingleResult();
+        Object snsCount = entityManager.createNativeQuery("SELECT COUNT(*) FROM place_sns").getSingleResult();
+        content.put("aiDescriptions", ((Number) descCount).longValue());
+        content.put("reviews", ((Number) reviewCount).longValue());
+        content.put("images", ((Number) imageCount).longValue());
+        content.put("businessHours", ((Number) bizHourCount).longValue());
+        content.put("menus", ((Number) menuCount).longValue());
+        content.put("sns", ((Number) snsCount).longValue());
+        stats.put("content", content);
+
+        // 4. Running batch jobs
+        Map<String, Object> jobs = new LinkedHashMap<>();
+        for (String jobName : List.of("updateCrawledDataJob", "vectorEmbeddingJob", "imageUpdateJob")) {
+            Set<JobExecution> running = jobExplorer.findRunningJobExecutions(jobName);
+            jobs.put(jobName, !running.isEmpty() ? "RUNNING" : "IDLE");
+        }
+        stats.put("jobs", jobs);
+
+        // 5. New places today
+        Object todayCount = entityManager.createNativeQuery(
+            "SELECT COUNT(*) FROM places WHERE created_at > CURRENT_DATE"
+        ).getSingleResult();
+        stats.put("newPlacesToday", ((Number) todayCount).longValue());
+
+        return stats;
+    }
+
+    /**
+     * Hourly place creation for the last 24 hours
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getRecentActivity() {
+        List<Object[]> rows = entityManager.createNativeQuery(
+            "SELECT date_trunc('hour', created_at) as hour, COUNT(*) as cnt " +
+            "FROM places WHERE created_at > NOW() - INTERVAL '24 hours' " +
+            "GROUP BY hour ORDER BY hour"
+        ).getResultList();
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object[] row : rows) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("hour", row[0].toString());
+            entry.put("count", ((Number) row[1]).longValue());
+            result.add(entry);
+        }
+        return result;
+    }
+
+    /**
+     * Manually trigger a batch job
+     */
+    public String triggerJob(String jobName) {
+        Job job = jobMap.get(jobName);
+        if (job == null) {
+            return "Unknown job: " + jobName;
+        }
+        try {
+            Set<JobExecution> running = jobExplorer.findRunningJobExecutions(jobName);
+            if (!running.isEmpty()) {
+                return jobName + " is already running";
+            }
+            JobParameters params = new JobParametersBuilder()
+                    .addLong("triggeredAt", System.currentTimeMillis())
+                    .toJobParameters();
+            asyncJobLauncher.run(job, params);
+            return jobName + " triggered successfully";
+        } catch (Exception e) {
+            return "Failed to trigger " + jobName + ": " + e.getMessage();
+        }
     }
 
     /**

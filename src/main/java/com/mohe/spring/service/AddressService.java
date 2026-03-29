@@ -94,7 +94,7 @@ public class AddressService {
 
         try {
             String coords = longitude + "," + latitude; // Naver uses lon,lat format
-            String apiUrl = "https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc?coords=" + coords + "&sourcecrs=epsg:4326&output=json&orders=roadaddr";
+            String apiUrl = "https://maps.apigw.ntruss.com/map-reversegeocode/v2/gc?coords=" + coords + "&sourcecrs=epsg:4326&output=json&orders=roadaddr";
             logger.info("📡 Naver API request: {}", apiUrl);
 
             @SuppressWarnings("unchecked")

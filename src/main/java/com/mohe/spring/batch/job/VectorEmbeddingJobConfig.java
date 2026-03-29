@@ -2,10 +2,10 @@ package com.mohe.spring.batch.job;
 
 import com.mohe.spring.batch.reader.VectorEmbeddingReader;
 import com.mohe.spring.entity.EmbedStatus;
+import com.mohe.spring.entity.KeywordEmbeddingLookup;
 import com.mohe.spring.entity.Place;
-import com.mohe.spring.entity.PlaceKeywordEmbedding;
+import com.mohe.spring.repository.KeywordEmbeddingLookupRepository;
 import com.mohe.spring.repository.PlaceRepository;
-import com.mohe.spring.repository.PlaceKeywordEmbeddingRepository;
 import com.mohe.spring.service.EmbeddingClient;
 import com.mohe.spring.service.KeywordEmbeddingSaveService;
 import com.mohe.spring.dto.embedding.EmbeddingResponse;
@@ -15,14 +15,16 @@ import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Configuration
 public class VectorEmbeddingJobConfig {
@@ -30,15 +32,18 @@ public class VectorEmbeddingJobConfig {
     private final EmbeddingClient embeddingClient;
     private final PlaceRepository placeRepository;
     private final KeywordEmbeddingSaveService embeddingSaveService;
+    private final KeywordEmbeddingLookupRepository lookupRepository;
 
     public VectorEmbeddingJobConfig(
         EmbeddingClient embeddingClient,
         PlaceRepository placeRepository,
-        KeywordEmbeddingSaveService embeddingSaveService
+        KeywordEmbeddingSaveService embeddingSaveService,
+        KeywordEmbeddingLookupRepository lookupRepository
     ) {
         this.embeddingClient = embeddingClient;
         this.placeRepository = placeRepository;
         this.embeddingSaveService = embeddingSaveService;
+        this.lookupRepository = lookupRepository;
     }
 
     @Bean
@@ -71,98 +76,114 @@ public class VectorEmbeddingJobConfig {
     public ItemProcessor<Place, Place> vectorEmbeddingProcessor() {
         return place -> {
             try {
-                // Check if place has mohe_description
+                // Validate mohe_description exists
                 if (place.getDescriptions().isEmpty()) {
-                    System.err.println("⚠️ No description found for '" + place.getName() + "' - skipping vectorization");
+                    System.err.println("⚠️ No description for '" + place.getName() + "' - skip");
                     return null;
                 }
-
                 String moheDescription = place.getDescriptions().get(0).getMoheDescription();
                 if (moheDescription == null || moheDescription.trim().isEmpty()) {
-                    System.err.println("⚠️ Empty mohe_description for '" + place.getName() + "' - skipping vectorization");
+                    System.err.println("⚠️ Empty mohe_description for '" + place.getName() + "' - skip");
                     return null;
                 }
 
-                System.out.println("🧮 Starting vectorization for '" + place.getName() + "'...");
-
-                // Get keywords that were already extracted during crawling
+                // Validate keywords exist
                 List<String> existingKeywords = place.getKeyword();
                 if (existingKeywords == null || existingKeywords.isEmpty()) {
-                    System.err.println("⚠️ No keywords found for '" + place.getName() + "' - skipping vectorization");
+                    System.err.println("⚠️ No keywords for '" + place.getName() + "' - skip");
                     return null;
                 }
 
-                // Take only first 9 keywords
+                // Take first 9 keywords
                 List<String> keywordsToProcess = existingKeywords.size() > 9
-                    ? existingKeywords.subList(0, 9)
-                    : existingKeywords;
+                    ? new ArrayList<>(existingKeywords.subList(0, 9))
+                    : new ArrayList<>(existingKeywords);
 
-                System.out.println("🔑 Processing " + keywordsToProcess.size() + " keywords for '" + place.getName() + "': " + String.join(", ", keywordsToProcess));
+                System.out.println("🧮 Vectorizing '" + place.getName() + "' — " + keywordsToProcess.size() + " keywords");
 
                 // Delete existing embeddings for this place (if re-processing)
                 embeddingSaveService.deleteEmbeddingsForPlace(place.getId());
 
-                // Call embedding service to get individual embeddings for each keyword
-                System.out.println("🚀 Calling embedding service for place_id=" + place.getId() + " with " + keywordsToProcess.size() + " keywords");
-                EmbeddingResponse response = embeddingClient.getEmbeddings(keywordsToProcess);
-
-                // Validate response
-                if (!response.hasValidEmbeddings()) {
-                    System.err.println("⚠️ No valid embeddings returned for '" + place.getName() + "' - skipping");
-                    return null;
+                // === LOOKUP CACHE: check which keywords already have embeddings ===
+                List<KeywordEmbeddingLookup> cached = lookupRepository.findByKeywordIn(keywordsToProcess);
+                Map<String, float[]> cachedMap = new HashMap<>();
+                for (KeywordEmbeddingLookup lookup : cached) {
+                    cachedMap.put(lookup.getKeyword(), lookup.getEmbeddingAsArray());
                 }
 
-                List<float[]> embeddings = response.getEmbeddingsAsFloatArrays();
-                System.out.println("✅ Received " + embeddings.size() + " embeddings for '" + place.getName() + "'");
+                // Find keywords that need new embedding
+                List<String> uncachedKeywords = keywordsToProcess.stream()
+                    .filter(kw -> !cachedMap.containsKey(kw))
+                    .collect(Collectors.toList());
 
-                if (embeddings.size() != keywordsToProcess.size()) {
-                    System.err.println("⚠️ Embedding count mismatch for '" + place.getName() + "': expected " + keywordsToProcess.size() + ", got " + embeddings.size());
-                    // Continue with available embeddings
-                }
+                int cacheHits = cachedMap.size();
+                int cacheMisses = uncachedKeywords.size();
 
-                // Validate embeddings - check if they're non-empty
-                int validEmbeddings = 0;
-                for (float[] embedding : embeddings) {
-                    boolean isNonZero = false;
-                    for (float v : embedding) {
-                        if (v != 0.0f) {
-                            isNonZero = true;
-                            break;
-                        }
+                // Call OpenAI only for uncached keywords
+                if (!uncachedKeywords.isEmpty()) {
+                    System.out.println("🚀 API call for " + cacheMisses + " new keywords (cache hit: " + cacheHits + ")");
+                    EmbeddingResponse response = embeddingClient.getEmbeddings(uncachedKeywords);
+
+                    if (!response.hasValidEmbeddings()) {
+                        System.err.println("⚠️ No valid embeddings returned for '" + place.getName() + "' - skip");
+                        return null;
                     }
-                    if (isNonZero) validEmbeddings++;
+
+                    List<float[]> newEmbeddings = response.getEmbeddingsAsFloatArrays();
+
+                    // Save new embeddings to lookup cache + merge into cachedMap
+                    for (int i = 0; i < Math.min(uncachedKeywords.size(), newEmbeddings.size()); i++) {
+                        String kw = uncachedKeywords.get(i);
+                        float[] emb = newEmbeddings.get(i);
+
+                        // Validate non-zero
+                        boolean isNonZero = false;
+                        for (float v : emb) {
+                            if (v != 0.0f) { isNonZero = true; break; }
+                        }
+                        if (!isNonZero) continue;
+
+                        // Save to global lookup cache
+                        try {
+                            lookupRepository.save(new KeywordEmbeddingLookup(kw, emb));
+                        } catch (Exception e) {
+                            // Unique constraint violation = another thread saved it first, OK
+                        }
+                        cachedMap.put(kw, emb);
+                    }
+                } else {
+                    System.out.println("✅ All " + cacheHits + " keywords from cache — no API call needed");
                 }
 
-                if (validEmbeddings == 0) {
-                    System.err.println("⚠️ All embeddings are zero vectors for '" + place.getName() + "' - embedding service may have failed");
+                // Build final keyword-embedding pairs and save to place_keyword_embeddings
+                List<String> finalKeywords = new ArrayList<>();
+                List<float[]> finalEmbeddings = new ArrayList<>();
+                for (String kw : keywordsToProcess) {
+                    float[] emb = cachedMap.get(kw);
+                    if (emb != null) {
+                        finalKeywords.add(kw);
+                        finalEmbeddings.add(emb);
+                    }
+                }
+
+                if (finalEmbeddings.isEmpty()) {
+                    System.err.println("⚠️ No valid embeddings for '" + place.getName() + "' after lookup");
                     return null;
                 }
 
-                // Save embeddings using service with new transaction
                 int savedCount = embeddingSaveService.saveEmbeddings(
-                    place.getId(),
-                    keywordsToProcess,
-                    embeddings
+                    place.getId(), finalKeywords, finalEmbeddings
                 );
 
-                System.out.println("💾 Saved " + savedCount + " embeddings for place_id=" + place.getId());
-
-                // Mark place as embed_status=COMPLETED after successful vectorization
                 place.setEmbedStatus(EmbedStatus.COMPLETED);
 
-                // ✅ Success logging
-                System.out.println("✅ Successfully vectorized '" + place.getName() + "' - " +
-                    "Keywords: " + String.join(", ", keywordsToProcess) + ", " +
-                    "Vector dimension: 1792, " +
-                    "Saved " + savedCount + " embeddings, " +
-                    "embed_status=COMPLETED");
+                System.out.println("✅ Vectorized '" + place.getName() + "' — " +
+                    savedCount + " embeddings (cache:" + cacheHits + " api:" + cacheMisses + ")");
 
                 return place;
             } catch (Exception e) {
-                System.err.println("❌ Vectorization failed for '" + place.getName() + "' due to error: " + e.getMessage());
+                System.err.println("❌ Vectorization failed for '" + place.getName() + "': " + e.getMessage());
                 e.printStackTrace();
-                // Keep crawl_status=COMPLETED, embed_status=PENDING
-                placeRepository.save(place);
                 return null;
             }
         };
@@ -171,12 +192,10 @@ public class VectorEmbeddingJobConfig {
     @Bean
     public ItemWriter<Place> vectorEmbeddingWriter() {
         return chunk -> {
-            // Save places individually and flush after each to avoid Hibernate session conflicts
             for (Place place : chunk.getItems()) {
                 placeRepository.saveAndFlush(place);
             }
-            // Log batch write success
-            System.out.println("💾 Saved batch of " + chunk.getItems().size() + " vectorized places to database");
+            System.out.println("💾 Saved batch of " + chunk.getItems().size() + " vectorized places");
         };
     }
 }

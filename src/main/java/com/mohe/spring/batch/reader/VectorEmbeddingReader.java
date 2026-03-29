@@ -2,6 +2,7 @@ package com.mohe.spring.batch.reader;
 
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.repository.PlaceRepository;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,8 +20,12 @@ import java.util.List;
  * 1. Load Place IDs page-by-page
  * 2. Fetch individual Place entities with collections
  *
- * Conditions: crawler_found = true, ready = false, mohe_description IS NOT NULL
+ * Conditions: crawl_status = COMPLETED, embed_status = PENDING, mohe_description IS NOT NULL
+ *
+ * @StepScope ensures a fresh instance is created for each Step execution,
+ * preventing stale state (initialized, hasMorePages, etc.) across Job runs.
  */
+@StepScope
 @Component
 public class VectorEmbeddingReader implements ItemReader<Place> {
 

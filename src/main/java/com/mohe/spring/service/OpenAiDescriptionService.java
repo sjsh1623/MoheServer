@@ -22,15 +22,18 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Handles GPT-4.1-mini calls for batch description generation using prompt caching.
+ * Handles OpenAI calls for batch description generation using prompt caching.
+ * Model is configurable via OPENAI_MODEL environment variable (default: gpt-5-mini).
  */
 @Service
 public class OpenAiDescriptionService {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiDescriptionService.class);
 
-    private static final String MODEL = "gpt-4.1-mini";
-    private static final String PROMPT_CACHE_KEY = "description.v1.1";
+    @Value("${OPENAI_MODEL:gpt-5-mini}")
+    private String model;
+
+    private static final String PROMPT_CACHE_KEY = "description.v2.0";
     private static final String PROMPT_TEMPLATE = """
         당신은 여행지와 공간을 자연스럽고 친근하게 소개하는 작가이자 콘텐츠 생성 AI입니다.
         입력은 JSON 형식으로 제공됩니다:
@@ -149,7 +152,7 @@ public class OpenAiDescriptionService {
     private DescriptionResult executeRequest(DescriptionPayload payload) {
         try {
             Map<String, Object> requestBody = new LinkedHashMap<>();
-            requestBody.put("model", MODEL);
+            requestBody.put("model", model);
             requestBody.put("messages", buildMessages(payload));
             requestBody.put("response_format", buildResponseFormat());
             requestBody.put("temperature", 0.7);

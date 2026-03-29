@@ -24,6 +24,11 @@ mohe:
   image-processor:
     url: ${IMAGE_PROCESSOR_URL:http://100.99.236.50:5200}
 
+api:
+  naver:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+
 crawler:
   base-url: ${CRAWLER_SERVER_URL:http://localhost:4000}
 
@@ -40,6 +45,15 @@ oauth:
     client-secret: ${OAUTH_GOOGLE_CLIENT_SECRET:}
 
 batch:
+  scheduler:
+    enabled: ${BATCH_SCHEDULER_ENABLED:true}
+    crawl-interval-ms: ${BATCH_SCHEDULER_CRAWL_INTERVAL_MS:1800000}
+    embed-interval-ms: ${BATCH_SCHEDULER_EMBED_INTERVAL_MS:2700000}
+    image-interval-ms: ${BATCH_SCHEDULER_IMAGE_INTERVAL_MS:3600000}
+  async:
+    core-pool-size: ${BATCH_ASYNC_CORE_POOL_SIZE:2}
+    max-pool-size: ${BATCH_ASYNC_MAX_POOL_SIZE:3}
+    queue-capacity: ${BATCH_ASYNC_QUEUE_CAPACITY:50}
   service:
     url: ${BATCH_SERVICE_URL:http://mohe-batch:8081}
   collector:

@@ -258,6 +258,27 @@ public class AdminMonitorController {
         return ResponseEntity.ok(ApiResponse.success(currentJobs));
     }
 
+    @GetMapping("/pipeline/stats")
+    @Operation(summary = "Get full pipeline statistics", description = "Returns comprehensive pipeline stats: places, crawling, AI, embedding, images, reviews")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getPipelineStats() {
+        Map<String, Object> stats = adminMonitorService.getPipelineStats();
+        return ResponseEntity.ok(ApiResponse.success(stats));
+    }
+
+    @GetMapping("/pipeline/recent-activity")
+    @Operation(summary = "Get recent pipeline activity", description = "Returns hourly place creation counts for the last 24 hours")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getRecentActivity() {
+        List<Map<String, Object>> activity = adminMonitorService.getRecentActivity();
+        return ResponseEntity.ok(ApiResponse.success(activity));
+    }
+
+    @PostMapping("/pipeline/jobs/{jobName}/trigger")
+    @Operation(summary = "Manually trigger a batch job", description = "Triggers updateCrawledDataJob, vectorEmbeddingJob, or imageUpdateJob")
+    public ResponseEntity<ApiResponse<Map<String, String>>> triggerJob(@PathVariable String jobName) {
+        String result = adminMonitorService.triggerJob(jobName);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("message", result)));
+    }
+
     /**
      * 지역 크롤링 현황 지도 데이터 (Phase 5)
      * batch_collector의 queue-monitoring을 프록시
