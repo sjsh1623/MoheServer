@@ -385,4 +385,45 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("status") String status,
         Pageable pageable
     );
+
+    /**
+     * Find nearby places filtered by category keywords (exact match on unnested array)
+     * Much faster than fetching all then filtering in Java
+     */
+    @Query(value = """
+        SELECT p.* FROM places p
+        WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+        AND p.embed_status = 'COMPLETED'
+        AND (p.rating >= 3.0 OR p.rating IS NULL)
+        AND EXISTS (
+            SELECT 1 FROM unnest(p.category) AS cat
+            WHERE LOWER(cat) = ANY(CAST(:keywords AS TEXT[]))
+        )
+        AND (
+            6371 * acos(
+                LEAST(1.0, GREATEST(-1.0,
+                    cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
+                    cos(radians(CAST(p.longitude AS DOUBLE PRECISION)) - radians(:longitude)) +
+                    sin(radians(:latitude)) * sin(radians(CAST(p.latitude AS DOUBLE PRECISION)))
+                ))
+            )
+        ) <= :distance
+        ORDER BY (
+            6371 * acos(
+                LEAST(1.0, GREATEST(-1.0,
+                    cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
+                    cos(radians(CAST(p.longitude AS DOUBLE PRECISION)) - radians(:longitude)) +
+                    sin(radians(:latitude)) * sin(radians(CAST(p.latitude AS DOUBLE PRECISION)))
+                ))
+            )
+        ) ASC
+        LIMIT :limit
+    """, nativeQuery = true)
+    List<Place> findNearbyPlacesByCategory(
+        @Param("latitude") Double latitude,
+        @Param("longitude") Double longitude,
+        @Param("distance") Double distance,
+        @Param("keywords") String[] keywords,
+        @Param("limit") int limit
+    );
 }

@@ -5,6 +5,7 @@ import com.mohe.spring.dto.PlaceDto;
 import com.mohe.spring.dto.SuggestedCategoriesResponse;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.enums.PlaceCategory;
+import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.service.CategoryRecommendationService;
 import com.mohe.spring.service.PlaceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -31,12 +33,15 @@ public class CategoryController {
 
     private final CategoryRecommendationService categoryRecommendationService;
     private final PlaceService placeService;
+    private final PlaceRepository placeRepository;
 
     public CategoryController(
             CategoryRecommendationService categoryRecommendationService,
-            PlaceService placeService) {
+            PlaceService placeService,
+            PlaceRepository placeRepository) {
         this.categoryRecommendationService = categoryRecommendationService;
         this.placeService = placeService;
+        this.placeRepository = placeRepository;
     }
 
     /**
@@ -132,21 +137,20 @@ public class CategoryController {
             logger.info("Fetching places for category={}, lat={}, lon={}, limit={}",
                     category, lat, lon, limit);
 
-            // 2. 거리 가중 장소 목록 가져오기
-            int fetchLimit = Math.max(limit * 3, 60); // 필터링 여유분 확보
-            List<Place> locationWeightedPlaces = placeService.getLocationWeightedPlaces(
-                    lat, lon, fetchLimit
-            );
+            // 2. SQL에서 카테고리 + 거리 필터를 한번에 처리 (정확 매칭, Java 후필터 없음)
+            String[] keywords = placeCategory.getKeywords().stream()
+                    .map(String::toLowerCase)
+                    .toArray(String[]::new);
 
-            // 3. 카테고리로 필터링
-            List<Place> filteredPlaces = filterByCategory(locationWeightedPlaces, placeCategory);
+            List<Place> limitedPlaces = new ArrayList<>();
+            for (double distance : new double[]{10.0, 20.0, 50.0}) {
+                limitedPlaces = placeRepository.findNearbyPlacesByCategory(
+                        lat, lon, distance, keywords, limit
+                );
+                if (limitedPlaces.size() >= Math.min(limit, 5)) break;
+            }
 
-            // 4. limit 만큼 자르기
-            List<Place> limitedPlaces = filteredPlaces.stream()
-                    .limit(limit)
-                    .collect(Collectors.toList());
-
-            // 5. DTO 변환
+            // 3. DTO 변환
             List<PlaceDto.PlaceResponse> placeResponses = limitedPlaces.stream()
                     .map(place -> convertToPlaceResponse(place, lat, lon))
                     .collect(Collectors.toList());
@@ -212,10 +216,21 @@ public class CategoryController {
         List<String> imageUrls = placeService.getImageUrls(place.getId());
         String primaryImageUrl = imageUrls.isEmpty() ? null : imageUrls.get(0);
 
-        // 카테고리 문자열 생성
-        String categoryString = place.getCategory() != null && !place.getCategory().isEmpty()
-            ? place.getCategory().get(0)
-            : null;
+        // 카테고리 문자열 — "음식점" 같은 상위 카테고리 대신 구체적인 카테고리 우선
+        String categoryString = null;
+        if (place.getCategory() != null && !place.getCategory().isEmpty()) {
+            List<String> cats = place.getCategory();
+            // "음식점", "restaurant" 같은 범용 카테고리 건너뛰고 구체적인 것 선택
+            for (String cat : cats) {
+                String lower = cat.toLowerCase();
+                if (!lower.equals("음식점") && !lower.equals("restaurant") &&
+                    !lower.equals("cafe") && !lower.equals("food")) {
+                    categoryString = cat;
+                    break;
+                }
+            }
+            if (categoryString == null) categoryString = cats.get(0);
+        }
 
         // PlaceResponse 생성자로 객체 생성
         PlaceDto.PlaceResponse response = new PlaceDto.PlaceResponse(
