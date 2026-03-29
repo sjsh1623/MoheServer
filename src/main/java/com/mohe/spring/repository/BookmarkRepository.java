@@ -71,4 +71,35 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, Long> {
         ORDER BY COUNT(b) DESC, p.rating DESC
     """)
     List<Place> findMostBookmarkedPlaces(Pageable pageable);
+
+    /**
+     * Find popular places among users with the same MBTI type, within distance
+     */
+    @Query(value = """
+        SELECT p.* FROM places p
+        JOIN bookmarks b ON b.place_id = p.id
+        JOIN users u ON b.user_id = u.id
+        WHERE u.mbti = :mbti
+        AND p.embed_status = 'COMPLETED'
+        AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+        AND (
+            6371 * acos(
+                LEAST(1.0, GREATEST(-1.0,
+                    cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
+                    cos(radians(CAST(p.longitude AS DOUBLE PRECISION)) - radians(:longitude)) +
+                    sin(radians(:latitude)) * sin(radians(CAST(p.latitude AS DOUBLE PRECISION)))
+                ))
+            )
+        ) <= :distance
+        GROUP BY p.id
+        ORDER BY COUNT(b.id) DESC, p.rating DESC NULLS LAST
+        LIMIT :lim
+    """, nativeQuery = true)
+    List<Place> findPopularPlacesByMbti(
+        @Param("mbti") String mbti,
+        @Param("latitude") Double latitude,
+        @Param("longitude") Double longitude,
+        @Param("distance") Double distance,
+        @Param("lim") int limit
+    );
 }

@@ -397,7 +397,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         AND (p.rating >= 3.0 OR p.rating IS NULL)
         AND EXISTS (
             SELECT 1 FROM unnest(p.category) AS cat
-            WHERE LOWER(cat) = ANY(CAST(:keywords AS TEXT[]))
+            WHERE LOWER(cat) = ANY(STRING_TO_ARRAY(:keywords, ','))
         )
         AND (
             6371 * acos(
@@ -423,7 +423,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("latitude") Double latitude,
         @Param("longitude") Double longitude,
         @Param("distance") Double distance,
-        @Param("keywords") String[] keywords,
+        @Param("keywords") String keywords,
         @Param("limit") int limit
     );
 }

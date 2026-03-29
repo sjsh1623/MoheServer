@@ -18,7 +18,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -89,6 +91,28 @@ public class CategoryController {
     }
 
     /**
+     * API: 홈 화면 카테고리 + 장소 통합 API
+     * 첫 줄: MBTI 기반 (로그인 시), 나머지: 시간+날씨 기반
+     */
+    @GetMapping("/home")
+    @Operation(summary = "홈 카테고리 조회", description = "MBTI(첫줄) + 시간/날씨 기반 카테고리 추천")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getHomeCategories(
+            @RequestParam("lat") Double lat,
+            @RequestParam("lon") Double lon,
+            @RequestParam(required = false) String mbti,
+            @RequestParam(defaultValue = "10") int placesPerCategory) {
+        try {
+            Map<String, Object> result = categoryRecommendationService.getHomeData(
+                    lat, lon, mbti, placesPerCategory);
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            logger.error("Failed to get home categories", e);
+            return ResponseEntity.status(500).body(
+                    ApiResponse.error("HOME_CATEGORY_ERROR", e.getMessage()));
+        }
+    }
+
+    /**
      * API 2: 카테고리별 장소 조회
      *
      * GET /api/categories/{category}/places?latitude={lat}&longitude={lon}&limit={limit}
@@ -138,9 +162,9 @@ public class CategoryController {
                     category, lat, lon, limit);
 
             // 2. SQL에서 카테고리 + 거리 필터를 한번에 처리 (정확 매칭, Java 후필터 없음)
-            String[] keywords = placeCategory.getKeywords().stream()
+            String keywords = placeCategory.getKeywords().stream()
                     .map(String::toLowerCase)
-                    .toArray(String[]::new);
+                    .collect(Collectors.joining(","));
 
             List<Place> limitedPlaces = new ArrayList<>();
             for (double distance : new double[]{10.0, 20.0, 50.0}) {
