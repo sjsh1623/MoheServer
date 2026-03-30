@@ -52,7 +52,8 @@ public class AdminMonitorService {
             JobExplorer jobExplorer,
             @Qualifier("updateCrawledDataJob") Job updateCrawledDataJob,
             @Qualifier("vectorEmbeddingJob") Job vectorEmbeddingJob,
-            @Qualifier("imageUpdateJob") Job imageUpdateJob
+            @Qualifier("imageUpdateJob") Job imageUpdateJob,
+            @Qualifier("descriptionOnlyJob") Job descriptionOnlyJob
     ) {
         this.placeRepository = placeRepository;
         this.embeddingRepository = embeddingRepository;
@@ -65,7 +66,8 @@ public class AdminMonitorService {
         this.jobMap = Map.of(
             "updateCrawledDataJob", updateCrawledDataJob,
             "vectorEmbeddingJob", vectorEmbeddingJob,
-            "imageUpdateJob", imageUpdateJob
+            "imageUpdateJob", imageUpdateJob,
+            "descriptionOnlyJob", descriptionOnlyJob
         );
     }
 
