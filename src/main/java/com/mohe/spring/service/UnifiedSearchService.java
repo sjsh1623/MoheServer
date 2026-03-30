@@ -139,58 +139,68 @@ public class UnifiedSearchService {
      * 2. 5km부터 장소 풀 확보 (5km씩 확장)
      * 3. 그 풀 안에서 벡터 유사도 순 정렬
      */
+    private static final double MIN_SIMILARITY = 0.25; // 유사도 임계값 — 이 이하는 관련 없는 결과
+
     private List<Place> searchNearbyByRelevance(String query, String rawQuery, Double lat, Double lon, int limit) {
-        // 5km부터 근처 장소 확보 → 그 안에서 벡터 유사도로 정렬
-        for (double radius : new double[]{5.0, 10.0, 15.0, 20.0, 30.0, 50.0}) {
-            // 1. 근처 장소 ID 가져오기 (거리순, 임베딩 있는 것만)
-            List<Place> nearbyPlaces = placeRepository.findNearbyPlacesForLLM(lat, lon, radius, limit * 5);
-            if (nearbyPlaces.size() < Math.min(limit, 3)) continue;
+        // 사용자 질의 임베딩
+        float[] queryVector = null;
+        String vectorString = null;
+        try {
+            queryVector = embeddingClient.getEmbedding(query);
+            if (!isZeroVector(queryVector)) vectorString = vectorToString(queryVector);
+        } catch (Exception e) {
+            System.err.println("Query embedding failed: " + e.getMessage());
+        }
 
-            // 2. 벡터 유사도로 재정렬
-            try {
-                float[] queryVector = embeddingClient.getEmbedding(query);
-                if (!isZeroVector(queryVector)) {
-                    String vectorString = vectorToString(queryVector);
-
-                    // 근처 장소 중 문장 임베딩 있는 ID만 추출
-                    List<Long> nearbyIds = nearbyPlaces.stream().map(Place::getId).collect(Collectors.toList());
-
-                    // SQL로 유사도 검색 (거리 필터 포함)
+        // 1km부터 확장하며 근처 장소에서 벡터 유사도 검색
+        for (double radius = 1.0; radius <= 50.0; radius += (radius < 5 ? 1.0 : radius < 15 ? 2.0 : 5.0)) {
+            if (vectorString != null) {
+                try {
+                    // SQL: 거리 필터 + 벡터 유사도 정렬 (한번에)
                     List<Object[]> simResults = descEmbeddingRepository.findSimilarPlacesByPrompt(
                         vectorString, lat, lon, radius, limit * 3);
 
                     if (!simResults.isEmpty()) {
-                        List<Long> simIds = simResults.stream()
-                            .map(row -> ((Number) row[0]).longValue())
-                            .distinct().collect(Collectors.toList());
+                        // 유사도 임계값 이상만 필터
+                        List<Object[]> filtered = simResults.stream()
+                            .filter(row -> {
+                                double sim = row[row.length - 1] != null ? ((Number) row[row.length - 1]).doubleValue() : 0;
+                                return sim >= MIN_SIMILARITY;
+                            })
+                            .collect(Collectors.toList());
 
-                        Map<Long, Place> map = nearbyPlaces.stream()
-                            .collect(Collectors.toMap(Place::getId, p -> p, (a, b) -> a));
+                        if (!filtered.isEmpty()) {
+                            List<Long> ids = filtered.stream()
+                                .map(row -> ((Number) row[0]).longValue())
+                                .distinct().limit(limit * 2).collect(Collectors.toList());
 
-                        List<Place> result = simIds.stream()
-                            .filter(map::containsKey).map(map::get)
-                            .limit(limit * 2).collect(Collectors.toList());
+                            List<Place> places = placeRepository.findAllById(ids);
+                            Map<Long, Place> map = places.stream()
+                                .collect(Collectors.toMap(Place::getId, p -> p, (a, b) -> a));
 
-                        if (result.size() > limit) {
-                            Collections.shuffle(result);
-                            result = result.subList(0, limit);
+                            List<Place> result = ids.stream()
+                                .filter(map::containsKey).map(map::get).collect(Collectors.toList());
+
+                            // 랜덤성
+                            if (result.size() > limit) {
+                                List<Place> pool = new ArrayList<>(result.subList(0, Math.min(result.size(), limit * 2)));
+                                Collections.shuffle(pool);
+                                result = pool.subList(0, Math.min(pool.size(), limit));
+                            }
+                            return result;
                         }
-
-                        if (result.size() >= Math.min(limit, 2)) return result;
                     }
+                } catch (Exception e) {
+                    System.err.println("Vector search at " + radius + "km failed: " + e.getMessage());
                 }
-            } catch (Exception e) {
-                System.err.println("Vector rerank failed: " + e.getMessage());
             }
 
-            // 벡터 실패 시 거리순 반환
-            List<Place> fallback = new ArrayList<>(nearbyPlaces.subList(0, Math.min(nearbyPlaces.size(), limit * 2)));
-            Collections.shuffle(fallback);
-            return fallback.subList(0, Math.min(fallback.size(), limit));
+            // 벡터 없으면 LIKE 검색으로 fallback (5km 이상부터)
+            if (vectorString == null && radius >= 5.0) break;
         }
 
-        // 최후 fallback
-        List<Long> kwIds = searchByKeyword(rawQuery, limit * 2);
+        // fallback: 키워드 LIKE 검색 + 거리 필터
+        List<Long> kwIds = searchByKeyword(rawQuery, limit * 3);
         return filterAndSortByLocation(kwIds, lat, lon, limit);
     }
 
