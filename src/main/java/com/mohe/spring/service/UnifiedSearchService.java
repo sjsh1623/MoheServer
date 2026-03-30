@@ -5,6 +5,7 @@ import com.mohe.spring.dto.UnifiedSearchResponse;
 import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import com.mohe.spring.entity.PlaceKeywordEmbedding;
+import com.mohe.spring.repository.PlaceDescriptionEmbeddingRepository;
 import com.mohe.spring.repository.PlaceKeywordEmbeddingRepository;
 import com.mohe.spring.repository.PlaceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +33,8 @@ public class UnifiedSearchService {
 
     private final PlaceRepository placeRepository;
     private final PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository;
+    private final PlaceDescriptionEmbeddingRepository descEmbeddingRepository;
+    private final EmbeddingClient embeddingClient;
     private final KeywordEmbeddingService keywordEmbeddingService;
     private final PlaceService placeService;
     private final OpenAiService openAiService;
@@ -39,11 +42,15 @@ public class UnifiedSearchService {
     @Autowired
     public UnifiedSearchService(PlaceRepository placeRepository,
                                 PlaceKeywordEmbeddingRepository placeKeywordEmbeddingRepository,
+                                PlaceDescriptionEmbeddingRepository descEmbeddingRepository,
+                                EmbeddingClient embeddingClient,
                                 KeywordEmbeddingService keywordEmbeddingService,
                                 PlaceService placeService,
                                 @Autowired(required = false) OpenAiService openAiService) {
         this.placeRepository = placeRepository;
         this.placeKeywordEmbeddingRepository = placeKeywordEmbeddingRepository;
+        this.descEmbeddingRepository = descEmbeddingRepository;
+        this.embeddingClient = embeddingClient;
         this.keywordEmbeddingService = keywordEmbeddingService;
         this.placeService = placeService;
         this.openAiService = openAiService;
@@ -86,14 +93,21 @@ public class UnifiedSearchService {
             }
         }
 
-        // 1. Kanana Embedding 벡터 검색 (의미론적 검색) - enrichedQuery 사용
-        List<Long> embeddingPlaceIds = searchByEmbedding(enrichedQuery, safeLimit * 3);
+        // 1. 문장 벡터 검색 (프롬프트형 질의에 최적) - enrichedQuery 사용
+        List<Long> descEmbeddingIds = searchByDescriptionEmbedding(enrichedQuery, safeLimit * 2);
 
-        // 2. 키워드 검색 (장소명, 주소) - 원본 쿼리 사용
-        List<Long> keywordPlaceIds = searchByKeyword(trimmedQuery, safeLimit * 2);
+        // 2. 키워드 벡터 검색 (카테고리형 질의) - enrichedQuery 사용
+        List<Long> kwEmbeddingIds = searchByEmbedding(enrichedQuery, safeLimit * 2);
 
-        // 3. 결과 병합 (Embedding 결과 우선, 키워드 결과 보조)
-        List<Long> mergedPlaceIds = mergeResults(embeddingPlaceIds, keywordPlaceIds, safeLimit * 2);
+        // 3. 키워드 LIKE 검색 (장소명, 주소) - 원본 쿼리 사용
+        List<Long> keywordPlaceIds = searchByKeyword(trimmedQuery, safeLimit);
+
+        // 4. 결과 병합 (문장 벡터 > 키워드 벡터 > LIKE 순)
+        LinkedHashSet<Long> merged = new LinkedHashSet<>();
+        merged.addAll(descEmbeddingIds);
+        merged.addAll(kwEmbeddingIds);
+        merged.addAll(keywordPlaceIds);
+        List<Long> mergedPlaceIds = merged.stream().limit(safeLimit * 2).collect(Collectors.toList());
 
         // 4. 위치 기반 필터링 및 정렬 (선택)
         List<Place> places;
@@ -110,7 +124,8 @@ public class UnifiedSearchService {
 
         long searchTime = System.currentTimeMillis() - startTime;
 
-        String searchType = determineSearchType(embeddingPlaceIds, keywordPlaceIds);
+        String searchType = !descEmbeddingIds.isEmpty() ? "semantic" :
+                            !kwEmbeddingIds.isEmpty() ? "hybrid" : "keyword";
         if (openAiService != null && category != null) {
             searchType = "ai-" + searchType;
         }
@@ -126,7 +141,29 @@ public class UnifiedSearchService {
     }
 
     /**
-     * Embedding 벡터 검색 - 의미론적 유사도 기반
+     * 문장 임베딩 벡터 검색 - 프롬프트형 질의에 최적
+     * place_description_embeddings의 mohe_description 문장과 cosine 유사도
+     */
+    private List<Long> searchByDescriptionEmbedding(String query, int limit) {
+        try {
+            float[] queryVector = embeddingClient.getEmbedding(query);
+            if (isZeroVector(queryVector)) return List.of();
+
+            String vectorString = vectorToString(queryVector);
+            List<Object[]> results = descEmbeddingRepository.findSimilarPlaces(vectorString, limit);
+
+            return results.stream()
+                .map(row -> ((Number) row[0]).longValue())
+                .distinct()
+                .collect(Collectors.toList());
+        } catch (Exception e) {
+            System.err.println("Description embedding search failed: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 키워드 Embedding 벡터 검색 - 카테고리형 유사도 기반
      */
     private List<Long> searchByEmbedding(String query, int limit) {
         try {
