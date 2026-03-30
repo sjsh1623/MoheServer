@@ -92,6 +92,7 @@ public class SecurityConfig {
                     "/api/mock/**",
                     "/api/images/**",
                     "/api/categories/**",
+                    "/api/search/**",
                     "/image/**",
                     "/images/**",
                     "/health",

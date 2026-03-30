@@ -4,7 +4,9 @@ import com.mohe.spring.batch.reader.VectorEmbeddingReader;
 import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.KeywordEmbeddingLookup;
 import com.mohe.spring.entity.Place;
+import com.mohe.spring.entity.PlaceDescriptionEmbedding;
 import com.mohe.spring.repository.KeywordEmbeddingLookupRepository;
+import com.mohe.spring.repository.PlaceDescriptionEmbeddingRepository;
 import com.mohe.spring.repository.PlaceRepository;
 import com.mohe.spring.service.EmbeddingClient;
 import com.mohe.spring.service.KeywordEmbeddingSaveService;
@@ -33,17 +35,20 @@ public class VectorEmbeddingJobConfig {
     private final PlaceRepository placeRepository;
     private final KeywordEmbeddingSaveService embeddingSaveService;
     private final KeywordEmbeddingLookupRepository lookupRepository;
+    private final PlaceDescriptionEmbeddingRepository descEmbeddingRepository;
 
     public VectorEmbeddingJobConfig(
         EmbeddingClient embeddingClient,
         PlaceRepository placeRepository,
         KeywordEmbeddingSaveService embeddingSaveService,
-        KeywordEmbeddingLookupRepository lookupRepository
+        KeywordEmbeddingLookupRepository lookupRepository,
+        PlaceDescriptionEmbeddingRepository descEmbeddingRepository
     ) {
         this.embeddingClient = embeddingClient;
         this.placeRepository = placeRepository;
         this.embeddingSaveService = embeddingSaveService;
         this.lookupRepository = lookupRepository;
+        this.descEmbeddingRepository = descEmbeddingRepository;
     }
 
     @Bean
@@ -119,39 +124,52 @@ public class VectorEmbeddingJobConfig {
                 int cacheHits = cachedMap.size();
                 int cacheMisses = uncachedKeywords.size();
 
-                // Call OpenAI only for uncached keywords
-                if (!uncachedKeywords.isEmpty()) {
-                    System.out.println("🚀 API call for " + cacheMisses + " new keywords (cache hit: " + cacheHits + ")");
-                    EmbeddingResponse response = embeddingClient.getEmbeddings(uncachedKeywords);
+                // === 문장 임베딩 필요 여부 체크 ===
+                boolean needDescEmbedding = !descEmbeddingRepository.existsByPlaceId(place.getId());
+                float[] descriptionEmbedding = null;
+
+                // API 호출: 캐시 미스 키워드 + 문장(필요시)을 한번에
+                if (!uncachedKeywords.isEmpty() || needDescEmbedding) {
+                    List<String> textsToEmbed = new ArrayList<>(uncachedKeywords);
+                    if (needDescEmbedding) {
+                        textsToEmbed.add(moheDescription); // 문장을 마지막에 추가
+                    }
+
+                    System.out.println("🚀 API call: " + uncachedKeywords.size() + " keywords + " +
+                        (needDescEmbedding ? "1 description" : "0 description") +
+                        " (cache hit: " + cacheHits + ")");
+
+                    EmbeddingResponse response = embeddingClient.getEmbeddings(textsToEmbed);
 
                     if (!response.hasValidEmbeddings()) {
                         System.err.println("⚠️ No valid embeddings returned for '" + place.getName() + "' - skip");
                         return null;
                     }
 
-                    List<float[]> newEmbeddings = response.getEmbeddingsAsFloatArrays();
+                    List<float[]> allEmbeddings = response.getEmbeddingsAsFloatArrays();
 
-                    // Save new embeddings to lookup cache + merge into cachedMap
-                    for (int i = 0; i < Math.min(uncachedKeywords.size(), newEmbeddings.size()); i++) {
+                    // 문장 임베딩 분리 (마지막 요소)
+                    if (needDescEmbedding && allEmbeddings.size() == textsToEmbed.size()) {
+                        descriptionEmbedding = allEmbeddings.get(allEmbeddings.size() - 1);
+                    }
+
+                    // 키워드 임베딩 처리 (문장 제외)
+                    int keywordEmbCount = Math.min(uncachedKeywords.size(), allEmbeddings.size());
+                    for (int i = 0; i < keywordEmbCount; i++) {
                         String kw = uncachedKeywords.get(i);
-                        float[] emb = newEmbeddings.get(i);
+                        float[] emb = allEmbeddings.get(i);
 
-                        // Validate non-zero
                         boolean isNonZero = false;
                         for (float v : emb) {
                             if (v != 0.0f) { isNonZero = true; break; }
                         }
                         if (!isNonZero) continue;
 
-                        // Save to global lookup cache (check first to avoid session corruption)
                         if (lookupRepository.findByKeyword(kw).isEmpty()) {
                             try {
                                 lookupRepository.saveAndFlush(new KeywordEmbeddingLookup(kw, emb));
                             } catch (Exception e) {
-                                // Race condition: another thread saved it. Clear persistence context.
-                                try {
-                                    lookupRepository.flush();
-                                } catch (Exception ignored) {}
+                                try { lookupRepository.flush(); } catch (Exception ignored) {}
                             }
                         }
                         cachedMap.put(kw, emb);
@@ -180,10 +198,25 @@ public class VectorEmbeddingJobConfig {
                     place.getId(), finalKeywords, finalEmbeddings
                 );
 
+                // === 문장 임베딩 저장 ===
+                if (descriptionEmbedding != null) {
+                    try {
+                        descEmbeddingRepository.deleteByPlaceId(place.getId());
+                        descEmbeddingRepository.saveAndFlush(
+                            new PlaceDescriptionEmbedding(place.getId(), moheDescription, descriptionEmbedding)
+                        );
+                    } catch (Exception e) {
+                        System.err.println("⚠️ Failed to save description embedding for '" + place.getName() + "': " + e.getMessage());
+                    }
+                } else if (!needDescEmbedding) {
+                    // 이미 문장 임베딩 있음 — skip
+                }
+
                 place.setEmbedStatus(EmbedStatus.COMPLETED);
 
                 System.out.println("✅ Vectorized '" + place.getName() + "' — " +
-                    savedCount + " embeddings (cache:" + cacheHits + " api:" + cacheMisses + ")");
+                    savedCount + " kw + " + (descriptionEmbedding != null ? "1 desc" : "desc cached") +
+                    " (cache:" + cacheHits + " api:" + cacheMisses + ")");
 
                 return place;
             } catch (Exception e) {
