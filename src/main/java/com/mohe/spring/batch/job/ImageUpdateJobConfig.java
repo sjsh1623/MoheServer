@@ -102,6 +102,9 @@ public class ImageUpdateJobConfig {
     public ItemProcessor<Place, Place> imageUpdateProcessor() {
         return place -> {
             try {
+                // 네이버 차단 방지: 장소당 2초 대기
+                Thread.sleep(2000);
+
                 logger.info("🖼️ Fetching images for place: {} (ID: {})", place.getName(), place.getId());
 
                 // 이미지 API 호출

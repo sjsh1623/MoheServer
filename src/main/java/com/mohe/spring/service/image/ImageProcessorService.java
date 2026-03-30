@@ -69,6 +69,11 @@ public class ImageProcessorService {
         for (int i = 0; i < imageUrls.size(); i++) {
             String imageUrl = imageUrls.get(i);
 
+            // 이미지 간 500ms 딜레이 (네이버 CDN 차단 방지)
+            if (i > 0) {
+                try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+
             // 확장자 추출
             String extension = extractExtensionFromUrl(imageUrl);
 
