@@ -109,12 +109,19 @@ public class UnifiedSearchService {
         merged.addAll(keywordPlaceIds);
         List<Long> mergedPlaceIds = merged.stream().limit(safeLimit * 2).collect(Collectors.toList());
 
-        // 4. 위치 기반 필터링 및 정렬 (선택)
+        // 4. 위치 기반 필터링 + 상위 후보에서 랜덤 셔플 (같은 쿼리에도 다른 결과)
         List<Place> places;
+        int fetchPool = Math.max(safeLimit * 3, 30); // 넉넉히 가져와서 셔플
         if (latitude != null && longitude != null) {
-            places = filterAndSortByLocation(mergedPlaceIds, latitude, longitude, safeLimit);
+            places = filterAndSortByLocation(mergedPlaceIds, latitude, longitude, fetchPool);
         } else {
-            places = fetchPlaces(mergedPlaceIds, safeLimit);
+            places = fetchPlaces(mergedPlaceIds, fetchPool);
+        }
+        // 상위 풀에서 랜덤 셔플 후 limit개 선택
+        if (places.size() > safeLimit) {
+            List<Place> top = new ArrayList<>(places.subList(0, Math.min(places.size(), safeLimit * 2)));
+            Collections.shuffle(top);
+            places = top.subList(0, Math.min(top.size(), safeLimit));
         }
 
         // 5. DTO 변환
@@ -432,14 +439,33 @@ public class UnifiedSearchService {
     /**
      * 검색 메시지 생성 (의도 포함)
      */
+    private static final List<String> FOUND_TEMPLATES = List.of(
+        "'%s'에 딱 맞는 곳을 %d개 찾았어요!",
+        "'%s' 관련 장소 %d곳을 골라봤어요.",
+        "'%s'에 어울리는 곳들이에요!",
+        "%d곳을 찾았어요. '%s' 분위기에 딱이에요!",
+        "'%s' 느낌의 장소를 추천해드려요.",
+        "이런 곳은 어때요? '%s'에 맞는 %d곳이에요."
+    );
+
+    private static final List<String> NOT_FOUND_TEMPLATES = List.of(
+        "'%s'에 맞는 곳을 아직 못 찾았어요. 다른 키워드로 해볼까요?",
+        "'%s' 관련 장소가 주변에 없네요. 조금 다르게 검색해볼까요?",
+        "아쉽지만 '%s' 결과가 없어요. 다른 분위기를 알려주세요!"
+    );
+
+    private final Random messageRandom = new Random();
+
     private String generateSearchMessage(String query, int resultCount, String intent) {
         if (resultCount == 0) {
-            return "'" + query + "'에 대한 검색 결과가 없습니다.";
+            String tmpl = NOT_FOUND_TEMPLATES.get(messageRandom.nextInt(NOT_FOUND_TEMPLATES.size()));
+            return String.format(tmpl, query);
         }
         if (intent != null && !intent.isEmpty() && !intent.equals(query)) {
-            return intent + " - " + resultCount + "개의 장소를 찾았습니다.";
+            return intent + " - " + resultCount + "곳을 찾았어요!";
         }
-        return "'" + query + "' 검색 결과 " + resultCount + "개를 찾았습니다.";
+        String tmpl = FOUND_TEMPLATES.get(messageRandom.nextInt(FOUND_TEMPLATES.size()));
+        return String.format(tmpl, query, resultCount);
     }
 
     /**
