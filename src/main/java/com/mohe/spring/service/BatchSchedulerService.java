@@ -5,8 +5,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -16,24 +19,26 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 /**
  * 평시 자동 크롤링 스케줄러
  *
- * 전체 파이프라인:
- * 1. MoheCrawler 큐 수집     - Kakao API로 장소 기본 데이터 수집 (queue-based)
- * 2. UpdateCrawledDataJob    - 네이버 스크래핑 + OpenAI 요약 생성
- * 3. VectorEmbeddingJob      - 키워드 벡터 임베딩
- * 4. ImageUpdateJob          - 이미지 다운로드 + ready=true 최종화
+ * 좀비 잡 방지:
+ * - 앱 시작 시 STARTED 잡 자동 FAILED 마킹
+ * - 1시간 이상 STARTED 잡 자동 FAILED 마킹
+ * - 앱 종료 시 실행 중 잡 FAILED 마킹
  */
 @Service
 public class BatchSchedulerService {
 
     private static final Logger logger = LoggerFactory.getLogger(BatchSchedulerService.class);
+    private static final long ZOMBIE_THRESHOLD_HOURS = 1; // 1시간 이상 실행 중이면 좀비로 판단
 
     private final JobLauncher asyncJobLauncher;
     private final JobExplorer jobExplorer;
+    private final JobRepository jobRepository;
     private final Job updateCrawledDataJob;
     private final Job vectorEmbeddingJob;
     private final Job imageUpdateJob;
@@ -48,29 +53,39 @@ public class BatchSchedulerService {
     @Value("${batch.collector.url:http://mohe-batch-crawler:4001}")
     private String batchCollectorUrl;
 
+    private static final String[] ALL_JOB_NAMES = {
+        "updateCrawledDataJob", "vectorEmbeddingJob", "imageUpdateJob"
+    };
+
     public BatchSchedulerService(
             JobLauncher asyncJobLauncher,
             JobExplorer jobExplorer,
+            JobRepository jobRepository,
             @Qualifier("updateCrawledDataJob") Job updateCrawledDataJob,
             @Qualifier("vectorEmbeddingJob") Job vectorEmbeddingJob,
             @Qualifier("imageUpdateJob") Job imageUpdateJob) {
         this.asyncJobLauncher = asyncJobLauncher;
         this.jobExplorer = jobExplorer;
+        this.jobRepository = jobRepository;
         this.updateCrawledDataJob = updateCrawledDataJob;
         this.vectorEmbeddingJob = vectorEmbeddingJob;
         this.imageUpdateJob = imageUpdateJob;
     }
 
     /**
-     * 앱 시작 30초 후 MoheCrawler 큐 수집 자동 시작
-     * Kakao API로 pending 지역의 장소 데이터를 수집
+     * 앱 시작 시: 좀비 잡 정리 + 큐 수집 시작
      */
     @PostConstruct
     public void init() {
+        // 1. 좀비 잡 정리 (이전 실행에서 남은 STARTED 잡)
+        cleanupZombieJobs("startup");
+
         if (!schedulerEnabled) return;
+
+        // 2. 큐 수집 시작 (30초 후)
         Thread.ofVirtual().start(() -> {
             try {
-                Thread.sleep(30000); // 30초 대기 (크롤러 준비 시간)
+                Thread.sleep(30000);
                 startQueueCollection();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -79,8 +94,67 @@ public class BatchSchedulerService {
     }
 
     /**
-     * 2시간마다 큐 수집 상태 확인 → 중지되어 있으면 재시작
+     * 앱 종료 시: 실행 중 잡 FAILED 마킹
      */
+    @EventListener(ContextClosedEvent.class)
+    public void onShutdown() {
+        logger.info("🛑 [Scheduler] 앱 종료 - 실행 중 잡 정리");
+        cleanupZombieJobs("shutdown");
+    }
+
+    /**
+     * 좀비 잡 자동 정리
+     * - STARTED 상태인 모든 잡을 FAILED로 변경
+     * - context: "startup" (앱 시작) 또는 "shutdown" (앱 종료) 또는 "periodic" (주기적)
+     */
+    private void cleanupZombieJobs(String context) {
+        int cleaned = 0;
+        for (String jobName : ALL_JOB_NAMES) {
+            try {
+                Set<JobExecution> running = jobExplorer.findRunningJobExecutions(jobName);
+                for (JobExecution execution : running) {
+                    // periodic 정리는 1시간 이상된 잡만
+                    if ("periodic".equals(context)) {
+                        LocalDateTime startTime = execution.getStartTime();
+                        if (startTime != null &&
+                            Duration.between(startTime, LocalDateTime.now()).toHours() < ZOMBIE_THRESHOLD_HOURS) {
+                            continue; // 아직 1시간 안 됨 — 정상 실행 중일 수 있음
+                        }
+                    }
+
+                    execution.setStatus(BatchStatus.FAILED);
+                    execution.setExitStatus(ExitStatus.FAILED.addExitDescription(
+                            "Cleaned up by scheduler (" + context + ")"));
+                    execution.setEndTime(LocalDateTime.now());
+
+                    // Step executions도 정리
+                    for (StepExecution step : execution.getStepExecutions()) {
+                        if (step.getStatus() == BatchStatus.STARTED || step.getStatus() == BatchStatus.STARTING) {
+                            step.setStatus(BatchStatus.FAILED);
+                            step.setExitStatus(ExitStatus.FAILED);
+                            step.setEndTime(LocalDateTime.now());
+                            jobRepository.update(step);
+                        }
+                    }
+
+                    jobRepository.update(execution);
+                    cleaned++;
+                    logger.info("🧹 [Scheduler] 좀비 잡 정리 ({}): {} (executionId={})",
+                            context, jobName, execution.getId());
+                }
+            } catch (Exception e) {
+                logger.warn("⚠️ [Scheduler] 좀비 잡 정리 실패 ({}): {} - {}", context, jobName, e.getMessage());
+            }
+        }
+        if (cleaned > 0) {
+            logger.info("🧹 [Scheduler] 총 {} 좀비 잡 정리 완료 ({})", cleaned, context);
+        }
+    }
+
+    // ============================================
+    // 스케줄러
+    // ============================================
+
     @Scheduled(fixedDelayString = "${batch.scheduler.queue-check-interval-ms:7200000}", initialDelay = 300000)
     public void ensureQueueCollectionRunning() {
         if (!schedulerEnabled) return;
@@ -92,8 +166,6 @@ public class BatchSchedulerService {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             String body = response.body();
 
-            // 큐 수집이 멈춰있으면 재시작
-            // API 응답 형식: {"data":{"batch_running":false,"scheduler_running":false},"success":true}
             if (body.contains("\"batch_running\":false") || body.contains("\"scheduler_running\":false")
                     || body.contains("\"status\":\"idle\"") || body.contains("\"status\":\"completed\"")) {
                 logger.info("🔄 [Scheduler] 큐 수집이 중지 상태 - 재시작");
@@ -104,39 +176,24 @@ public class BatchSchedulerService {
         }
     }
 
-    /**
-     * 30분마다 크롤링 + OpenAI 요약 파이프라인 실행
-     * 미처리 장소(crawl_status=null)를 네이버 스크래핑 → OpenAI 요약 생성
-     */
     @Scheduled(fixedDelayString = "${batch.scheduler.crawl-interval-ms:1800000}", initialDelay = 60000)
     public void scheduleCrawlingJob() {
         if (!schedulerEnabled) return;
         launchJobIfIdle(updateCrawledDataJob, "updateCrawledDataJob");
     }
 
-    /**
-     * 45분마다 벡터 임베딩 실행
-     * 크롤링 완료(crawl_status=COMPLETED, embed_status=PENDING) 장소의 키워드 벡터화
-     */
     @Scheduled(fixedDelayString = "${batch.scheduler.embed-interval-ms:2700000}", initialDelay = 120000)
     public void scheduleEmbeddingJob() {
         if (!schedulerEnabled) return;
         launchJobIfIdle(vectorEmbeddingJob, "vectorEmbeddingJob");
     }
 
-    /**
-     * 60분마다 이미지 업데이트 + 최종화 실행
-     * crawler_found=true, ready=false인 장소의 이미지 다운로드 → ready=true
-     */
     @Scheduled(fixedDelayString = "${batch.scheduler.image-interval-ms:3600000}", initialDelay = 180000)
     public void scheduleImageUpdateJob() {
         if (!schedulerEnabled) return;
         launchJobIfIdle(imageUpdateJob, "imageUpdateJob");
     }
 
-    /**
-     * MoheCrawler 큐 수집 시작 호출
-     */
     private void startQueueCollection() {
         try {
             HttpRequest request = HttpRequest.newBuilder()
@@ -159,13 +216,31 @@ public class BatchSchedulerService {
 
     /**
      * 동일 Job이 이미 실행 중이면 스킵, 아니면 실행
+     * 1시간 이상 STARTED면 좀비로 간주하고 정리 후 새로 실행
      */
     private void launchJobIfIdle(Job job, String jobName) {
         try {
             Set<JobExecution> running = jobExplorer.findRunningJobExecutions(jobName);
+
             if (!running.isEmpty()) {
-                logger.info("⏭️ [Scheduler] {} 이미 실행 중 - 스킵", jobName);
-                return;
+                // 1시간 이상된 좀비 잡 확인
+                boolean hasZombie = false;
+                for (JobExecution exec : running) {
+                    LocalDateTime startTime = exec.getStartTime();
+                    if (startTime != null &&
+                        Duration.between(startTime, LocalDateTime.now()).toHours() >= ZOMBIE_THRESHOLD_HOURS) {
+                        hasZombie = true;
+                        break;
+                    }
+                }
+
+                if (hasZombie) {
+                    logger.warn("🧹 [Scheduler] {} 좀비 잡 감지 (1시간+) - 정리 후 재실행", jobName);
+                    cleanupZombieJobs("periodic");
+                } else {
+                    logger.info("⏭️ [Scheduler] {} 이미 실행 중 - 스킵", jobName);
+                    return;
+                }
             }
 
             JobParameters params = new JobParametersBuilder()
