@@ -93,8 +93,8 @@ public class UnifiedSearchService {
             }
         }
 
-        // 1. 문장 벡터 검색 (프롬프트형 질의에 최적) - enrichedQuery 사용
-        List<Long> descEmbeddingIds = searchByDescriptionEmbedding(enrichedQuery, safeLimit * 2);
+        // 1. 문장 벡터 검색 (프롬프트형 질의에 최적, 위치 필터 포함)
+        List<Long> descEmbeddingIds = searchByDescriptionEmbedding(enrichedQuery, latitude, longitude, safeLimit * 2);
 
         // 2. 키워드 벡터 검색 (카테고리형 질의) - enrichedQuery 사용
         List<Long> kwEmbeddingIds = searchByEmbedding(enrichedQuery, safeLimit * 2);
@@ -151,13 +151,21 @@ public class UnifiedSearchService {
      * 문장 임베딩 벡터 검색 - 프롬프트형 질의에 최적
      * place_description_embeddings의 mohe_description 문장과 cosine 유사도
      */
-    private List<Long> searchByDescriptionEmbedding(String query, int limit) {
+    private List<Long> searchByDescriptionEmbedding(String query, Double latitude, Double longitude, int limit) {
         try {
             float[] queryVector = embeddingClient.getEmbedding(query);
             if (isZeroVector(queryVector)) return List.of();
 
             String vectorString = vectorToString(queryVector);
-            List<Object[]> results = descEmbeddingRepository.findSimilarPlaces(vectorString, limit);
+            List<Object[]> results;
+
+            // 위치가 있으면 거리 필터 포함 검색 (30km)
+            if (latitude != null && longitude != null) {
+                results = descEmbeddingRepository.findSimilarPlacesByPrompt(
+                    vectorString, latitude, longitude, 30.0, limit);
+            } else {
+                results = descEmbeddingRepository.findSimilarPlaces(vectorString, limit);
+            }
 
             return results.stream()
                 .map(row -> ((Number) row[0]).longValue())
@@ -236,6 +244,8 @@ public class UnifiedSearchService {
     /**
      * 위치 기반 필터링 및 정렬
      */
+    private static final double MAX_SEARCH_DISTANCE_KM = 15.0; // 최대 15km 이내만
+
     private List<Place> filterAndSortByLocation(List<Long> placeIds, Double latitude, Double longitude, int limit) {
         if (placeIds.isEmpty()) {
             return List.of();
@@ -245,16 +255,27 @@ public class UnifiedSearchService {
             .filter(place -> EmbedStatus.COMPLETED.equals(place.getEmbedStatus()))
             .collect(Collectors.toList());
 
-        // 거리 계산 및 정렬
-        places.sort((p1, p2) -> {
-            double dist1 = calculateDistance(latitude, longitude, p1);
-            double dist2 = calculateDistance(latitude, longitude, p2);
-            return Double.compare(dist1, dist2);
-        });
-
-        return places.stream()
+        // 거리 계산 + 15km 이내만 필터 + 거리순 정렬
+        List<Place> nearby = places.stream()
+            .filter(p -> calculateDistance(latitude, longitude, p) <= MAX_SEARCH_DISTANCE_KM)
+            .sorted((p1, p2) -> Double.compare(
+                calculateDistance(latitude, longitude, p1),
+                calculateDistance(latitude, longitude, p2)))
             .limit(limit)
             .collect(Collectors.toList());
+
+        // 15km 이내 결과가 부족하면 30km까지 확장
+        if (nearby.size() < Math.min(limit, 3)) {
+            nearby = places.stream()
+                .filter(p -> calculateDistance(latitude, longitude, p) <= 30.0)
+                .sorted((p1, p2) -> Double.compare(
+                    calculateDistance(latitude, longitude, p1),
+                    calculateDistance(latitude, longitude, p2)))
+                .limit(limit)
+                .collect(Collectors.toList());
+        }
+
+        return nearby;
     }
 
     /**
