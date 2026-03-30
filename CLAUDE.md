@@ -603,3 +603,57 @@ placeRepository.saveAndFlush(freshPlace);
 2. **Crawler Load Balancing**: Multiple crawler instances
 3. **OpenAI Batch API**: Use batch endpoint (50% cost reduction)
 4. **Connection Pooling**: Tune for higher concurrency
+
+## Data Pipeline (2026-03-30)
+
+### Pipeline Flow
+```
+Kakao 키워드 수집 → 네이버 크롤링 + GPT-4.1-mini → 키워드+문장 임베딩 → 서비스
+```
+
+### Batch Jobs
+| Job | Interval | Description |
+|-----|----------|-------------|
+| `updateCrawledDataJob` | 30min | 크롤링 + AI 설명/키워드 생성 |
+| `vectorEmbeddingJob` | 45min | 키워드 9개 + 문장 1개 임베딩 (1 API call) |
+| `imageUpdateJob` | 60min | 이미지 후처리 |
+| `descriptionOnlyJob` | Manual | 크롤링 스킵, 기존 데이터로 AI 설명 생성 |
+
+### Embedding Architecture
+- **place_keyword_embeddings**: 장소당 9벡터, 카테고리 필터용
+- **place_description_embeddings**: 장소당 1벡터 (mohe_description 문장), 프롬프트 검색용
+- **keyword_embeddings**: 글로벌 키워드 캐시 (94.5% 중복 API 호출 절감)
+- Model: `text-embedding-3-small` (1536D), DB: pgvector
+
+### Search System
+- **Category search**: SQL `unnest(category)` exact match + distance filter
+- **Prompt search**: Description embedding cosine similarity (pgvector)
+- **Unified search**: Description vector > Keyword vector > LIKE merge
+- **Chat search**: `POST /api/search/chat` → search + conversation DB save
+
+### Conversation Storage
+- `search_conversations`: 대화 세션 (user_id or session_id)
+- `search_messages`: user/assistant 메시지 + place_ids[]
+
+### Zombie Job Prevention (Automatic)
+- `@PostConstruct`: Cleanup STARTED jobs on startup
+- Scheduler: Auto-cleanup jobs running >1 hour
+- `ContextClosedEvent`: Mark running jobs FAILED on shutdown
+- No manual intervention needed
+
+### Home Categories
+- `GET /api/categories/home?lat=&lon=&mbti=`
+- First row: MBTI-based (same MBTI bookmarks → keyword fallback)
+- Rest: Time + Weather based (30 categories from 20 rules)
+- `GET /api/categories/{key}/places`: SQL category filter with distance
+
+### Key Environment Variables
+- `OPENAI_MODEL=gpt-4.1-mini` — Description generation
+- `EMBEDDING_MODEL=text-embedding-3-small` — Vectorization (1536D)
+- `CRAWLER_SERVER_URL=http://mohe-batch-crawler:2000` — Naver crawler
+- `OPENAI_API_KEY` — OpenAI API key (in .env)
+
+### Admin Dashboard
+- `GET /api/admin/monitor/pipeline/stats` — Full pipeline statistics
+- `GET /api/admin/monitor/pipeline/recent-crawls` — Recently crawled places
+- `POST /api/admin/monitor/pipeline/jobs/{name}/trigger` — Manual job trigger
