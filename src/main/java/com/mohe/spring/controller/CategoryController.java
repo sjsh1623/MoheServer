@@ -166,10 +166,15 @@ public class CategoryController {
                     .map(String::toLowerCase)
                     .collect(Collectors.joining(","));
 
+            // 현재 요일/시간 (영업 중 필터)
+            String[] koDays = {"일", "월", "화", "수", "목", "금", "토"};
+            String day = koDays[java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK) - 1];
+            String time = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+
             List<Place> limitedPlaces = new ArrayList<>();
             for (double distance : new double[]{10.0, 20.0, 50.0}) {
                 limitedPlaces = placeRepository.findNearbyPlacesByCategory(
-                        lat, lon, distance, keywords, limit
+                        lat, lon, distance, keywords, limit, day, time
                 );
                 if (limitedPlaces.size() >= Math.min(limit, 5)) break;
             }

@@ -23,6 +23,9 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Calendar;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -402,7 +405,7 @@ public class PlaceService {
         double radiusKilometers = safeRadiusMeters / 1000.0;
         int safeLimit = Math.max(1, Math.min(limit, 50));
 
-        List<Place> places = placeRepository.findNearbyPlacesForLLM(latitude, longitude, radiusKilometers, safeLimit)
+        List<Place> places = placeRepository.findNearbyPlacesForLLM(latitude, longitude, radiusKilometers, safeLimit, getCurrentDayOfWeek(), getCurrentTime())
             .stream()
             .filter(this::isReady)
             .collect(Collectors.toList());
@@ -457,10 +460,23 @@ public class PlaceService {
     /**
      * Build a geo-weighted candidate list: 70% within 15km, 30% within 30km.
      */
+    private static final String[] KO_DAYS = {"일", "월", "화", "수", "목", "금", "토"};
+
+    private String getCurrentDayOfWeek() {
+        return KO_DAYS[Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1];
+    }
+
+    private String getCurrentTime() {
+        return LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+    }
+
     public List<Place> getLocationWeightedPlaces(Double latitude, Double longitude, int limit) {
         if (latitude == null || longitude == null) {
             return placeRepository.findRecommendablePlaces(PageRequest.of(0, limit)).getContent();
         }
+
+        String day = getCurrentDayOfWeek();
+        String time = getCurrentTime();
 
         int safeLimit = Math.max(1, limit);
         int innerTarget = (int) Math.ceil(safeLimit * 0.7);
@@ -469,7 +485,7 @@ public class PlaceService {
         LinkedHashMap<Long, Place> selected = new LinkedHashMap<>();
 
         addPlacesWithinDistance(
-            placeRepository.findNearbyPlacesForLLM(latitude, longitude, 15.0, Math.max(innerTarget * 2, safeLimit)),
+            placeRepository.findNearbyPlacesForLLM(latitude, longitude, 15.0, Math.max(innerTarget * 2, safeLimit), day, time),
             selected,
             latitude,
             longitude,
@@ -480,7 +496,7 @@ public class PlaceService {
 
         if (selected.size() < innerTarget) {
             addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 20.0, Math.max(innerTarget * 3, safeLimit)),
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 20.0, Math.max(innerTarget * 3, safeLimit), day, time),
                 selected,
                 latitude,
                 longitude,
@@ -492,7 +508,7 @@ public class PlaceService {
 
         if (outerTarget > 0) {
             addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 30.0, Math.max(outerTarget * 3, safeLimit)),
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 30.0, Math.max(outerTarget * 3, safeLimit), day, time),
                 selected,
                 latitude,
                 longitude,
@@ -504,7 +520,7 @@ public class PlaceService {
 
         if (selected.size() < safeLimit) {
             addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 30.0, safeLimit * 4),
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 30.0, safeLimit * 4, day, time),
                 selected,
                 latitude,
                 longitude,
@@ -517,7 +533,7 @@ public class PlaceService {
         // Expand search radius progressively if still not enough results
         if (selected.size() < safeLimit) {
             addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 50.0, safeLimit * 4),
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 50.0, safeLimit * 4, day, time),
                 selected,
                 latitude,
                 longitude,
@@ -529,7 +545,7 @@ public class PlaceService {
 
         if (selected.size() < safeLimit) {
             addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 100.0, safeLimit * 4),
+                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 100.0, safeLimit * 4, day, time),
                 selected,
                 latitude,
                 longitude,

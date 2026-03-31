@@ -169,6 +169,17 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
                 sin(radians(:latitude)) * sin(radians(CAST(p.latitude AS DOUBLE PRECISION)))
             )
         ) <= :distance
+        AND (
+            NOT EXISTS (SELECT 1 FROM place_business_hours pbh WHERE pbh.place_id = p.id)
+            OR EXISTS (
+                SELECT 1 FROM place_business_hours pbh
+                WHERE pbh.place_id = p.id
+                AND pbh.day_of_week = :dayOfWeek
+                AND pbh.open IS NOT NULL AND pbh.close IS NOT NULL
+                AND pbh.open <= CAST(:currentTime AS TIME)
+                AND pbh.close >= CAST(:currentTime AS TIME)
+            )
+        )
         ORDER BY (
             6371 * acos(
                 cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
@@ -182,7 +193,9 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("latitude") Double latitude,
         @Param("longitude") Double longitude,
         @Param("distance") Double distance,
-        @Param("limit") int limit
+        @Param("limit") int limit,
+        @Param("dayOfWeek") String dayOfWeek,
+        @Param("currentTime") String currentTime
     );
 
     /**
@@ -401,6 +414,7 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         AND EXISTS (
             SELECT 1 FROM unnest(p.category) AS cat
             WHERE LOWER(cat) = ANY(STRING_TO_ARRAY(:keywords, ','))
+               OR EXISTS (SELECT 1 FROM unnest(STRING_TO_ARRAY(:keywords, ',')) AS kw WHERE LOWER(cat) LIKE '%' || kw || '%')
         )
         AND (
             6371 * acos(
@@ -411,6 +425,17 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
                 ))
             )
         ) <= :distance
+        AND (
+            NOT EXISTS (SELECT 1 FROM place_business_hours pbh WHERE pbh.place_id = p.id)
+            OR EXISTS (
+                SELECT 1 FROM place_business_hours pbh
+                WHERE pbh.place_id = p.id
+                AND pbh.day_of_week = :dayOfWeek
+                AND pbh.open IS NOT NULL AND pbh.close IS NOT NULL
+                AND pbh.open <= CAST(:currentTime AS TIME)
+                AND pbh.close >= CAST(:currentTime AS TIME)
+            )
+        )
         ORDER BY (
             6371 * acos(
                 LEAST(1.0, GREATEST(-1.0,
@@ -427,6 +452,8 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("longitude") Double longitude,
         @Param("distance") Double distance,
         @Param("keywords") String keywords,
-        @Param("limit") int limit
+        @Param("limit") int limit,
+        @Param("dayOfWeek") String dayOfWeek,
+        @Param("currentTime") String currentTime
     );
 }

@@ -218,7 +218,10 @@ public class CategoryRecommendationService {
             if (fallbackPlaces.size() >= limit) break;
             try {
                 String kws = cat.getKeywords().stream().map(String::toLowerCase).collect(Collectors.joining(","));
-                List<Place> places = placeRepository.findNearbyPlacesByCategory(lat, lon, 30.0, kws, 5);
+                String[] koDays = {"일", "월", "화", "수", "목", "금", "토"};
+                String day = koDays[java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK) - 1];
+                String time = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+                List<Place> places = placeRepository.findNearbyPlacesByCategory(lat, lon, 30.0, kws, 5, day, time);
                 for (Place p : places) {
                     if (seenIds.add(p.getId())) fallbackPlaces.add(p);
                 }
