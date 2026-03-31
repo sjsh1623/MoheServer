@@ -250,12 +250,15 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
      * Returns only IDs to avoid pagination issues with collection fetching
      * Step 1: Get IDs with pagination (efficient)
      */
-    @Query("""
-        SELECT p.id FROM Place p
-        WHERE p.crawlStatus = 'COMPLETED'
-        AND p.embedStatus = 'PENDING'
+    @Query(value = """
+        SELECT p.id FROM places p
+        WHERE p.crawl_status = 'COMPLETED'
+        AND (
+            p.embed_status = 'PENDING'
+            OR NOT EXISTS (SELECT 1 FROM place_images pi WHERE pi.place_id = p.id)
+        )
         ORDER BY p.id ASC
-    """)
+    """, nativeQuery = true)
     Page<Long> findPlaceIdsForImageUpdate(Pageable pageable);
 
     /**

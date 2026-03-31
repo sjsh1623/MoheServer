@@ -22,6 +22,9 @@ public class PlaceImage {
     @Column(columnDefinition = "TEXT")
     private String url;
 
+    @Column(name = "original_url", columnDefinition = "TEXT")
+    private String originalUrl;
+
     private Integer orderIndex;
 
     private LocalDateTime createdAt;

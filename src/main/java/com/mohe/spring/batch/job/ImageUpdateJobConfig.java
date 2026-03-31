@@ -179,6 +179,10 @@ public class ImageUpdateJobConfig {
                                 PlaceImage placeImage = new PlaceImage();
                                 placeImage.setPlace(place);
                                 placeImage.setUrl(savedImagePaths.get(i));
+                                // 원본 네이버 URL도 저장 (fallback용)
+                                if (i < imageUrlsToSave.size()) {
+                                    placeImage.setOriginalUrl(imageUrlsToSave.get(i));
+                                }
                                 placeImage.setOrderIndex(i);
                                 newImages.add(placeImage);
                             }
