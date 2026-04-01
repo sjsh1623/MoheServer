@@ -72,7 +72,9 @@ public class PlaceService {
             String recommendationType;
 
             if (hasLocation) {
-                places = getLocationWeightedPlaces(latitude, longitude, recommendationLimit);
+                places = getLocationWeightedPlaces(latitude, longitude, recommendationLimit * 3);
+                // 음식점/카페/바 등 추천에 적합한 카테고리만 필터
+                places = filterRecommendableCategories(places, recommendationLimit);
                 recommendationType = isAuthenticated ? "vector-location-hybrid" : "location-weighted";
             } else if (isAuthenticated) {
                 places = vectorSearchService.getPersonalizedRecommendations(auth.getName(), recommendationLimit);
@@ -603,6 +605,41 @@ public class PlaceService {
 
     private boolean isReady(Place place) {
         return place != null && EmbedStatus.COMPLETED.equals(place.getEmbedStatus());
+    }
+
+    // 추천에 부적합한 카테고리 제외 (목공소, 화장품, 학원 등)
+    private static final java.util.Set<String> EXCLUDED_RECOMMENDATION_CATEGORIES = java.util.Set.of(
+        "문화,예술", "미술,공예", "목공예", "전통공예", "도자기", "culture",
+        "가정,생활", "미용", "화장품", "생활용품", "통신판매",
+        "학원", "교육", "부동산", "은행", "금융",
+        "병원", "약국", "의원", "치과", "한의원",
+        "주유소", "세차", "자동차", "정비",
+        "숙박", "모텔", "여관",
+        "공공기관", "관공서", "우체국"
+    );
+
+    private List<Place> filterRecommendableCategories(List<Place> places, int limit) {
+        if (places == null || places.isEmpty()) return List.of();
+
+        // 카테고리 다양성: 같은 주요 카테고리 최대 3개
+        Map<String, Integer> categoryCounts = new java.util.HashMap<>();
+
+        return places.stream()
+            .filter(place -> {
+                if (place.getCategory() == null || place.getCategory().isEmpty()) return true;
+                // 부적합 카테고리 제외
+                for (String cat : place.getCategory()) {
+                    if (EXCLUDED_RECOMMENDATION_CATEGORIES.contains(cat)) return false;
+                }
+                // 카테고리 다양성
+                String mainCat = place.getCategory().get(0);
+                int count = categoryCounts.getOrDefault(mainCat, 0);
+                if (count >= 3) return false;
+                categoryCounts.put(mainCat, count + 1);
+                return true;
+            })
+            .limit(limit)
+            .collect(Collectors.toList());
     }
 
     private List<Place> filterReady(List<Place> places) {
