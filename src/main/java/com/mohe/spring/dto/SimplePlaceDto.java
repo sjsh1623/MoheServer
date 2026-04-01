@@ -33,8 +33,33 @@ public class SimplePlaceDto {
     private String explanation;
     private String recommendationReason;
     
+    // Business hours
+    private List<BusinessHourDto> businessHours;
+
     // Debug field
     private Boolean isDemo;
+
+    public static class BusinessHourDto {
+        private String day;
+        private String open;
+        private String close;
+        private String description;
+        private Boolean isOperating;
+        private Integer lastOrderMinutes;
+
+        public BusinessHourDto() {}
+        public BusinessHourDto(String day, String open, String close, String description, Boolean isOperating, Integer lastOrderMinutes) {
+            this.day = day; this.open = open; this.close = close;
+            this.description = description; this.isOperating = isOperating; this.lastOrderMinutes = lastOrderMinutes;
+        }
+
+        public String getDay() { return day; }
+        public String getOpen() { return open; }
+        public String getClose() { return close; }
+        public String getDescription() { return description; }
+        public Boolean getIsOperating() { return isOperating; }
+        public Integer getLastOrderMinutes() { return lastOrderMinutes; }
+    }
 
     public SimplePlaceDto() {}
 
@@ -148,6 +173,9 @@ public class SimplePlaceDto {
 
     public String getRecommendationReason() { return recommendationReason; }
     public void setRecommendationReason(String recommendationReason) { this.recommendationReason = recommendationReason; }
+
+    public List<BusinessHourDto> getBusinessHours() { return businessHours; }
+    public void setBusinessHours(List<BusinessHourDto> businessHours) { this.businessHours = businessHours; }
 
     public Boolean getIsDemo() { return isDemo; }
     public void setIsDemo(Boolean isDemo) { this.isDemo = isDemo; }

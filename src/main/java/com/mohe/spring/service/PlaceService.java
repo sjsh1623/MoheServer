@@ -712,6 +712,21 @@ public class PlaceService {
             .orElse(null);
         dto.setDescription(moheDescription);
 
+        // Business hours
+        if (place.getBusinessHours() != null && !place.getBusinessHours().isEmpty()) {
+            List<SimplePlaceDto.BusinessHourDto> hours = place.getBusinessHours().stream()
+                .map(bh -> new SimplePlaceDto.BusinessHourDto(
+                    bh.getDayOfWeek(),
+                    bh.getOpen() != null ? bh.getOpen().toString().substring(0, 5) : null,
+                    bh.getClose() != null ? bh.getClose().toString().substring(0, 5) : null,
+                    bh.getDescription(),
+                    bh.getIsOperating(),
+                    bh.getLastOrderMinutes()
+                ))
+                .collect(Collectors.toList());
+            dto.setBusinessHours(hours);
+        }
+
         return dto;
     }
 
