@@ -93,6 +93,7 @@ public class SecurityConfig {
                     "/api/images/**",
                     "/api/categories/**",
                     "/api/search/**",
+                    "/api/analytics/**",
                     "/image/**",
                     "/images/**",
                     "/health",

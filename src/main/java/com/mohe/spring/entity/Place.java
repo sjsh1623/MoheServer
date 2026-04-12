@@ -83,11 +83,26 @@ public class Place {
     private List<PlaceMenu> menus = new ArrayList<>();
 
     /**
-     * 이미지 URL 리스트 (배치 처리용 임시 필드)
-     * DB에 저장되지 않으며, Processor에서 Writer로 데이터 전달 시 사용
+     * 배치 처리용 임시 필드 (DB 미저장)
+     * Processor → Writer 데이터 전달용 (비동기 스레드에서 lazy proxy 우회)
      */
     @Transient
     private List<String> imageUrls;
+
+    @Transient
+    private List<PlaceReview> tempReviews;
+
+    @Transient
+    private List<PlaceDescription> tempDescriptions;
+
+    @Transient
+    private List<PlaceImage> tempImages;
+
+    @Transient
+    private List<PlaceBusinessHour> tempBusinessHours;
+
+    @Transient
+    private List<PlaceSns> tempSns;
 
     @PrePersist
     protected void onCreate() {

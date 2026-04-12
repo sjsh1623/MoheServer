@@ -30,7 +30,7 @@ public class SearchChatService {
             Double latitude, Double longitude, int limit) {
 
         // 1. 검색 실행
-        UnifiedSearchResponse searchResult = unifiedSearchService.search(query, latitude, longitude, limit);
+        UnifiedSearchResponse searchResult = unifiedSearchService.searchSemantic(query, latitude, longitude, limit);
 
         // 2. 대화 생성 또는 기존 대화에 추가
         SearchConversation conversation;

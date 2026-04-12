@@ -26,10 +26,12 @@ import java.util.HashMap;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 @Service
@@ -284,12 +286,14 @@ public class PlaceService {
         int safeLimit = Math.max(1, Math.min(limit, 50));
 
         try {
-            List<Place> weightedPlaces = getLocationWeightedPlaces(latitude, longitude, safeLimit);
+            // 시간 오프셋 적용 위해 후보군을 약간 넉넉히 가져옴
+            int fetchSize = Math.min(safeLimit * 2, 40);
+            List<Place> weightedPlaces = getLocationWeightedPlaces(latitude, longitude, fetchSize);
 
             // Filter by business hours - only show currently open places
             weightedPlaces = filterOpenPlaces(weightedPlaces);
 
-            List<Place> popularPlaces = weightedPlaces.stream()
+            List<Place> sortedPlaces = weightedPlaces.stream()
                 .sorted((p1, p2) -> {
                     int reviewCompare = Integer.compare(
                         p2.getReviewCount() != null ? p2.getReviewCount() : 0,
@@ -302,8 +306,23 @@ public class PlaceService {
                     double rating2 = p2.getRating() != null ? p2.getRating().doubleValue() : 0.0;
                     return Double.compare(rating2, rating1);
                 })
+                .collect(Collectors.toList());
+
+            // 시간 기반 오프셋: 매 시간마다 다른 시작점에서 선택
+            int hour = LocalTime.now().getHour();
+            int offset = (hour * 3) % Math.max(1, sortedPlaces.size() - safeLimit);
+            List<Place> popularPlaces = sortedPlaces.stream()
+                .skip(offset)
                 .limit(safeLimit)
                 .collect(Collectors.toList());
+
+            // 오프셋으로 부족하면 앞에서 채움
+            if (popularPlaces.size() < safeLimit) {
+                for (Place place : sortedPlaces) {
+                    if (popularPlaces.size() >= safeLimit) break;
+                    if (!popularPlaces.contains(place)) popularPlaces.add(place);
+                }
+            }
 
             List<SimplePlaceDto> placeDtos = popularPlaces.stream()
                 .map(place -> convertToSimplePlaceDto(place, latitude, longitude))
@@ -378,28 +397,32 @@ public class PlaceService {
     }
 
     public PlaceListResponse getPlacesList(int page, int limit, String sort) {
+        // Slice 방식으로 COUNT(*) 완전 제거 — 16만건 테이블에서 count 쿼리 2초+ 절감
         PageRequest pageRequest = PageRequest.of(page, limit);
-        Page<Place> placePage;
-        
+        org.springframework.data.domain.Slice<Place> slice;
+
         switch (sort.toLowerCase()) {
             case "popularity":
-                placePage = placeRepository.findPopularPlaces(pageRequest);
+                slice = placeRepository.findPopularPlacesSlice(pageRequest);
                 break;
             case "rating":
-                placePage = placeRepository.findTopRatedPlaces(3.0, pageRequest);
+                slice = placeRepository.findTopRatedPlacesSlice(3.0, pageRequest);
                 break;
             case "recent":
             default:
-                placePage = placeRepository.findRecommendablePlaces(pageRequest);
+                slice = placeRepository.findRecommendablePlacesSlice(pageRequest);
                 break;
         }
-        
-        List<SimplePlaceDto> placeDtos = placePage.getContent().stream()
+
+        List<SimplePlaceDto> placeDtos = slice.getContent().stream()
             .map(this::convertToSimplePlaceDto)
             .collect(Collectors.toList());
-        
-        return new PlaceListResponse(placeDtos, (int) placePage.getTotalElements(), 
-                                   placePage.getTotalPages(), page, limit);
+
+        // hasNext 기반 추정 (정확한 count 불필요 — 프론트는 무한스크롤)
+        int estimatedTotal = slice.hasNext() ? (page + 2) * limit : page * limit + placeDtos.size();
+        int estimatedPages = slice.hasNext() ? page + 2 : page + 1;
+
+        return new PlaceListResponse(placeDtos, estimatedTotal, estimatedPages, page, limit);
     }
 
     public PlaceListResponse getNearbyPlaces(double latitude, double longitude, double radiusMeters, int limit) {
@@ -407,7 +430,12 @@ public class PlaceService {
         double radiusKilometers = safeRadiusMeters / 1000.0;
         int safeLimit = Math.max(1, Math.min(limit, 50));
 
-        List<Place> places = placeRepository.findNearbyPlacesForLLM(latitude, longitude, radiusKilometers, safeLimit, getCurrentDayOfWeek(), getCurrentTime())
+        double[] bbox = computeBoundingBox(latitude, longitude, radiusKilometers);
+        List<Place> places = placeRepository.findNearbyPlacesOptimized(
+                latitude, longitude, radiusKilometers,
+                bbox[0], bbox[1], bbox[2], bbox[3],
+                safeLimit, getCurrentDayOfWeek(), getCurrentTime()
+            )
             .stream()
             .filter(this::isReady)
             .collect(Collectors.toList());
@@ -472,6 +500,20 @@ public class PlaceService {
         return LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
     }
 
+    /**
+     * Bounding box 계산: 위도/경도 기준 km → degree 변환
+     */
+    private double[] computeBoundingBox(double latitude, double longitude, double distanceKm) {
+        double latDelta = distanceKm / 111.0;
+        double lonDelta = distanceKm / (111.0 * Math.cos(Math.toRadians(latitude)));
+        return new double[]{
+            latitude - latDelta,  // minLat
+            latitude + latDelta,  // maxLat
+            longitude - lonDelta, // minLon
+            longitude + lonDelta  // maxLon
+        };
+    }
+
     public List<Place> getLocationWeightedPlaces(Double latitude, Double longitude, int limit) {
         if (latitude == null || longitude == null) {
             return placeRepository.findRecommendablePlaces(PageRequest.of(0, limit)).getContent();
@@ -481,93 +523,90 @@ public class PlaceService {
         String time = getCurrentTime();
 
         int safeLimit = Math.max(1, limit);
-        int innerTarget = (int) Math.ceil(safeLimit * 0.7);
-        int outerTarget = Math.max(safeLimit - innerTarget, 0);
+        int fetchSize = safeLimit * 4; // 충분한 후보를 한 번에 가져옴
 
-        LinkedHashMap<Long, Place> selected = new LinkedHashMap<>();
-
-        addPlacesWithinDistance(
-            placeRepository.findNearbyPlacesForLLM(latitude, longitude, 15.0, Math.max(innerTarget * 2, safeLimit), day, time),
-            selected,
-            latitude,
-            longitude,
-            0.0,
-            15.0,
-            innerTarget
+        // 단일 쿼리: 100km 반경 내 모든 후보를 거리순으로 가져옴
+        double[] bbox = computeBoundingBox(latitude, longitude, 100.0);
+        List<Place> allCandidates = placeRepository.findNearbyPlacesOptimized(
+            latitude, longitude, 100.0,
+            bbox[0], bbox[1], bbox[2], bbox[3],
+            fetchSize, day, time
         );
 
-        if (selected.size() < innerTarget) {
-            addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 20.0, Math.max(innerTarget * 3, safeLimit), day, time),
-                selected,
-                latitude,
-                longitude,
-                0.0,
-                15.0,
-                innerTarget
-            );
-        }
-
-        if (outerTarget > 0) {
-            addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 30.0, Math.max(outerTarget * 3, safeLimit), day, time),
-                selected,
-                latitude,
-                longitude,
-                15.0,
-                30.0,
-                innerTarget + outerTarget
-            );
-        }
-
-        if (selected.size() < safeLimit) {
-            addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 30.0, safeLimit * 4, day, time),
-                selected,
-                latitude,
-                longitude,
-                0.0,
-                30.0,
-                safeLimit
-            );
-        }
-
-        // Expand search radius progressively if still not enough results
-        if (selected.size() < safeLimit) {
-            addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 50.0, safeLimit * 4, day, time),
-                selected,
-                latitude,
-                longitude,
-                0.0,
-                50.0,
-                safeLimit
-            );
-        }
-
-        if (selected.size() < safeLimit) {
-            addPlacesWithinDistance(
-                placeRepository.findNearbyPlacesForLLM(latitude, longitude, 100.0, safeLimit * 4, day, time),
-                selected,
-                latitude,
-                longitude,
-                0.0,
-                100.0,
-                safeLimit
-            );
-        }
-
-        // Only use location-independent fallback as last resort if no location-based results found
-        if (selected.isEmpty()) {
-            placeRepository.findRecommendablePlaces(PageRequest.of(0, safeLimit)).getContent()
+        if (allCandidates.isEmpty()) {
+            // 위치 기반 결과 없으면 fallback
+            return placeRepository.findRecommendablePlaces(PageRequest.of(0, safeLimit)).getContent()
                 .stream()
                 .filter(this::isReady)
-                .forEach(place -> selected.putIfAbsent(place.getId(), place));
+                .collect(Collectors.toList());
         }
 
-        return selected.values().stream()
-            .limit(safeLimit)
-            .collect(Collectors.toList());
+        // 거리 구간별로 후보 분류
+        List<Place> innerPlaces = new ArrayList<>();  // 0~15km
+        List<Place> outerPlaces = new ArrayList<>();   // 15~30km
+        List<Place> farPlaces = new ArrayList<>();     // 30km+
+
+        for (Place place : allCandidates) {
+            if (place == null || place.getId() == null || !isReady(place)) continue;
+            double dist = calculateDistanceKm(latitude, longitude, place);
+            if (dist <= 15.0) {
+                innerPlaces.add(place);
+            } else if (dist <= 30.0) {
+                outerPlaces.add(place);
+            } else {
+                farPlaces.add(place);
+            }
+        }
+
+        // 각 구간별 가중 셔플 적용
+        weightedShuffle(innerPlaces);
+        weightedShuffle(outerPlaces);
+        weightedShuffle(farPlaces);
+
+        // 70% 15km 이내, 30% 15~30km로 배분
+        int innerTarget = (int) Math.ceil(safeLimit * 0.7);
+        List<Place> result = new ArrayList<>();
+
+        // 1차: 15km 이내에서 innerTarget개
+        for (Place place : innerPlaces) {
+            if (result.size() >= innerTarget) break;
+            result.add(place);
+        }
+
+        // 2차: 15~30km에서 나머지 채움
+        for (Place place : outerPlaces) {
+            if (result.size() >= safeLimit) break;
+            result.add(place);
+        }
+
+        // 3차: 부족하면 더 먼 곳에서 채움
+        if (result.size() < safeLimit) {
+            for (Place place : farPlaces) {
+                if (result.size() >= safeLimit) break;
+                result.add(place);
+            }
+            // 그래도 부족하면 innerPlaces 나머지에서 채움
+            for (Place place : innerPlaces) {
+                if (result.size() >= safeLimit) break;
+                if (!result.contains(place)) result.add(place);
+            }
+        }
+
+        return result.stream().limit(safeLimit).collect(Collectors.toList());
+    }
+
+    /**
+     * Rating 기반 가중 셔플: 평점 높은 장소가 상위에 올 확률이 높되, 매번 다른 순서
+     * 인접 3개 범위 내에서 교환하여 품질 급락 없이 다양성 확보
+     */
+    private void weightedShuffle(List<Place> places) {
+        if (places == null || places.size() <= 1) return;
+        Random random = new Random();
+        for (int i = 0; i < places.size() - 1; i++) {
+            int range = Math.min(3, places.size() - i - 1);
+            int j = i + random.nextInt(range + 1);
+            Collections.swap(places, i, j);
+        }
     }
 
     private void addPlacesWithinDistance(
@@ -695,11 +734,12 @@ public class PlaceService {
         );
 
         // Set additional fields
+        // reviewCount 필드 직접 사용 (N+1 방지 — getReviews().size() 대신)
         dto.setReviewCount(place.getReviewCount() != null ? place.getReviewCount() : 0);
         dto.setAddress(fullAddress); // Keep for backward compatibility
         dto.setShortAddress(shortAddress); // 구 + 동
         dto.setFullAddress(fullAddress); // 전체 주소
-        dto.setDistance(0.0); // TODO: Calculate actual distance
+        // distance는 위치 있는 버전에서만 세팅 (위치 없으면 null)
         dto.setIsBookmarked(false); // TODO: Check if bookmarked by current user
         dto.setIsDemo(false);
         dto.setImages(imageUrls);

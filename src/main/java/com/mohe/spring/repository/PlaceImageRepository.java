@@ -14,4 +14,12 @@ public interface PlaceImageRepository extends JpaRepository<PlaceImage, Long> {
 
     @Query("SELECT pi FROM PlaceImage pi WHERE pi.place.id = :placeId ORDER BY pi.orderIndex ASC")
     Optional<PlaceImage> findFirstByPlaceIdOrderByOrderIndexAsc(@Param("placeId") Long placeId);
+
+    @Query(value = """
+        SELECT DISTINCT ON (pi.place_id) pi.place_id, pi.url
+        FROM place_images pi
+        WHERE pi.place_id IN :placeIds
+        ORDER BY pi.place_id, pi.order_index ASC
+    """, nativeQuery = true)
+    List<Object[]> findFirstImagesByPlaceIds(@Param("placeIds") List<Long> placeIds);
 }

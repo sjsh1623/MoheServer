@@ -5,7 +5,7 @@ import java.time.LocalTime;
 /**
  * 시간대 구분 Enum
  *
- * <p>하루를 5개 시간대로 구분하여 시간 기반 추천에 사용합니다.</p>
+ * <p>하루를 6개 시간대로 구분하여 시간 기반 추천에 사용합니다.</p>
  *
  * @author Andrew Lim
  * @since 1.0
@@ -13,19 +13,22 @@ import java.time.LocalTime;
 public enum TimeSlot {
 
     /** 새벽 (0-5시) */
-    EARLY_MORNING(0, 5, "새벽", "early_morning"),
+    DAWN(0, 5, "새벽", "dawn"),
 
-    /** 아침 (6-11시) */
-    MORNING(6, 11, "아침", "morning"),
+    /** 아침 (6-9시) */
+    MORNING(6, 9, "아침", "morning"),
+
+    /** 오전 (10-11시) */
+    LATE_MORNING(10, 11, "오전", "late_morning"),
 
     /** 오후 (12-17시) */
     AFTERNOON(12, 17, "오후", "afternoon"),
 
-    /** 저녁 (18-22시) */
-    EVENING(18, 22, "저녁", "evening"),
+    /** 저녁 (18-21시) */
+    EVENING(18, 21, "저녁", "evening"),
 
-    /** 밤 (23시) */
-    LATE_NIGHT(23, 23, "밤", "late_night");
+    /** 밤 (22-23시) */
+    NIGHT(22, 23, "밤", "night");
 
     private final int startHour;
     private final int endHour;
@@ -63,8 +66,8 @@ public enum TimeSlot {
             }
         }
 
-        // 0시 이전 (23시 이후)는 LATE_NIGHT
-        return LATE_NIGHT;
+        // Fallback: 밤
+        return NIGHT;
     }
 
     /**
@@ -84,7 +87,7 @@ public enum TimeSlot {
             }
         }
 
-        return LATE_NIGHT;
+        return NIGHT;
     }
 
     // Getters

@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -334,5 +336,48 @@ public class AdminMonitorController {
             log.error("Failed to start queue crawling: {}", e.getMessage());
             return ResponseEntity.ok(ApiResponse.error("BATCH_COLLECTOR_UNAVAILABLE", e.getMessage()));
         }
+    }
+
+    // ===== Place Delete APIs =====
+
+    @DeleteMapping("/places/{id}")
+    @Operation(summary = "Delete a place", description = "Delete a place by ID with all related data (cascade)")
+    @Transactional
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deletePlace(@PathVariable Long id) {
+        log.info("Deleting place ID: {}", id);
+        try {
+            adminMonitorService.deletePlace(id);
+            Map<String, Object> result = new HashMap<>();
+            result.put("deletedId", id);
+            return ResponseEntity.ok(ApiResponse.success(result, "Place deleted successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(ApiResponse.error("NOT_FOUND", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/places/batch-delete")
+    @Operation(summary = "Batch delete places", description = "Delete multiple places by IDs")
+    @Transactional
+    public ResponseEntity<ApiResponse<Map<String, Object>>> batchDeletePlaces(@RequestBody Map<String, List<Long>> body) {
+        List<Long> placeIds = body.get("placeIds");
+        if (placeIds == null || placeIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("BAD_REQUEST", "placeIds is required and must not be empty"));
+        }
+        log.info("Batch deleting {} places: {}", placeIds.size(), placeIds);
+        int deleted = adminMonitorService.deletePlaces(placeIds);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("requestedCount", placeIds.size());
+        result.put("deletedCount", deleted);
+        return ResponseEntity.ok(ApiResponse.success(result, "Deleted " + deleted + " places"));
+    }
+
+    // ===== Pipeline Progress API =====
+
+    @GetMapping("/pipeline/progress")
+    @Operation(summary = "Get pipeline progress", description = "Returns description, embedding, and image processing progress")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getPipelineProgress() {
+        Map<String, Object> progress = adminMonitorService.getPipelineProgress();
+        return ResponseEntity.ok(ApiResponse.success(progress));
     }
 }

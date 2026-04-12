@@ -18,13 +18,18 @@ import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.integration.async.AsyncItemProcessor;
+import org.springframework.batch.integration.async.AsyncItemWriter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Future;
 
 /**
  * 이미지 업데이트 전용 배치 Job
@@ -74,6 +79,19 @@ public class ImageUpdateJobConfig {
                 .build();
     }
 
+    @Bean(name = "imageTaskExecutor")
+    public TaskExecutor imageTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(3);
+        executor.setMaxPoolSize(3);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("img-async-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
+
     @Bean
     public Step imageUpdateStep(
         JobRepository jobRepository,
@@ -82,11 +100,18 @@ public class ImageUpdateJobConfig {
         ItemProcessor<Place, Place> imageUpdateProcessor,
         ItemWriter<Place> imageUpdateWriter
     ) {
+        AsyncItemProcessor<Place, Place> asyncProcessor = new AsyncItemProcessor<>();
+        asyncProcessor.setDelegate(imageUpdateProcessor);
+        asyncProcessor.setTaskExecutor(imageTaskExecutor());
+
+        AsyncItemWriter<Place> asyncWriter = new AsyncItemWriter<>();
+        asyncWriter.setDelegate(imageUpdateWriter);
+
         return new StepBuilder("imageUpdateStep", jobRepository)
-                .<Place, Place>chunk(5, transactionManager)
+                .<Place, Future<Place>>chunk(5, transactionManager)
                 .reader(imageUpdateReader)
-                .processor(imageUpdateProcessor)
-                .writer(imageUpdateWriter)
+                .processor(asyncProcessor)
+                .writer(asyncWriter)
                 .faultTolerant()
                 .skip(Exception.class)
                 .skipLimit(Integer.MAX_VALUE)

@@ -5,6 +5,7 @@ import com.mohe.spring.entity.EmbedStatus;
 import com.mohe.spring.entity.Place;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -31,9 +32,27 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
     @Query("SELECT p FROM Place p WHERE p.embedStatus = 'COMPLETED' ORDER BY p.rating DESC, p.reviewCount DESC")
     Page<Place> findPopularPlaces(Pageable pageable);
 
-    @Query("SELECT p FROM Place p WHERE p.embedStatus = 'COMPLETED' AND (" +
-           "LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
-           "LOWER(p.roadAddress) LIKE LOWER(CONCAT('%', :query, '%')))")
+    // COUNT(*) 제거 버전 — places/list에서 사용 (16만건 count 쿼리 2초+ 절감)
+    @Query("SELECT p FROM Place p WHERE p.embedStatus = 'COMPLETED' ORDER BY p.rating DESC NULLS LAST, p.reviewCount DESC NULLS LAST")
+    Slice<Place> findPopularPlacesSlice(Pageable pageable);
+
+    @Query("SELECT p FROM Place p WHERE p.embedStatus = 'COMPLETED' AND (p.rating >= :minRating OR p.rating IS NULL) ORDER BY p.rating DESC, p.reviewCount DESC")
+    Slice<Place> findTopRatedPlacesSlice(@Param("minRating") Double minRating, Pageable pageable);
+
+    @Query("SELECT p FROM Place p WHERE (p.rating >= 0.0 OR p.rating IS NULL) AND p.embedStatus = 'COMPLETED' ORDER BY p.rating DESC, p.name ASC")
+    Slice<Place> findRecommendablePlacesSlice(Pageable pageable);
+
+    @Query(value = """
+        SELECT DISTINCT p.* FROM places p
+        LEFT JOIN place_descriptions pd ON pd.place_id = p.id
+        WHERE p.embed_status = 'COMPLETED' AND (
+            LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(p.road_address) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(pd.mohe_description) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR EXISTS (SELECT 1 FROM unnest(p.category) AS cat WHERE LOWER(cat) LIKE LOWER(CONCAT('%', :query, '%')))
+            OR EXISTS (SELECT 1 FROM unnest(p.keyword) AS kw WHERE LOWER(kw) LIKE LOWER(CONCAT('%', :query, '%')))
+        )
+    """, countQuery = "SELECT COUNT(DISTINCT p.id) FROM places p LEFT JOIN place_descriptions pd ON pd.place_id = p.id WHERE p.embed_status = 'COMPLETED' AND (LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(pd.mohe_description) LIKE LOWER(CONCAT('%', :query, '%')))", nativeQuery = true)
     Page<Place> searchPlaces(@Param("query") String query, Pageable pageable);
 
     @Query("SELECT p FROM Place p WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL")
@@ -400,6 +419,63 @@ public interface PlaceRepository extends JpaRepository<Place, Long> {
         @Param("keyword") String keyword,
         @Param("status") String status,
         Pageable pageable
+    );
+
+    /**
+     * Find nearby places within a bounding box + Haversine distance, single query.
+     * Uses bounding box pre-filter on indexed lat/lon columns for fast elimination,
+     * then applies accurate Haversine distance check.
+     * Returns results ordered by distance ASC.
+     */
+    @Query(value = """
+        SELECT p.* FROM places p
+        WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+        AND p.embed_status = 'COMPLETED'
+        AND (p.rating >= 3.0 OR p.rating IS NULL)
+        AND CAST(p.latitude AS DOUBLE PRECISION) BETWEEN :minLat AND :maxLat
+        AND CAST(p.longitude AS DOUBLE PRECISION) BETWEEN :minLon AND :maxLon
+        AND (
+            6371 * acos(
+                LEAST(1.0, GREATEST(-1.0,
+                    cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
+                    cos(radians(CAST(p.longitude AS DOUBLE PRECISION)) - radians(:longitude)) +
+                    sin(radians(:latitude)) * sin(radians(CAST(p.latitude AS DOUBLE PRECISION)))
+                ))
+            )
+        ) <= :distance
+        AND (
+            NOT EXISTS (SELECT 1 FROM place_business_hours pbh WHERE pbh.place_id = p.id)
+            OR EXISTS (
+                SELECT 1 FROM place_business_hours pbh
+                WHERE pbh.place_id = p.id
+                AND pbh.day_of_week = :dayOfWeek
+                AND pbh.open IS NOT NULL AND pbh.close IS NOT NULL
+                AND pbh.open <= CAST(:currentTime AS TIME)
+                AND pbh.close >= CAST(:currentTime AS TIME)
+            )
+        )
+        ORDER BY (
+            6371 * acos(
+                LEAST(1.0, GREATEST(-1.0,
+                    cos(radians(:latitude)) * cos(radians(CAST(p.latitude AS DOUBLE PRECISION))) *
+                    cos(radians(CAST(p.longitude AS DOUBLE PRECISION)) - radians(:longitude)) +
+                    sin(radians(:latitude)) * sin(radians(CAST(p.latitude AS DOUBLE PRECISION)))
+                ))
+            )
+        ) ASC
+        LIMIT :limit
+    """, nativeQuery = true)
+    List<Place> findNearbyPlacesOptimized(
+        @Param("latitude") Double latitude,
+        @Param("longitude") Double longitude,
+        @Param("distance") Double distance,
+        @Param("minLat") Double minLat,
+        @Param("maxLat") Double maxLat,
+        @Param("minLon") Double minLon,
+        @Param("maxLon") Double maxLon,
+        @Param("limit") int limit,
+        @Param("dayOfWeek") String dayOfWeek,
+        @Param("currentTime") String currentTime
     );
 
     /**

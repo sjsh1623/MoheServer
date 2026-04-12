@@ -6,13 +6,14 @@ import java.util.List;
 /**
  * 시간대 × 날씨별 카테고리 추천 규칙
  * 각 규칙당 10개 카테고리 추천
+ * 6 TimeSlot × 4 Weather = 24 rules
  */
 public enum CategoryRecommendationRule {
 
     // ============================================
-    // 새벽 (0-5시)
+    // 새벽 (0-5시) - DAWN
     // ============================================
-    EARLY_MORNING_SUNNY(TimeSlot.EARLY_MORNING, WeatherCondition.SUNNY,
+    DAWN_SUNNY(TimeSlot.DAWN, WeatherCondition.SUNNY,
         Arrays.asList(
             PlaceCategory.LATE_NIGHT_CAFE, PlaceCategory.NIGHT_RESTAURANT,
             PlaceCategory.BAR, PlaceCategory.PUB, PlaceCategory.HANGANG_PARK,
@@ -20,7 +21,7 @@ public enum CategoryRecommendationRule {
             PlaceCategory.INDOOR_POCHA, PlaceCategory.LATE_NIGHT_FOOD
         ), "맑은 새벽, 밤하늘을 보며 여유를"),
 
-    EARLY_MORNING_CLOUDY(TimeSlot.EARLY_MORNING, WeatherCondition.CLOUDY,
+    DAWN_CLOUDY(TimeSlot.DAWN, WeatherCondition.CLOUDY,
         Arrays.asList(
             PlaceCategory.LATE_NIGHT_CAFE, PlaceCategory.NIGHT_RESTAURANT,
             PlaceCategory.BAR, PlaceCategory.JAZZ_BAR, PlaceCategory.CRAFT_BEER,
@@ -28,7 +29,7 @@ public enum CategoryRecommendationRule {
             PlaceCategory.INDOOR_POCHA, PlaceCategory.KARAOKE
         ), "흐린 새벽, 따뜻한 실내에서 시간을"),
 
-    EARLY_MORNING_RAINY(TimeSlot.EARLY_MORNING, WeatherCondition.RAINY,
+    DAWN_RAINY(TimeSlot.DAWN, WeatherCondition.RAINY,
         Arrays.asList(
             PlaceCategory.LATE_NIGHT_CAFE, PlaceCategory.NIGHT_RESTAURANT,
             PlaceCategory.BAR, PlaceCategory.WINE_BAR, PlaceCategory.JAZZ_BAR,
@@ -36,7 +37,7 @@ public enum CategoryRecommendationRule {
             PlaceCategory.STEW, PlaceCategory.LATE_NIGHT_FOOD
         ), "비 오는 새벽, 감성 있는 실내 공간에서"),
 
-    EARLY_MORNING_SNOWY(TimeSlot.EARLY_MORNING, WeatherCondition.SNOWY,
+    DAWN_SNOWY(TimeSlot.DAWN, WeatherCondition.SNOWY,
         Arrays.asList(
             PlaceCategory.LATE_NIGHT_CAFE, PlaceCategory.NIGHT_RESTAURANT,
             PlaceCategory.TEA_HOUSE, PlaceCategory.BAR, PlaceCategory.KOREAN_FOOD,
@@ -45,7 +46,7 @@ public enum CategoryRecommendationRule {
         ), "눈 오는 새벽, 따뜻한 곳에서 몸을 녹이며"),
 
     // ============================================
-    // 아침 (6-11시)
+    // 아침 (6-9시) - MORNING
     // ============================================
     MORNING_SUNNY(TimeSlot.MORNING, WeatherCondition.SUNNY,
         Arrays.asList(
@@ -80,7 +81,42 @@ public enum CategoryRecommendationRule {
         ), "눈 오는 아침, 따뜻한 곳에서 아침을"),
 
     // ============================================
-    // 오후 (12-17시)
+    // 오전 (10-11시) - LATE_MORNING
+    // ============================================
+    LATE_MORNING_SUNNY(TimeSlot.LATE_MORNING, WeatherCondition.SUNNY,
+        Arrays.asList(
+            PlaceCategory.BRUNCH_CAFE, PlaceCategory.CAFE, PlaceCategory.BAKERY,
+            PlaceCategory.DESSERT_CAFE, PlaceCategory.SALAD, PlaceCategory.SANDWICH,
+            PlaceCategory.PARK, PlaceCategory.BOTANICAL_GARDEN, PlaceCategory.FLOWER_CAFE,
+            PlaceCategory.TERRACE
+        ), "화창한 오전, 여유로운 브런치 타임"),
+
+    LATE_MORNING_CLOUDY(TimeSlot.LATE_MORNING, WeatherCondition.CLOUDY,
+        Arrays.asList(
+            PlaceCategory.BRUNCH_CAFE, PlaceCategory.CAFE, PlaceCategory.BAKERY,
+            PlaceCategory.DESSERT_CAFE, PlaceCategory.BOOKSTORE, PlaceCategory.GALLERY,
+            PlaceCategory.EXHIBITION, PlaceCategory.LIBRARY_CAFE, PlaceCategory.SHOPPING_MALL,
+            PlaceCategory.MUSEUM
+        ), "흐린 오전, 실내에서 여유롭게"),
+
+    LATE_MORNING_RAINY(TimeSlot.LATE_MORNING, WeatherCondition.RAINY,
+        Arrays.asList(
+            PlaceCategory.CAFE, PlaceCategory.BAKERY, PlaceCategory.DESSERT_CAFE,
+            PlaceCategory.BOOKSTORE, PlaceCategory.LIBRARY_CAFE, PlaceCategory.MUSEUM,
+            PlaceCategory.GALLERY, PlaceCategory.SHOPPING_MALL, PlaceCategory.BOARD_GAME,
+            PlaceCategory.MANGA_CAFE
+        ), "비 오는 오전, 실내에서 차분하게"),
+
+    LATE_MORNING_SNOWY(TimeSlot.LATE_MORNING, WeatherCondition.SNOWY,
+        Arrays.asList(
+            PlaceCategory.CAFE, PlaceCategory.BAKERY, PlaceCategory.DESSERT_CAFE,
+            PlaceCategory.BOOKSTORE, PlaceCategory.LIBRARY_CAFE, PlaceCategory.MUSEUM,
+            PlaceCategory.GALLERY, PlaceCategory.CHOCOLATE, PlaceCategory.TEA_HOUSE,
+            PlaceCategory.KOREAN_FOOD
+        ), "눈 오는 오전, 따뜻한 실내에서 포근하게"),
+
+    // ============================================
+    // 오후 (12-17시) - AFTERNOON
     // ============================================
     AFTERNOON_SUNNY(TimeSlot.AFTERNOON, WeatherCondition.SUNNY,
         Arrays.asList(
@@ -115,7 +151,7 @@ public enum CategoryRecommendationRule {
         ), "눈 오는 오후, 따뜻한 실내에서 힐링"),
 
     // ============================================
-    // 저녁 (18-22시)
+    // 저녁 (18-21시) - EVENING
     // ============================================
     EVENING_SUNNY(TimeSlot.EVENING, WeatherCondition.SUNNY,
         Arrays.asList(
@@ -150,9 +186,9 @@ public enum CategoryRecommendationRule {
         ), "눈 오는 저녁, 따뜻한 음식과 분위기를"),
 
     // ============================================
-    // 밤 (23시)
+    // 밤 (22-23시) - NIGHT
     // ============================================
-    LATE_NIGHT_SUNNY(TimeSlot.LATE_NIGHT, WeatherCondition.SUNNY,
+    NIGHT_SUNNY(TimeSlot.NIGHT, WeatherCondition.SUNNY,
         Arrays.asList(
             PlaceCategory.LATE_NIGHT_CAFE, PlaceCategory.NIGHT_RESTAURANT,
             PlaceCategory.BAR, PlaceCategory.CRAFT_BEER, PlaceCategory.HANGANG_PARK,
@@ -160,7 +196,7 @@ public enum CategoryRecommendationRule {
             PlaceCategory.LATE_NIGHT_FOOD, PlaceCategory.CHICKEN
         ), "맑은 밤, 야외에서 시원한 바람을 맞으며"),
 
-    LATE_NIGHT_CLOUDY(TimeSlot.LATE_NIGHT, WeatherCondition.CLOUDY,
+    NIGHT_CLOUDY(TimeSlot.NIGHT, WeatherCondition.CLOUDY,
         Arrays.asList(
             PlaceCategory.LATE_NIGHT_CAFE, PlaceCategory.NIGHT_RESTAURANT,
             PlaceCategory.BAR, PlaceCategory.PUB, PlaceCategory.JAZZ_BAR,
@@ -168,7 +204,7 @@ public enum CategoryRecommendationRule {
             PlaceCategory.LATE_NIGHT_FOOD, PlaceCategory.CHICKEN
         ), "흐린 밤, 실내에서 여유로운 시간을"),
 
-    LATE_NIGHT_RAINY(TimeSlot.LATE_NIGHT, WeatherCondition.RAINY,
+    NIGHT_RAINY(TimeSlot.NIGHT, WeatherCondition.RAINY,
         Arrays.asList(
             PlaceCategory.LATE_NIGHT_CAFE, PlaceCategory.NIGHT_RESTAURANT,
             PlaceCategory.BAR, PlaceCategory.WINE_BAR, PlaceCategory.JAZZ_BAR,
@@ -176,7 +212,7 @@ public enum CategoryRecommendationRule {
             PlaceCategory.LATE_NIGHT_FOOD, PlaceCategory.LOUNGE_BAR
         ), "비 오는 밤, 감성 있는 공간에서"),
 
-    LATE_NIGHT_SNOWY(TimeSlot.LATE_NIGHT, WeatherCondition.SNOWY,
+    NIGHT_SNOWY(TimeSlot.NIGHT, WeatherCondition.SNOWY,
         Arrays.asList(
             PlaceCategory.LATE_NIGHT_CAFE, PlaceCategory.NIGHT_RESTAURANT,
             PlaceCategory.KOREAN_FOOD, PlaceCategory.BAR, PlaceCategory.TEA_HOUSE,
@@ -208,11 +244,12 @@ public enum CategoryRecommendationRule {
 
     private static CategoryRecommendationRule findDefaultRule(TimeSlot timeSlot) {
         switch (timeSlot) {
-            case EARLY_MORNING: return EARLY_MORNING_SUNNY;
+            case DAWN: return DAWN_SUNNY;
             case MORNING: return MORNING_SUNNY;
+            case LATE_MORNING: return LATE_MORNING_SUNNY;
             case AFTERNOON: return AFTERNOON_SUNNY;
             case EVENING: return EVENING_SUNNY;
-            case LATE_NIGHT: return LATE_NIGHT_SUNNY;
+            case NIGHT: return NIGHT_SUNNY;
             default: return AFTERNOON_SUNNY;
         }
     }

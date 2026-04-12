@@ -95,20 +95,38 @@ public class CategoryController {
      * 첫 줄: MBTI 기반 (로그인 시), 나머지: 시간+날씨 기반
      */
     @GetMapping("/home")
-    @Operation(summary = "홈 카테고리 조회", description = "MBTI(첫줄) + 시간/날씨 기반 카테고리 추천")
+    @Operation(summary = "홈 카테고리 조회", description = "시간/날씨 기반 카테고리 추천 (DB 미사용, 즉시 응답)")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getHomeCategories(
             @RequestParam("lat") Double lat,
-            @RequestParam("lon") Double lon,
-            @RequestParam(required = false) String mbti,
-            @RequestParam(defaultValue = "10") int placesPerCategory) {
+            @RequestParam("lon") Double lon) {
         try {
-            Map<String, Object> result = categoryRecommendationService.getHomeData(
-                    lat, lon, mbti, placesPerCategory);
+            Map<String, Object> result = categoryRecommendationService.getHomeCategoriesOnly(lat, lon);
             return ResponseEntity.ok(ApiResponse.success(result));
         } catch (Exception e) {
             logger.error("Failed to get home categories", e);
             return ResponseEntity.status(500).body(
                     ApiResponse.error("HOME_CATEGORY_ERROR", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/home/mbti")
+    @Operation(summary = "MBTI 추천 행 조회", description = "MBTI 기반 장소 추천 (별도 로드)")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getHomeMbtiRow(
+            @RequestParam("lat") Double lat,
+            @RequestParam("lon") Double lon,
+            @RequestParam String mbti,
+            @RequestParam(defaultValue = "10") int limit) {
+        try {
+            Map<String, Object> result = categoryRecommendationService.getMbtiRowOnly(
+                    lat, lon, mbti, limit);
+            if (result == null) {
+                return ResponseEntity.ok(ApiResponse.success(Map.of()));
+            }
+            return ResponseEntity.ok(ApiResponse.success(result));
+        } catch (Exception e) {
+            logger.error("Failed to get MBTI row", e);
+            return ResponseEntity.status(500).body(
+                    ApiResponse.error("MBTI_ROW_ERROR", e.getMessage()));
         }
     }
 

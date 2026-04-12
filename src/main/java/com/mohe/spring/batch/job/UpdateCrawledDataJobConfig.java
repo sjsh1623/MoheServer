@@ -189,8 +189,7 @@ public class UpdateCrawledDataJobConfig {
             place.setParkingAvailable(crawledData.isParkingAvailable());
             place.setPetFriendly(crawledData.isPetFriendly());
 
-            // Clear and create new PlaceDescription
-            place.getDescriptions().clear();
+            // Processor에서는 @Transient temp 필드에 저장 (lazy proxy 우회)
             PlaceDescription description = new PlaceDescription();
             description.setPlace(place);
             description.setOriginalDescription(sanitizeText(crawledData.getOriginalDescription()));
@@ -284,7 +283,7 @@ public class UpdateCrawledDataJobConfig {
             }
 
             description.setMoheDescription(sanitizeText(moheDescription));
-            place.getDescriptions().add(description);
+            place.setTempDescriptions(List.of(description));
 
             // 📝 Log Mohe AI description before saving to database
             System.out.println("📝 Mohe AI Summary for '" + place.getName() + "' (will be saved to DB):");
@@ -327,8 +326,8 @@ public class UpdateCrawledDataJobConfig {
 
             place.setKeyword(keywords);
 
-            // Download and save images
-            place.getImages().clear();
+            // Download and save images → temp 필드에 저장
+            List<PlaceImage> tempImgs = new ArrayList<>();
             if (crawledData.getImageUrls() != null && !crawledData.getImageUrls().isEmpty()) {
                 System.out.println("📸 Downloading " + crawledData.getImageUrls().size() + " images for '" + place.getName() + "'...");
                 List<String> savedImagePaths = imageService.downloadAndSaveImages(
@@ -343,12 +342,13 @@ public class UpdateCrawledDataJobConfig {
                     placeImage.setPlace(place);
                     placeImage.setUrl(savedImagePaths.get(i));
                     placeImage.setOrderIndex(i + 1);
-                    place.getImages().add(placeImage);
+                    tempImgs.add(placeImage);
                 }
             }
+            place.setTempImages(tempImgs);
 
-            // Create and set PlaceBusinessHours
-            place.getBusinessHours().clear();
+            // Create PlaceBusinessHours → temp 필드
+            List<PlaceBusinessHour> tempHrs = new ArrayList<>();
             if (crawledData.getBusinessHours() != null && crawledData.getBusinessHours().getWeekly() != null) {
                 for (Map.Entry<String, com.mohe.spring.dto.crawling.WeeklyHoursDto> entry : crawledData.getBusinessHours().getWeekly().entrySet()) {
                     PlaceBusinessHour businessHour = new PlaceBusinessHour();
@@ -376,12 +376,13 @@ public class UpdateCrawledDataJobConfig {
                         businessHour.setLastOrderMinutes(crawledData.getBusinessHours().getLastOrderMinutes());
                     }
 
-                    place.getBusinessHours().add(businessHour);
+                    tempHrs.add(businessHour);
                 }
             }
+            place.setTempBusinessHours(tempHrs);
 
-            // Create and set PlaceSns
-            place.getSns().clear();
+            // Create PlaceSns → temp 필드
+            List<PlaceSns> tempSnsList = new ArrayList<>();
             if (crawledData.getSnsUrls() != null && !crawledData.getSnsUrls().isEmpty()) {
                 for (Map.Entry<String, String> entry : crawledData.getSnsUrls().entrySet()) {
                     if (entry.getValue() != null && !entry.getValue().isEmpty()) {
@@ -389,34 +390,34 @@ public class UpdateCrawledDataJobConfig {
                         sns.setPlace(place);
                         sns.setPlatform(entry.getKey());
                         sns.setUrl(entry.getValue());
-                        place.getSns().add(sns);
+                        tempSnsList.add(sns);
                     }
                 }
             }
+            place.setTempSns(tempSnsList);
 
-            // Create and set PlaceReview (save up to 10 reviews)
-            place.getReviews().clear();
+            // Create PlaceReview → temp 필드
+            List<PlaceReview> tempRevs = new ArrayList<>();
             if (crawledData.getReviews() != null && !crawledData.getReviews().isEmpty()) {
-                // Limit to 10 reviews
                 int reviewCount = Math.min(crawledData.getReviews().size(), 10);
                 System.out.println("💬 Saving " + reviewCount + " reviews for '" + place.getName() + "'");
 
                 for (int i = 0; i < reviewCount; i++) {
                     String reviewText = crawledData.getReviews().get(i);
                     if (reviewText != null && !reviewText.trim().isEmpty()) {
-                        // Sanitize review text to remove NULL bytes and other invalid characters
                         String sanitizedReviewText = sanitizeText(reviewText);
                         if (sanitizedReviewText != null && !sanitizedReviewText.trim().isEmpty()) {
                             PlaceReview review = new PlaceReview();
                             review.setPlace(place);
                             review.setReviewText(sanitizedReviewText);
                             review.setOrderIndex(i + 1);
-                            place.getReviews().add(review);
+                            tempRevs.add(review);
                         }
                     }
                 }
-                System.out.println("✅ Saved " + place.getReviews().size() + " reviews for '" + place.getName() + "'");
+                System.out.println("✅ Prepared " + tempRevs.size() + " reviews for '" + place.getName() + "'");
             }
+            place.setTempReviews(tempRevs);
 
                 // Mark place as crawl_status=COMPLETED (description generated), but embed_status=PENDING (vectorization not done yet)
                 place.setCrawlStatus(CrawlStatus.COMPLETED);
@@ -477,7 +478,9 @@ public class UpdateCrawledDataJobConfig {
                 placeRepository.flush();
 
                 // Update fields with new data
+                int sourceReviews = place.getTempReviews() != null ? place.getTempReviews().size() : 0;
                 updatePlaceFields(freshPlace, place);
+                int targetReviews = freshPlace.getReviews() != null ? freshPlace.getReviews().size() : 0;
 
                 // Save the updated entity
                 placeRepository.saveAndFlush(freshPlace);
@@ -485,7 +488,8 @@ public class UpdateCrawledDataJobConfig {
 
                 System.out.println("💾 [" + savedCount + "/" + chunk.getItems().size() + "] Saved place '" + freshPlace.getName() +
                     "' (ID: " + freshPlace.getId() + ", crawl_status=" + freshPlace.getCrawlStatus() +
-                    ", embed_status=" + freshPlace.getEmbedStatus() + ") to database");
+                    ", embed_status=" + freshPlace.getEmbedStatus() +
+                    ", reviews: source=" + sourceReviews + " → target=" + targetReviews + ") to database");
             }
 
             System.out.println("✅ Successfully saved batch: " + savedCount + "/" + chunk.getItems().size() + " places written to database");
@@ -510,33 +514,33 @@ public class UpdateCrawledDataJobConfig {
         target.setEmbedStatus(source.getEmbedStatus());
         target.setCrawlStatus(source.getCrawlStatus());
 
-        // Copy collections
-        if (source.getDescriptions() != null) {
-            source.getDescriptions().forEach(desc -> {
+        // Copy from @Transient temp fields (lazy proxy 우회)
+        if (source.getTempDescriptions() != null) {
+            source.getTempDescriptions().forEach(desc -> {
                 desc.setPlace(target);
                 target.getDescriptions().add(desc);
             });
         }
-        if (source.getImages() != null) {
-            source.getImages().forEach(img -> {
+        if (source.getTempImages() != null) {
+            source.getTempImages().forEach(img -> {
                 img.setPlace(target);
                 target.getImages().add(img);
             });
         }
-        if (source.getBusinessHours() != null) {
-            source.getBusinessHours().forEach(hour -> {
+        if (source.getTempBusinessHours() != null) {
+            source.getTempBusinessHours().forEach(hour -> {
                 hour.setPlace(target);
                 target.getBusinessHours().add(hour);
             });
         }
-        if (source.getSns() != null) {
-            source.getSns().forEach(s -> {
+        if (source.getTempSns() != null) {
+            source.getTempSns().forEach(s -> {
                 s.setPlace(target);
                 target.getSns().add(s);
             });
         }
-        if (source.getReviews() != null) {
-            source.getReviews().forEach(review -> {
+        if (source.getTempReviews() != null) {
+            source.getTempReviews().forEach(review -> {
                 review.setPlace(target);
                 target.getReviews().add(review);
             });

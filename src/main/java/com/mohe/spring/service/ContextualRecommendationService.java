@@ -145,8 +145,10 @@ public class ContextualRecommendationService {
             mapTimeContext(timeOfDay)
         );
 
+        final double userLat = safeLat;
+        final double userLon = safeLon;
         List<PlaceDto.PlaceResponse> placeResponses = finalPlaces.stream()
-            .map(this::convertToPlaceResponse)
+            .map(p -> convertToPlaceResponse(p, userLat, userLon))
             .collect(Collectors.toList());
 
         return new ContextualRecommendationResponse(
@@ -288,11 +290,11 @@ public class ContextualRecommendationService {
         return sum < 1e-3;
     }
 
-    private PlaceDto.PlaceResponse convertToPlaceResponse(Place place) {
+    private PlaceDto.PlaceResponse convertToPlaceResponse(Place place, double userLat, double userLon) {
         String category = (place.getCategory() != null && !place.getCategory().isEmpty())
             ? place.getCategory().get(0)
             : "기타";
-        double rating = place.getRating() != null ? place.getRating().doubleValue() : 4.0;
+        double rating = place.getRating() != null ? place.getRating().doubleValue() : 0.0;
         List<String> imageUrls = placeService.getImageUrls(place.getId());
         String imageUrl = imageUrls.isEmpty() ? null : imageUrls.get(0);
 
@@ -307,11 +309,21 @@ public class ContextualRecommendationService {
             rating,
             category
         );
+
+        // 실제 거리 계산
         if (place.getLatitude() != null && place.getLongitude() != null) {
-            response.setDistance(0.0);
+            double dist = 6371 * Math.acos(Math.min(1.0, Math.max(-1.0,
+                Math.cos(Math.toRadians(userLat)) * Math.cos(Math.toRadians(place.getLatitude().doubleValue())) *
+                Math.cos(Math.toRadians(place.getLongitude().doubleValue()) - Math.toRadians(userLon)) +
+                Math.sin(Math.toRadians(userLat)) * Math.sin(Math.toRadians(place.getLatitude().doubleValue()))
+            )));
+            response.setDistance(Math.round(dist * 10.0) / 10.0);
         }
 
-        // Set address information
+        // 실제 리뷰 수
+        int actualReviews = place.getReviews() != null ? place.getReviews().size() : 0;
+        response.setReviewCount(actualReviews);
+
         response.setShortAddress(shortAddress);
         response.setFullAddress(fullAddress);
         response.setLocation(shortAddress);

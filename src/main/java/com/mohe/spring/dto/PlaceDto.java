@@ -285,7 +285,8 @@ public class PlaceDto {
         private final List<String> images;
         private final Double rating;
         private final String category;
-        private Double distance = 0.0; // Default to 0 as per requirements
+        private Double distance = 0.0;
+        private int reviewCount = 0;
         private String shortAddress; // 구 + 동
         private String fullAddress; // 전체 주소
         private String location; // shortAddress alias for backward compatibility
@@ -313,6 +314,8 @@ public class PlaceDto {
         public String getCategory() { return category; }
         public Double getDistance() { return distance; }
         public void setDistance(Double distance) { this.distance = distance; }
+        public int getReviewCount() { return reviewCount; }
+        public void setReviewCount(int reviewCount) { this.reviewCount = reviewCount; }
 
         public String getShortAddress() { return shortAddress; }
         public void setShortAddress(String shortAddress) {

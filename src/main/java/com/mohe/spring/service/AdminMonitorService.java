@@ -17,6 +17,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import jakarta.persistence.EntityManager;
@@ -902,5 +903,77 @@ public class AdminMonitorService {
         empty.put("activeJobCount", 0);
         empty.put("activeJobs", Collections.emptyList());
         return empty;
+    }
+
+    /**
+     * Delete a single place by ID (cascade handles related entities)
+     */
+    @Transactional
+    public void deletePlace(Long id) {
+        if (!placeRepository.existsById(id)) {
+            throw new IllegalArgumentException("Place not found: " + id);
+        }
+        placeRepository.deleteById(id);
+        log.info("Deleted place ID: {}", id);
+    }
+
+    /**
+     * Delete multiple places by IDs
+     */
+    @Transactional
+    public int deletePlaces(List<Long> placeIds) {
+        int deleted = 0;
+        for (Long id : placeIds) {
+            if (placeRepository.existsById(id)) {
+                placeRepository.deleteById(id);
+                deleted++;
+            }
+        }
+        log.info("Batch deleted {} places out of {} requested", deleted, placeIds.size());
+        return deleted;
+    }
+
+    /**
+     * Get pipeline progress: description, embedding, and image stats
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getPipelineProgress() {
+        Map<String, Object> progress = new LinkedHashMap<>();
+
+        // Description progress
+        long totalPlaces = placeRepository.count();
+        long crawlCompleted = placeRepository.countByCrawlStatus(CrawlStatus.COMPLETED);
+        long crawlPending = placeRepository.countByCrawlStatus(CrawlStatus.PENDING);
+
+        Map<String, Object> description = new LinkedHashMap<>();
+        description.put("total", totalPlaces);
+        description.put("completed", crawlCompleted);
+        description.put("pending", crawlPending);
+        progress.put("description", description);
+
+        // Embedding progress
+        long embedCompleted = placeRepository.countByEmbedStatus(EmbedStatus.COMPLETED);
+        long embedPending = placeRepository.countByEmbedStatus(EmbedStatus.PENDING);
+
+        Map<String, Object> embedding = new LinkedHashMap<>();
+        embedding.put("total", totalPlaces);
+        embedding.put("completed", embedCompleted);
+        embedding.put("pending", embedPending);
+        progress.put("embedding", embedding);
+
+        // Image progress
+        Object withImagesCount = entityManager.createNativeQuery(
+            "SELECT COUNT(DISTINCT place_id) FROM place_images"
+        ).getSingleResult();
+        long withImages = ((Number) withImagesCount).longValue();
+        long withoutImages = totalPlaces - withImages;
+
+        Map<String, Object> image = new LinkedHashMap<>();
+        image.put("total", totalPlaces);
+        image.put("withImages", withImages);
+        image.put("withoutImages", withoutImages);
+        progress.put("image", image);
+
+        return progress;
     }
 }
